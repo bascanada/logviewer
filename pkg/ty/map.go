@@ -30,6 +30,14 @@ func (mi MI) GetString(key string) string {
 	return ""
 }
 
+func (mi MI) GetStringOk(key string) (string, bool) {
+	v, ok := mi[key]
+	if ok {
+		return v.(string), ok
+	}
+	return "", false
+}
+
 func (mi MI) GetMS(key string) MS {
 	if v, b := mi[key]; b {
 		return v.(MS)

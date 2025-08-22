@@ -1,28 +1,64 @@
 package logclient
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/berlingoqc/logviewer/pkg/log/client"
+	"github.com/berlingoqc/logviewer/pkg/log/client/operator"
 	"github.com/berlingoqc/logviewer/pkg/ty"
 )
 
 func getSearchRequest(logSearch *client.LogSearch) (ty.MS, error) {
 	ms := ty.MS{
-		"search":        "index=" + logSearch.Options.GetString("index") + "+",
 		"earliest_time": logSearch.Range.Gte.Value,
 		"latest_time":   logSearch.Range.Lte.Value,
 	}
 
-	searchItem := make([]string, len(logSearch.Fields))
+	var query strings.Builder
+	var regexQuery strings.Builder
 
-	i := 0
-	for k, v := range logSearch.Fields {
-		searchItem[i] = k + "=\"" + v + "\""
-		i += 1
+	if index, ok := logSearch.Options.GetStringOk("index"); ok {
+		query.WriteString(fmt.Sprintf("index=%s", index))
 	}
 
-	ms["search"] += strings.Join(searchItem, "&")
+	for k, v := range logSearch.Fields {
+		op := logSearch.FieldsCondition[k]
+		if op == "" {
+			op = operator.Equals
+		}
+
+		if op == operator.Regex {
+			if regexQuery.Len() > 0 {
+				regexQuery.WriteString(" | ")
+			}
+			regexQuery.WriteString(fmt.Sprintf(`regex %s="%s"`, k, v))
+			continue
+		}
+
+		if query.Len() > 0 {
+			query.WriteString(" ")
+		}
+
+		switch op {
+		case operator.Equals, operator.Match:
+			query.WriteString(fmt.Sprintf(`%s="%s"`, k, v))
+		case operator.Wildcard:
+			query.WriteString(fmt.Sprintf(`%s=%s*`, k, v))
+		case operator.Exists:
+			query.WriteString(fmt.Sprintf(`%s=*`, k))
+		}
+	}
+
+	if regexQuery.Len() > 0 {
+		if query.Len() > 0 {
+			query.WriteString(" ")
+		}
+		query.WriteString("| ")
+		query.WriteString(regexQuery.String())
+	}
+
+	ms["search"] = query.String()
 
 	return ms, nil
 }
