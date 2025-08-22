@@ -5,21 +5,18 @@
 # --- Configuration ---
 SPLUNK_HOST="localhost"
 SPLUNK_PORT="8088"
-HEC_TOKEN="" # Replace with your HEC token
-
-# --- Log Data ---
-LOG_DATA=(
-  "{\"event\": \"User logged in\", \"user\": \"alice\", \"status\": \"success\"}"
-  "{\"event\": \"User failed to log in\", \"user\": \"bob\", \"status\": \"failure\"}"
-  "{\"event\": \"Item added to cart\", \"user\": \"alice\", \"item\": \"apple\"}"
-  "{\"event\": \"Checkout completed\", \"user\": \"alice\", \"status\": \"success\"}"
-)
+HEC_TOKEN="" # This will be replaced by the run-integration-tests.sh script
 
 # --- Send Logs ---
-for log in "${LOG_DATA[@]}"; do
-  echo "Sending log: $log"
-  curl -k "https://_SPLUNK_HOST_:_SPLUNK_PORT_/services/collector" \
-    -H "Authorization: Splunk _HEC_TOKEN_" \
-    -d "$log"
-  echo ""
+LOG_DIR="../logs"
+
+for file in $LOG_DIR/*; do
+  echo "Sending logs from $file"
+  while IFS= read -r line; do
+    echo "Sending log: $line"
+    curl -k "https://_SPLUNK_HOST_:_SPLUNK_PORT_/services/collector"
+      -H "Authorization: Splunk _HEC_TOKEN_"
+      -d "$line"
+    echo ""
+  done < "$file"
 done

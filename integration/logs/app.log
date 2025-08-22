@@ -1,0 +1,4 @@
+{"event": "User logged in", "user": "alice", "status": "success"}
+{"event": "User failed to log in", "user": "bob", "status": "failure"}
+{"event": "Item added to cart", "user": "alice", "item": "apple"}
+{"event": "Checkout completed", "user": "alice", "status": "success"}

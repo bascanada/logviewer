@@ -23,7 +23,7 @@ jobs:
         env:
           VERSION: ${{ steps.tag.outputs.tag }}
       - name: Build for all plateform
-        run: ./build.sh
+        run: make build-all
         env:
           VERSION: ${{ steps.tag.outputs.tag }}
       - name: Login docker
