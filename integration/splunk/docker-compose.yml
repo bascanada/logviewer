@@ -1,0 +1,12 @@
+version: '3'
+
+services:
+  splunk:
+    image: splunk/splunk:latest
+    container_name: splunk
+    environment:
+      - SPLUNK_START_ARGS=--accept-license
+      - SPLUNK_PASSWORD=password
+    ports:
+      - "8000:8000"
+      - "8088:8088"
