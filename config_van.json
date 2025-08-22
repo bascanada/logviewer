@@ -1,0 +1,19 @@
+{
+    "clients": {
+        "pi": {
+            "type": "ssh",
+            "options": {
+                "User": "wq",
+                "Addr": "192.168.8.228:22"
+            }
+        }
+    },
+    "contexts": {
+        "test-file1": {
+
+        },
+        "test-file2": {
+            
+        }
+    }
+}

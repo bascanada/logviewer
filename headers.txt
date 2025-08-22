@@ -1,0 +1,14 @@
+Host: splunk.nonprod.tktm.io
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:127.0) Gecko/20100101 Firefox/127.0
+Accept: text/javascript, text/html, application/xml, text/xml, */*
+Accept-Language: en-US,en;q=0.5
+X-Splunk-Form-Key: 13207931756135681617
+Content-Type: application/x-www-form-urlencoded; charset=UTF-8
+X-Requested-With: XMLHttpRequest
+Origin: https://splunk.nonprod.tktm.io
+Connection: keep-alive
+Cookie: ${COOKIE}
+Sec-Fetch-Dest: empty
+Sec-Fetch-Mode: cors
+Sec-Fetch-Site: same-origin
+Sec-GPC: 1
