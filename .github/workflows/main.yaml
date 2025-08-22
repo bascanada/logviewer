@@ -26,7 +26,7 @@ jobs:
       - name: Test
         run: go test -coverprofile=coverage.txt -covermode count ./... && cat coverage.txt | gocover-cobertura > coverage.xml
       - name: Build for all plateform
-        run: make build-all
+        run: make build/all
       - name: Docker build
         run: docker build -t ghcr.io/berlingoqc/logviewer:latest .
       - name: Docker push

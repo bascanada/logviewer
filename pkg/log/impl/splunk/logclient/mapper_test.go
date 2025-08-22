@@ -52,7 +52,21 @@ func TestSearchRequest(t *testing.T) {
 
 		requestBodyFields, err := getSearchRequest(logSearch)
 		assert.NoError(t, err)
-		assert.Equal(t, `index=nonprod application_name=wq.services*`, requestBodyFields["search"])
+		assert.Equal(t, `index=nonprod application_name="wq.services*"`, requestBodyFields["search"])
+	})
+
+	t.Run("search with wildcard condition and spaces", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Fields:          ty.MS{"application_name": "wq services"},
+			FieldsCondition: ty.MS{"application_name": operator.Wildcard},
+			Options:         ty.MI{"index": "nonprod"},
+		}
+		logSearch.Range.Gte.S("24h@h")
+		logSearch.Range.Lte.S("now")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Equal(t, `index=nonprod application_name="wq services*"`, requestBodyFields["search"])
 	})
 
 	t.Run("search with exists condition", func(t *testing.T) {
@@ -105,7 +119,7 @@ func TestSearchRequest(t *testing.T) {
 		requestBodyFields, err := getSearchRequest(logSearch)
 		assert.NoError(t, err)
 		assert.Contains(t, requestBodyFields["search"], `index=nonprod`)
-		assert.Contains(t, requestBodyFields["search"], `application_name=wq.services.pet*`)
+		assert.Contains(t, requestBodyFields["search"], `application_name="wq.services.pet*"`)
 		assert.Contains(t, requestBodyFields["search"], `http_method="GET"`)
 		assert.Contains(t, requestBodyFields["search"], `trace_id=*`)
 		assert.Contains(t, requestBodyFields["search"], `| regex message="(error|fail)"`)
@@ -123,5 +137,19 @@ func TestSearchRequest(t *testing.T) {
 		requestBodyFields, err := getSearchRequest(logSearch)
 		assert.NoError(t, err)
 		assert.Equal(t, `index=nonprod message="this is a test"`, requestBodyFields["search"])
+	})
+
+	t.Run("search with value containing double quotes", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Fields:          ty.MS{"message": `this is a "test"`},
+			FieldsCondition: ty.MS{},
+			Options:         ty.MI{"index": "nonprod"},
+		}
+		logSearch.Range.Gte.S("24h@h")
+		logSearch.Range.Lte.S("now")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Equal(t, `index=nonprod message="this is a \"test\""`, requestBodyFields["search"])
 	})
 }

@@ -9,6 +9,10 @@ import (
 	"github.com/berlingoqc/logviewer/pkg/ty"
 )
 
+func escapeSplunkValue(value string) string {
+	return strings.ReplaceAll(value, "\"", "\\\"")
+}
+
 func getSearchRequest(logSearch *client.LogSearch) (ty.MS, error) {
 	ms := ty.MS{
 		"earliest_time": logSearch.Range.Gte.Value,
@@ -32,7 +36,7 @@ func getSearchRequest(logSearch *client.LogSearch) (ty.MS, error) {
 			if regexQuery.Len() > 0 {
 				regexQuery.WriteString(" | ")
 			}
-			regexQuery.WriteString(fmt.Sprintf(`regex %s="%s"`, k, v))
+			regexQuery.WriteString(fmt.Sprintf(`regex %s="%s"`, k, escapeSplunkValue(v)))
 			continue
 		}
 
@@ -42,9 +46,9 @@ func getSearchRequest(logSearch *client.LogSearch) (ty.MS, error) {
 
 		switch op {
 		case operator.Equals, operator.Match:
-			query.WriteString(fmt.Sprintf(`%s="%s"`, k, v))
+			query.WriteString(fmt.Sprintf(`%s="%s"`, k, escapeSplunkValue(v)))
 		case operator.Wildcard:
-			query.WriteString(fmt.Sprintf(`%s=%s*`, k, v))
+			query.WriteString(fmt.Sprintf(`%s="%s*"`, k, escapeSplunkValue(v)))
 		case operator.Exists:
 			query.WriteString(fmt.Sprintf(`%s=*`, k))
 		}

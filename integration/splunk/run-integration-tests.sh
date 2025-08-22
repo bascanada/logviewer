@@ -34,7 +34,7 @@ curl -k -u "_SPLUNK_USER_:_SPLUNK_PASSWORD_" "https://_SPLUNK_HOST_:_SPLUNK_API_
 
 # Create HEC token
 echo "Creating HEC token..."
-HEC_TOKEN=$(curl -s -k -u "_SPLUNK_USER_:_SPLUNK_PASSWORD_" "https://_SPLUNK_HOST_:_SPLUNK_API_PORT_/services/data/inputs/http/http?output_mode=json" -d "name=my-test-token" -d "description=Token for integration tests" | grep -o '"token": "[^"']*' | grep -o '[^"']*')
+HEC_TOKEN=$(curl -s -k -u "_SPLUNK_USER_:_SPLUNK_PASSWORD_" "https://_SPLUNK_HOST_:_SPLUNK_API_PORT_/services/data/inputs/http/http?output_mode=json" -d "name=my-test-token" -d "description=Token for integration tests" | grep -o '"token": "[^"']\*' | grep -o '[^"']*')
 
 if [ -z "$HEC_TOKEN" ]; then
   echo "Failed to create HEC token."
@@ -53,7 +53,7 @@ sed -i.bak "s/HEC_TOKEN=".*/HEC_TOKEN=\"$HEC_TOKEN\"/" send-logs.sh
 # Run integration tests
 # (Replace this with your actual test command)
 echo "Running integration tests..."
-(cd ../.. && go test ./...)
+(cd ../.. && go test ./pkg/log/impl/splunk/logclient)
 
 # Clean up
 cleanup
