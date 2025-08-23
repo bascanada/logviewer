@@ -337,6 +337,37 @@ request.
 -> % logviewer -c ./config.json -i growbe-odoo -i growbe-ingress query
 ```
 
+## MCP Server
+
+LogViewer can also be run as an MCP server, exposing its core functionalities as a tool for Large Language Models (LLMs) and other AI agents. This enables programmatic access to log contexts, fields, and querying capabilities through natural language or structured commands.
+
+### Starting the MCP Server
+
+To start the MCP server, use the `mcp` command and provide a path to your configuration file:
+
+```bash
+logviewer mcp --context-path /path/to/your/config.json
+```
+
+By default, the server will listen on port `8081`. You can change this with the `--port` flag.
+
+### Interacting with the MCP Server
+
+Once the server is running, you can interact with it using an MCP client or any tool that can communicate with an MCP server.
+
+**Example:**
+
+```bash
+# In one terminal, start the server
+logviewer mcp --context-path ./config.json
+
+# In another terminal, use a client to interact with the server
+# (This is a hypothetical example of how a client might work)
+mcp-cli --port 8081 "list all available log contexts"
+mcp-cli --port 8081 "get all fields for the 'growbe-odoo' context"
+mcp-cli --port 8081 "query logs for the 'growbe-odoo' context for the last 15 minutes with a size of 10"
+```
+
 ## Server Mode
 
 LogViewer can be run as a server, exposing its log querying capabilities via an HTTP API. This allows for programmatic access to the log aggregation engine.
