@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	httpPkg "github.com/berlingoqc/logviewer/pkg/http"
 	"github.com/berlingoqc/logviewer/pkg/log"
 	"github.com/berlingoqc/logviewer/pkg/log/impl/ssh"
 	"github.com/spf13/cobra"
@@ -58,10 +59,13 @@ var (
 	logger log.MyLoggerOptions
 
 	myLog bool
+	debugHttp bool
 )
 
 func onCommandStart(cmd *cobra.Command, args []string) {
 	log.ConfigureMyLogger(&logger)
+	// enable HTTP debug logs when requested
+	httpPkg.SetDebug(debugHttp)
 }
 
 func init() {
@@ -75,6 +79,7 @@ func init() {
 
 	// ME
 	queryCommand.PersistentFlags().BoolVar(&myLog, "mylog", false, "read from logviewer logs file")
+	queryCommand.PersistentFlags().BoolVar(&debugHttp, "debug-http", false, "enable HTTP debug logs (prints request bodies and masked headers)")
 
 	// K8S
 	queryCommand.PersistentFlags().StringVar(&k8sNamespace, "k8s-namespace", "", "K8s namespace")
