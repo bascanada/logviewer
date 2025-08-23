@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/berlingoqc/logviewer/pkg/api"
 	"github.com/berlingoqc/logviewer/pkg/log/client/config"
 	"github.com/berlingoqc/logviewer/pkg/server"
 	"github.com/spf13/cobra"
@@ -33,7 +34,7 @@ var serverCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		s, err := server.NewServer(host, strconv.Itoa(port), cfg, logger)
+		s, err := server.NewServer(host, strconv.Itoa(port), cfg, logger, api.OpenAPISpec)
 		if err != nil {
 			logger.Error("failed to create server", "err", err)
 			os.Exit(1)

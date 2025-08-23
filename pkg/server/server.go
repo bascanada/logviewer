@@ -22,9 +22,10 @@ type Server struct {
 	port          string
 	host          string
 	searchFactory factory.SearchFactory
+	openapiSpec   []byte
 }
 
-func NewServer(host, port string, cfg *config.ContextConfig, logger *slog.Logger) (*Server, error) {
+func NewServer(host, port string, cfg *config.ContextConfig, logger *slog.Logger, openapiSpec []byte) (*Server, error) {
 	clientFactory, err := factory.GetLogClientFactory(cfg.Clients)
 	if err != nil {
 		return nil, err
@@ -42,6 +43,7 @@ func NewServer(host, port string, cfg *config.ContextConfig, logger *slog.Logger
 		port:          port,
 		host:          host,
 		searchFactory: searchFactory,
+		openapiSpec:   openapiSpec,
 	}
 	s.routes()
 	return s, nil
@@ -53,6 +55,7 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/query/fields", s.queryFieldsHandler)
 	s.router.HandleFunc("/contexts", s.contextsHandler)
 	s.router.HandleFunc("/contexts/", s.contextsHandler)
+	s.router.HandleFunc("/openapi.yaml", s.openapiHandler)
 }
 
 func (s *Server) Start() error {

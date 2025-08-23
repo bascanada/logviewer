@@ -55,6 +55,7 @@ func newTestServer(t *testing.T, cfg *config.ContextConfig, searchFactory factor
 		router:        router,
 		logger:        logger,
 		searchFactory: searchFactory,
+		openapiSpec:   []byte("openapi: 3.0.0"), // a dummy spec for testing
 	}
 	s.routes()
 	return s
@@ -194,4 +195,22 @@ func TestQueryLogsHandler_BackendError(t *testing.T) {
 	s.router.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code) // The handler returns invalid search on backend error
+}
+
+func TestOpenAPIHandler(t *testing.T) {
+	s := newTestServer(t, nil, nil)
+
+	req, err := http.NewRequest("GET", "/openapi.yaml", nil)
+	assert.NoError(t, err)
+
+	rr := httptest.NewRecorder()
+	s.router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "application/yaml", rr.Header().Get("Content-Type"))
+
+	// Check if the body is not empty and looks like a yaml
+	body := rr.Body.String()
+	assert.NotEmpty(t, body)
+	assert.Contains(t, body, "openapi: 3.0.0")
 }
