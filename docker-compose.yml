@@ -3,10 +3,10 @@ services:
   logviewer-server:
     build:
       context: .
-      dockerfile: server.Dockerfile
+      dockerfile: Dockerfile
     ports:
       - "8080:8080"
     volumes:
       - ./config.json:/config/config.json:ro
-    command: ["--config", "/config/config.json", "--logging-level", "info", "--logging-stdout"]
+    command: ["server", "--config", "/config/config.json", "--logging-level", "info", "--logging-stdout"]
     restart: unless-stopped
