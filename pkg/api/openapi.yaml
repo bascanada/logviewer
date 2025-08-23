@@ -1,0 +1,444 @@
+openapi: 3.0.0
+info:
+  title: Logviewer Server API
+  description: HTTP API for the logviewer application providing programmatic access to log querying capabilities
+  version: 1.0.0
+  contact:
+    name: Logviewer API
+    url: https://github.com/berlingoqc/logviewer
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+paths:
+  /openapi.yaml:
+    get:
+      summary: Get OpenAPI Specification
+      description: Returns the complete OpenAPI specification for this API
+      operationId: getOpenAPISpec
+      responses:
+        '200':
+          description: OpenAPI specification in YAML format
+          content:
+            application/yaml:
+              schema:
+                type: string
+            text/yaml:
+              schema:
+                type: string
+
+  /health:
+    get:
+      summary: Health Check
+      description: Returns the operational status of the server
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+
+  /contexts:
+    get:
+      summary: List Available Contexts
+      description: Returns all available log contexts from the configuration file
+      operationId: listContexts
+      responses:
+        '200':
+          description: List of available contexts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContextsResponse'
+
+  /query/logs:
+    get:
+      summary: Query Log Entries (GET)
+      description: |
+        Query log entries using URL parameters. This endpoint is designed for tools
+        that can only make GET requests (like many LLM tools).
+
+        For complex queries, use the POST version instead.
+      parameters:
+        - name: contextId
+          in: query
+          required: true
+          description: Context ID from your configuration
+          schema:
+            type: string
+          example: "nonprod-api"
+        - name: fields
+          in: query
+          description: |
+            Field filters in format: field1=value1,field2=value2
+            Use /query/fields to discover available field names first.
+          schema:
+            type: string
+          example: "level=ERROR,service=auth-api"
+        - name: last
+          in: query
+          description: "Relative time range (15m, 2h, 1d)"
+          schema:
+            type: string
+          example: "1h"
+        - name: from
+          in: query
+          description: "Start time (RFC3339 format)"
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: "End time (RFC3339 format)"
+          schema:
+            type: string
+            format: date-time
+        - name: size
+          in: query
+          description: "Maximum number of entries to return"
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10000
+          example: 50
+        - name: inherits
+          in: query
+          description: "Comma-separated list of search configurations to inherit"
+          schema:
+            type: string
+          example: "base-search,error-filter"
+      responses:
+        '200':
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogsResponse'
+    post:
+      summary: Query Log Entries (POST)
+      description: |
+        Query log entries using JSON payload. Use this for complex queries
+        or when GET URL length limits are a concern.
+      operationId: queryLogs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryRequest'
+            examples:
+              basic_query:
+                summary: Basic log query
+                description: "Equivalent to: logviewer -c config.json -i my-context query log --size 50"
+                value:
+                  contextId: "my-context"
+                  search:
+                    size: 50
+              filtered_query:
+                summary: Filtered error logs
+                description: "Equivalent to: logviewer -c config.json -i my-context query log -f level=ERROR --last 1h"
+                value:
+                  contextId: "my-context"
+                  search:
+                    fields:
+                      level: "ERROR"
+                    range:
+                      last: "1h"
+              inherited_query:
+                summary: Query with inheritance
+                description: "Equivalent to: logviewer -c config.json -i my-context --inherits base-search query log"
+                value:
+                  contextId: "my-context"
+                  inherits: ["base-search"]
+                  search:
+                    size: 100
+      responses:
+        '200':
+          description: Successful log query
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogsResponse'
+        '400':
+          description: Bad request - invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Context not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /query/fields:
+    get:
+      summary: Discover Available Fields (GET)
+      parameters:
+        - name: contextId
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "nonprod-api"
+        - name: last
+          in: query
+          description: "Time range for field discovery"
+          schema:
+            type: string
+          example: "1h"
+        - name: inherits
+          in: query
+          description: "Comma-separated inherits list"
+          schema:
+            type: string
+    post:
+      summary: Query Available Fields (POST)
+      description: Query available fields and their values for a specified context using a JSON payload.
+      operationId: queryFields
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryRequest'
+            examples:
+              basic_fields:
+                summary: Get available fields
+                description: "Equivalent to: logviewer -c config.json -i my-context query field"
+                value:
+                  contextId: "my-context"
+              filtered_fields:
+                summary: Get fields for time range
+                description: "Equivalent to: logviewer -c config.json -i my-context query field --last 1h"
+                value:
+                  contextId: "my-context"
+                  search:
+                    range:
+                      last: "1h"
+      responses:
+        '200':
+          description: Available fields and their values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldsResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    QueryRequest:
+      type: object
+      required:
+        - contextId
+      properties:
+        contextId:
+          type: string
+          description: ID of the preconfigured context to query
+          example: "production-api"
+        inherits:
+          type: array
+          items:
+            type: string
+          description: List of search configurations to inherit from
+          example: ["base-search", "error-filter"]
+        search:
+          $ref: '#/components/schemas/LogSearch'
+
+    LogSearch:
+      type: object
+      description: Search parameters that override context defaults
+      properties:
+        fields:
+          type: object
+          additionalProperties:
+            type: string
+          description: Field filters (key-value pairs)
+          example:
+            level: "ERROR"
+            service: "auth-service"
+        fieldsCondition:
+          type: object
+          additionalProperties:
+            type: string
+            enum: ["match", "exists", "wildcard", "regex"]
+          description: Filter operators for each field
+          example:
+            message: "regex"
+            level: "match"
+        range:
+          type: object
+          properties:
+            last:
+              type: string
+              pattern: "^\\d+[smhd]$"
+              description: "Relative time range (e.g., '15m', '2h', '1d')"
+              example: "15m"
+            gte:
+              type: string
+              format: date-time
+              description: "Start time (RFC3339 format)"
+            lte:
+              type: string
+              format: date-time
+              description: "End time (RFC3339 format)"
+        size:
+          type: integer
+          minimum: 1
+          maximum: 10000
+          description: Maximum number of entries to return
+          example: 100
+        refresh:
+          type: object
+          properties:
+            follow:
+              type: boolean
+              description: Whether to follow/tail the logs
+            duration:
+              type: string
+              pattern: "^\\d+[smh]$"
+              description: Refresh interval
+              example: "5s"
+        options:
+          type: object
+          additionalProperties: true
+          description: Backend-specific options
+        fieldExtraction:
+          type: object
+          properties:
+            regex:
+              type: string
+              description: Regex pattern with named groups for field extraction
+            timestampRegex:
+              type: string
+              description: Regex pattern for timestamp extraction
+
+    LogsResponse:
+      type: object
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogEntry'
+        meta:
+          $ref: '#/components/schemas/QueryMetadata'
+        error:
+          type: string
+          description: Error message if query failed
+
+    FieldsResponse:
+      type: object
+      properties:
+        fields:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          description: Map of field names to arrays of possible values
+          example:
+            level: ["INFO", "WARN", "ERROR"]
+            service: ["auth-api", "user-service"]
+        meta:
+          $ref: '#/components/schemas/QueryMetadata'
+        error:
+          type: string
+
+    ContextsResponse:
+      type: object
+      properties:
+        contexts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContextInfo'
+
+    ContextInfo:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "production-api"
+        client:
+          type: string
+          example: "opensearch-prod"
+        description:
+          type: string
+          example: "Production API logs from OpenSearch"
+        searchInherit:
+          type: array
+          items:
+            type: string
+          example: ["base-search"]
+
+    LogEntry:
+      type: object
+      properties:
+        Timestamp:
+          type: string
+          format: date-time
+          description: Log entry timestamp
+        Message:
+          type: string
+          description: Log message content
+        Level:
+          type: string
+          description: Log level (INFO, WARN, ERROR, etc.)
+          example: "ERROR"
+        Fields:
+          type: object
+          additionalProperties: true
+          description: Additional structured fields from the log entry
+
+    QueryMetadata:
+      type: object
+      properties:
+        queryTime:
+          type: string
+          description: Time taken to execute the query
+          example: "150ms"
+        resultCount:
+          type: integer
+          description: Number of results returned
+          example: 42
+        contextUsed:
+          type: string
+          description: Context ID that was used
+          example: "production-api"
+        clientType:
+          type: string
+          description: Type of log client used
+          example: "opensearch"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+        code:
+          type: string
+          enum: ["CONTEXT_NOT_FOUND", "INVALID_SEARCH", "BACKEND_ERROR", "VALIDATION_ERROR"]
+          description: Machine-readable error code
+        details:
+          type: object
+          additionalProperties: true
+          description: Additional error context

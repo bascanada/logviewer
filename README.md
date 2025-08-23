@@ -337,6 +337,101 @@ request.
 -> % logviewer -c ./config.json -i growbe-odoo -i growbe-ingress query
 ```
 
+## Server Mode
+
+LogViewer can be run as a server, exposing its log querying capabilities via an HTTP API. This allows for programmatic access to the log aggregation engine.
+
+### Starting the Server
+
+To start the server, use the `server` command and provide a path to your configuration file:
+
+```bash
+logviewer server --config /path/to/your/config.json
+```
+
+By default, the server will listen on `0.0.0.0:8080`. You can change this with the `--host` and `--port` flags.
+
+### API Endpoints
+
+The server provides the following endpoints:
+
+#### `GET /health`
+
+Checks the health of the server.
+
+```bash
+curl -X GET http://localhost:8080/health
+```
+
+#### `GET /contexts`
+
+Lists all available contexts from the configuration file.
+
+```bash
+curl -X GET http://localhost:8080/contexts
+```
+
+#### `GET /contexts/{contextId}`
+
+Retrieves details for a specific context.
+
+```bash
+curl -X GET http://localhost:8080/contexts/my-context-id
+```
+
+#### `POST /query/logs`
+
+Queries for log entries, equivalent to `logviewer query log`.
+
+**Example:** Get the last 10 log entries for the `growbe-odoo` context.
+
+```bash
+curl -X POST http://localhost:8080/query/logs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contextId": "growbe-odoo",
+    "search": {
+      "size": 10
+    }
+  }'
+```
+
+#### `POST /query/fields`
+
+Queries for available fields, equivalent to `logviewer query field`.
+
+**Example:** Get all available fields for the `growbe-odoo` context.
+
+```bash
+curl -X POST http://localhost:8080/query/fields \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contextId": "growbe-odoo"
+  }'
+```
+
+## LLM Tool Integration
+
+For AI tools that can only make GET requests (like Gemini CLI), use the GET endpoints:
+
+### Discovery Pattern
+```bash
+# 1. Find available contexts
+GET /contexts
+
+# 2. Discover fields for a context
+GET /query/fields?contextId=my-context
+
+# 3. Query logs using discovered field names
+GET /query/logs?contextId=my-context&fields=field_name=field_value&last=1h
+```
+
+### Example: Find Error Logs
+```bash
+# Using curl (what Gemini CLI does internally)
+curl "http://localhost:8080/query/logs?contextId=nonprod-api&fields=level=ERROR&last=30m&size=20"
+```
+
 ## Todo
 
 * Mix multiple datasource in the same flow (maybe be complicated to order them correctly)
