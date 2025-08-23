@@ -1,0 +1,327 @@
+openapi: 3.0.0
+info:
+  title: LogViewer API
+  description: API for querying logs from various backends through the LogViewer server.
+  version: "1.0.0"
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+paths:
+  /health:
+    get:
+      summary: Health Check
+      description: Checks if the server is running and healthy.
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+
+  /contexts:
+    get:
+      summary: List Available Contexts
+      description: Retrieves a list of all configured contexts from the config file.
+      responses:
+        '200':
+          description: A list of contexts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContextsResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+
+  /contexts/{contextId}:
+    get:
+      summary: Get Context Details
+      description: Retrieves the details for a specific context.
+      parameters:
+        - name: contextId
+          in: path
+          required: true
+          description: The ID of the context to retrieve.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Details for the specified context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContextInfo'
+        '404':
+          description: Context Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+
+  /query/logs:
+    post:
+      summary: Query for Log Entries
+      description: >
+        Executes a search query against a specified context and returns matching log entries.
+        This is the API equivalent of the `logviewer query log` CLI command.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryRequest'
+            examples:
+              basic_log_query:
+                summary: "Basic log search"
+                description: "Equivalent to: `logviewer -c config.json -i my-context query log --size 10`"
+                value:
+                  contextId: "my-context"
+                  search:
+                    size: 10
+              filtered_log_query:
+                summary: "Filtered log search"
+                description: "Equivalent to: `logviewer -c config.json -i my-context query log -f level=ERROR`"
+                value:
+                  contextId: "my-context"
+                  search:
+                    fields:
+                      level: "ERROR"
+      responses:
+        '200':
+          description: A list of log entries matching the query.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogsResponse'
+        '400':
+          description: Bad Request (e.g., invalid JSON, validation error)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '500':
+          description: Internal Server Error or Backend Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+
+  /query/fields:
+    post:
+      summary: Query for Available Fields
+      description: >
+        Executes a search query against a specified context and returns the available fields
+        and their potential values. This is the API equivalent of the `logviewer query field` CLI command.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryRequest'
+            examples:
+              basic_field_query:
+                summary: "Basic field discovery"
+                description: "Equivalent to: `logviewer -c config.json -i my-context query field`"
+                value:
+                  contextId: "my-context"
+      responses:
+        '200':
+          description: A map of field names to their possible values.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldsResponse'
+        '400':
+          description: Bad Request (e.g., invalid JSON, validation error)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '500':
+          description: Internal Server Error or Backend Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+
+components:
+  schemas:
+    QueryRequest:
+      type: object
+      required:
+        - contextId
+      properties:
+        contextId:
+          type: string
+          description: The ID of the context to query, as defined in the config file.
+        inherits:
+          type: array
+          items:
+            type: string
+          description: A list of search IDs to inherit from, as defined in the config file.
+        search:
+          $ref: '#/components/schemas/LogSearch'
+
+    LogSearch:
+      type: object
+      description: Defines the search parameters. Mirrors the CLI flags.
+      properties:
+        fields:
+          type: object
+          description: Key-value pairs for field matching (e.g., "level": "error").
+          additionalProperties:
+            type: string
+        fieldsCondition:
+          type: object
+          description: Extra rules for filtering fields.
+          additionalProperties:
+            type: string
+        range:
+          type: object
+          properties:
+            lte:
+              type: string
+              format: date-time
+              nullable: true
+            gte:
+              type: string
+              format: date-time
+              nullable: true
+            last:
+              type: string
+              description: A duration string (e.g., '15m', '1h') for a relative time range.
+              nullable: true
+        size:
+          type: integer
+          description: Number of log entries to return.
+          nullable: true
+        refresh:
+          type: object
+          properties:
+            follow:
+              type: boolean
+              nullable: true
+            duration:
+              type: string
+              nullable: true
+        options:
+          type: object
+          description: Implementation-specific options.
+          additionalProperties: true
+        fieldExtraction:
+          type: object
+          properties:
+            regex:
+              type: string
+              nullable: true
+            date:
+              type: string
+              nullable: true
+        printerOptions:
+          type: object
+          properties:
+            template:
+              type: string
+              nullable: true
+
+    LogsResponse:
+      type: object
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogEntry'
+        meta:
+          $ref: '#/components/schemas/QueryMetadata'
+
+    FieldsResponse:
+      type: object
+      properties:
+        fields:
+          type: object
+          description: A map of field names to an array of their possible string values.
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        meta:
+          $ref: '#/components/schemas/QueryMetadata'
+
+    ContextsResponse:
+      type: object
+      properties:
+        contexts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContextInfo'
+
+    ContextInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        client:
+          type: string
+        description:
+          type: string
+        searchInherit:
+          type: array
+          items:
+            type: string
+
+    LogEntry:
+      type: object
+      properties:
+        Timestamp:
+          type: string
+          format: date-time
+        Message:
+          type: string
+        Level:
+          type: string
+        Fields:
+          type: object
+          additionalProperties: true
+
+    QueryMetadata:
+      type: object
+      properties:
+        queryTime:
+          type: string
+          description: The duration of the query execution.
+        resultCount:
+          type: integer
+          description: The number of results returned.
+        contextUsed:
+          type: string
+          description: The context ID used for the query.
+        clientType:
+          type: string
+          description: The type of the backend client (e.g., opensearch, splunk).
+
+    APIError:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        details:
+          type: object
+          nullable: true
+          additionalProperties: true

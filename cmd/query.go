@@ -133,8 +133,8 @@ func resolveSearch() (client.LogSearchResult, error) {
 		if len(contextIds) != 1 {
 			return nil, errors.New("-i required only exactly one element when doing a query log or query tag")
 		}
-		var config config.ContextConfig
-		if err := ty.ReadJsonFile(contextPath, &config); err != nil {
+		config, err := config.LoadContextConfig(contextPath)
+		if err != nil {
 			return nil, err
 		}
 
@@ -305,12 +305,12 @@ var queryCommand = &cobra.Command{
 	Short:  "Query a login system for logs and available fields",
 	PreRun: onCommandStart,
 	Run: func(cmd *cobra.Command, args []string) {
-		var config config.ContextConfig
-		if err := ty.ReadJsonFile(contextPath, &config); err != nil {
+		config, err := config.LoadContextConfig(contextPath)
+		if err != nil {
 			panic(err)
 		}
 
-		if err := views.RunQueryViewApp(config, contextIds); err != nil {
+		if err := views.RunQueryViewApp(*config, contextIds); err != nil {
 			panic(err)
 		}
 	},

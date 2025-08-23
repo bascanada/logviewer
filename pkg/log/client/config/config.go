@@ -2,10 +2,33 @@ package config
 
 import (
 	"errors"
+	"fmt"
+	"os"
 
 	"github.com/berlingoqc/logviewer/pkg/log/client"
 	"github.com/berlingoqc/logviewer/pkg/ty"
 )
+
+func LoadContextConfig(configPath string) (*ContextConfig, error) {
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("config file not found at path: %s", configPath)
+	}
+
+	var config ContextConfig
+	if err := ty.ReadJsonFile(configPath, &config); err != nil {
+		return nil, fmt.Errorf("error reading config file: %w", err)
+	}
+
+	if len(config.Contexts) == 0 {
+		return nil, errors.New("no contexts found in config file")
+	}
+
+	if len(config.Clients) == 0 {
+		return nil, errors.New("no clients found in config file")
+	}
+
+	return &config, nil
+}
 
 type Client struct {
 	Type    string `json:"type"`

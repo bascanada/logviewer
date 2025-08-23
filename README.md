@@ -337,6 +337,79 @@ request.
 -> % logviewer -c ./config.json -i growbe-odoo -i growbe-ingress query
 ```
 
+## Server Mode
+
+LogViewer can be run as a server, exposing its log querying capabilities via an HTTP API. This allows for programmatic access to the log aggregation engine.
+
+### Starting the Server
+
+To start the server, use the `server` command and provide a path to your configuration file:
+
+```bash
+logviewer server --config /path/to/your/config.json
+```
+
+By default, the server will listen on `0.0.0.0:8080`. You can change this with the `--host` and `--port` flags.
+
+### API Endpoints
+
+The server provides the following endpoints:
+
+#### `GET /health`
+
+Checks the health of the server.
+
+```bash
+curl -X GET http://localhost:8080/health
+```
+
+#### `GET /contexts`
+
+Lists all available contexts from the configuration file.
+
+```bash
+curl -X GET http://localhost:8080/contexts
+```
+
+#### `GET /contexts/{contextId}`
+
+Retrieves details for a specific context.
+
+```bash
+curl -X GET http://localhost:8080/contexts/my-context-id
+```
+
+#### `POST /query/logs`
+
+Queries for log entries, equivalent to `logviewer query log`.
+
+**Example:** Get the last 10 log entries for the `growbe-odoo` context.
+
+```bash
+curl -X POST http://localhost:8080/query/logs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contextId": "growbe-odoo",
+    "search": {
+      "size": 10
+    }
+  }'
+```
+
+#### `POST /query/fields`
+
+Queries for available fields, equivalent to `logviewer query field`.
+
+**Example:** Get all available fields for the `growbe-odoo` context.
+
+```bash
+curl -X POST http://localhost:8080/query/fields \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contextId": "growbe-odoo"
+  }'
+```
+
 ## Todo
 
 * Mix multiple datasource in the same flow (maybe be complicated to order them correctly)
