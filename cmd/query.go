@@ -143,7 +143,7 @@ func resolveSearch() (client.LogSearchResult, error) {
 			return nil, err
 		}
 
-		searchFactory, err := factory.GetLogSearchFactory(clientFactory, config)
+		searchFactory, err := factory.GetLogSearchFactory(clientFactory, *config)
 		if err != nil {
 			return nil, err
 		}
