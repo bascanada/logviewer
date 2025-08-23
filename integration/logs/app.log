@@ -1,0 +1,75 @@
+2025-08-22 10:00:01.543  INFO 18748 --- [           main] com.example.demo.DemoApplication         : Starting DemoApplication on DESKTOP-12345 with PID 18748 (C:\Users\user\demo\target\classes started by user in C:\Users\user\demo)
+2025-08-22 10:00:01.546  INFO 18748 --- [           main] com.example.demo.DemoApplication         : No active profile set, falling back to default profiles: default
+2025-08-22 10:00:02.634  INFO 18748 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port(s): 8080 (http)
+2025-08-22 10:00:02.645  INFO 18748 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2025-08-22 10:00:02.645  INFO 18748 --- [           main] org.apache.catalina.core.StandardEngine  : Starting Servlet engine: [Apache Tomcat/9.0.54]
+2025-08-22 10:00:02.734  INFO 18748 --- [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2025-08-22 10:00:02.734  INFO 18748 --- [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 1136 ms
+2025-08-22 10:00:03.150  INFO 18748 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2025-08-22 10:00:03.452  INFO 18748 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2025-08-22 10:00:03.500  INFO 18748 --- [           main] org.hibernate.dialect.Dialect            : HHH000400: Using dialect: org.hibernate.dialect.H2Dialect
+2025-08-22 10:00:04.210  INFO 18748 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port(s): 8080 (http) with context path ''
+2025-08-22 10:00:04.225  INFO 18748 --- [           main] com.example.demo.DemoApplication         : Started DemoApplication in 3.248 seconds (JVM running for 4.015)
+2025-08-22 10:01:15.301  INFO 18748 --- [nio-8080-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2025-08-22 10:01:15.302  INFO 18748 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2025-08-22 10:01:15.303  INFO 18748 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms
+2025-08-22 10:01:15.320  INFO 18748 --- [nio-8080-exec-1] com.example.controller.UserController    : GET /users request received
+2025-08-22 10:01:15.325  INFO 18748 --- [nio-8080-exec-1] com.example.service.UserService          : Fetching all users from the database.
+2025-08-22 10:01:15.350  INFO 18748 --- [nio-8080-exec-2] com.example.controller.UserController    : GET /users/1 request received for user ID: 1
+2025-08-22 10:01:15.352  INFO 18748 --- [nio-8080-exec-2] com.example.service.UserService          : Fetching user with ID: 1
+2025-08-22 10:01:16.400  WARN 18748 --- [nio-8080-exec-3] com.example.service.ProductService       : Product with ID: 999 not found.
+2025-08-22 10:01:16.401  INFO 18748 --- [nio-8080-exec-3] com.example.controller.ProductController : GET /products/999 request returned 404 Not Found.
+2025-08-22 10:01:17.805  INFO 18748 --- [nio-8080-exec-4] com.example.controller.OrderController   : POST /orders request received with 3 items.
+2025-08-22 10:01:17.810  INFO 18748 --- [nio-8080-exec-4] com.example.service.OrderService         : Creating new order for user: alice
+2025-08-22 10:01:17.850  ERROR 18748 --- [nio-8080-exec-5] com.example.controller.AdminController   : Unauthorized access attempt to /admin/dashboard from IP: 192.168.1.10
+2025-08-22 10:01:18.100  INFO 18748 --- [nio-8080-exec-6] com.example.controller.UserController    : GET /users/search?name=bob request received
+2025-08-22 10:01:18.102  INFO 18748 --- [nio-8080-exec-6] com.example.service.UserService          : Searching for users with name: bob
+2025-08-22 10:01:19.200  ERROR 18748 --- [nio-8080-exec-7] com.example.service.PaymentService       : Payment failed for order ID: 12345
+java.lang.RuntimeException: Could not connect to payment gateway
+	at com.example.service.PaymentService.processPayment(PaymentService.java:42)
+	at com.example.controller.OrderController.checkout(OrderController.java:85)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:566)
+	at org.springframework.web.method.support.InvocableHandlerMethod.doInvoke(InvocableHandlerMethod.java:190)
+	at org.springframework.web.method.support.InvocableHandlerMethod.invokeForRequest(InvocableHandlerMethod.java:138)
+	at org.springframework.web.servlet.mvc.method.annotation.ServletInvocableHandlerMethod.invokeAndHandle(ServletInvocableHandlerMethod.java:106)
+	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.invokeHandlerMethod(RequestMappingHandlerAdapter.java:878)
+	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.handleInternal(RequestMappingHandlerAdapter.java:792)
+	at org.springframework.web.servlet.mvc.method.AbstractHandlerMethodAdapter.handle(AbstractHandlerMethodAdapter.java:87)
+	at org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:1040)
+	at org.springframework.web.servlet.DispatcherServlet.doService(DispatcherServlet.java:943)
+	at org.springframework.web.servlet.FrameworkServlet.processRequest(FrameworkServlet.java:1006)
+	at org.springframework.web.servlet.FrameworkServlet.doPost(FrameworkServlet.java:909)
+	at javax.servlet.http.HttpServlet.service(HttpServlet.java:681)
+	at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:883)
+	at javax.servlet.http.HttpServlet.service(HttpServlet.java:764)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:228)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:163)
+	at org.apache.tomcat.websocket.server.WsFilter.doFilter(WsFilter.java:53)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:190)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:163)
+	at org.springframework.web.filter.CharacterEncodingFilter.doFilterInternal(CharacterEncodingFilter.java:201)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:119)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:190)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:163)
+	at org.apache.catalina.core.StandardWrapperValve.invoke(StandardWrapperValve.java:197)
+	at org.apache.catalina.core.StandardContextValve.invoke(StandardContextValve.java:97)
+	at org.apache.catalina.authenticator.AuthenticatorBase.invoke(AuthenticatorBase.java:542)
+	at org.apache.catalina.core.StandardHostValve.invoke(StandardHostValve.java:135)
+	at org.apache.catalina.valves.ErrorReportValve.invoke(ErrorReportValve.java:92)
+	at org.apache.catalina.core.StandardEngineValve.invoke(StandardEngineValve.java:78)
+	at org.apache.catalina.connector.CoyoteAdapter.service(CoyoteAdapter.java:357)
+	at org.apache.coyote.http11.Http11Processor.service(Http11Processor.java:382)
+	at org.apache.coyote.AbstractProcessorLight.process(AbstractProcessorLight.java:65)
+	at org.apache.coyote.AbstractProtocol$ConnectionHandler.process(AbstractProtocol.java:895)
+	at org.apache.tomcat.util.net.NioEndpoint$SocketProcessor.doRun(NioEndpoint.java:1732)
+	at org.apache.tomcat.util.net.SocketProcessorBase.run(SocketProcessorBase.java:49)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:61)
+	at java.base/java.lang.Thread.run(Thread.java:829)
+2025-08-22 10:01:20.500  INFO 18748 --- [   scheduling-1] com.example.tasks.ScheduledTasks         : Running scheduled database cleanup task.
+2025-08-22 10:01:20.505  INFO 18748 --- [   scheduling-1] com.example.service.CleanupService       : Deleting 5 old records.
+

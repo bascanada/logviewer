@@ -6,7 +6,7 @@ import (
 	"log"
 
 	"github.com/berlingoqc/logviewer/pkg/log/client"
-	"github.com/berlingoqc/logviewer/pkg/log/config"
+	"github.com/berlingoqc/logviewer/pkg/log/client/config"
 	"github.com/berlingoqc/logviewer/pkg/log/factory"
 	"github.com/berlingoqc/logviewer/pkg/log/printer"
 	"github.com/gdamore/tcell/v2"

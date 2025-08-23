@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/berlingoqc/logviewer/pkg/log/client"
-	"github.com/berlingoqc/logviewer/pkg/log/config"
+	"github.com/berlingoqc/logviewer/pkg/log/client/config"
 	"github.com/berlingoqc/logviewer/pkg/log/factory"
 	"github.com/berlingoqc/logviewer/pkg/log/impl/docker"
 	"github.com/berlingoqc/logviewer/pkg/log/impl/elk/kibana"
@@ -27,11 +27,31 @@ import (
 
 func stringArrayEnvVariable(strs []string, maps *ty.MS) error {
 	for _, f := range strs {
-		items := strings.Split(f, "=")
-		if len(items) < 2 {
-			return errors.New("invalid value : " + f)
+		if strings.Contains(f, "=") {
+			items := strings.SplitN(f, "=", 2)
+			key := items[0]
+			val := items[1]
+
+			// empty key (e.g. "=error") is treated as a free-text token
+			if key == "" {
+				if prev, ok := (*maps)[""]; ok && prev != "" {
+					(*maps)[""] = prev + " " + val
+				} else {
+					(*maps)[""] = val
+				}
+			} else {
+				(*maps)[key] = val
+			}
+			continue
 		}
-		(*maps)[items[0]] = strings.Join(items[1:], "")
+
+		// No '=' present: treat the whole string as a free-text token and
+		// append it to any existing free-text tokens.
+		if prev, ok := (*maps)[""]; ok && prev != "" {
+			(*maps)[""] = prev + " " + f
+		} else {
+			(*maps)[""] = f
+		}
 	}
 	return nil
 }
@@ -75,7 +95,8 @@ func resolveSearch() (client.LogSearchResult, error) {
 	}
 
 	if index != "" {
-		searchRequest.Options["Index"] = index
+		// use lowercase `index` consistently with splunk mapper and tests
+		searchRequest.Options["index"] = index
 	}
 
 	if k8sContainer != "" {

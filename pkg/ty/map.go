@@ -1,5 +1,7 @@
 package ty
 
+import "fmt"
+
 type MI map[string]interface{}
 type MS map[string]string
 
@@ -30,9 +32,30 @@ func (mi MI) GetString(key string) string {
 	return ""
 }
 
+func (mi MI) GetStringOk(key string) (string, bool) {
+	v, ok := mi[key]
+	if ok {
+		return v.(string), ok
+	}
+	return "", false
+}
+
 func (mi MI) GetMS(key string) MS {
 	if v, b := mi[key]; b {
-		return v.(MS)
+		switch vv := v.(type) {
+		case MS:
+			return vv
+		case map[string]string:
+			return MS(vv)
+		case map[string]interface{}:
+			res := MS{}
+			for k, val := range vv {
+				res[k] = fmt.Sprint(val)
+			}
+			return res
+		default:
+			return MS{}
+		}
 	}
 	return MS{}
 }

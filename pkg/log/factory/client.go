@@ -4,7 +4,7 @@ import (
 	"errors"
 
 	"github.com/berlingoqc/logviewer/pkg/log/client"
-	"github.com/berlingoqc/logviewer/pkg/log/config"
+	"github.com/berlingoqc/logviewer/pkg/log/client/config"
 	"github.com/berlingoqc/logviewer/pkg/log/impl/docker"
 	"github.com/berlingoqc/logviewer/pkg/log/impl/elk/kibana"
 	"github.com/berlingoqc/logviewer/pkg/log/impl/elk/opensearch"

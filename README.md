@@ -134,13 +134,13 @@ level
 [19:51:34][WARN] Select expired jobs, expiration max delay 1, returned 0 jobs
 
 # Query with a custom format , all fields can be used and more , it's go template
--> % logviewer --opensearch-endpoint "https://logs-dev.mfxelk.eu-west-1.nonprod.tmaws.eu" --elk-index "mfx*" --last 10m --size 10 --format "{{.Fields.level}} - {{.Message}}" query log
+-> % logviewer --opensearch-endpoint "https://logs-dev.elk.eu-west-1.nonprod.aws.eu" --elk-index "gfx*" --last 10m --size 10 --format "{{.Fields.level}} - {{.Message}}" query log
 INFO - Message sent to SQS with SQS-assigned messageId: a64e36bf-9418-4c06-93d7-311424dee65c
 INFO - Message sent to SQS with SQS-assigned messageId: 6da1de09-aa1e-4295-abe4-c8eb457775ad
 INFO - Shutting down SessionCallBackScheduler executor
 INFO - Shutting down SessionCallBackScheduler executor
 INFO - Shutting down SessionCallBackScheduler executor
-INFO - Message sent to SQS with SQS-assigned messageId: 9d741e5d-1abf-4ae0-b054-798a0cc7f1b9
+INFO - Message sent to SQS with SQS-assigned messageId: 9d741e5d-1abf-4ae0-3554-798a0cc7f1b9
 INFO - name='/health/healthcheck' total=0 
 INFO - name='/health/healthcheck' total=1 
 INFO - name='/health/healthcheck' total=0 
@@ -336,7 +336,6 @@ request.
 # will display the field
 -> % logviewer -c ./config.json -i growbe-odoo -i growbe-ingress query
 ```
-
 
 ## Todo
 

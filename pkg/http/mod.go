@@ -5,10 +5,12 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/berlingoqc/logviewer/pkg/ty"
 )
@@ -28,15 +30,43 @@ func (c CookieAuth) Login(req *http.Request) error {
 	return nil
 }
 
+// HeaderAuth sets fixed headers (like Authorization) on each request.
+type HeaderAuth struct {
+	Headers ty.MS
+}
+
+func (h HeaderAuth) Login(req *http.Request) error {
+	for k, v := range h.Headers {
+		req.Header.Set(k, v)
+	}
+	return nil
+}
+
 type HttpClient struct {
 	client http.Client
 	url    string
 }
 
+// Debug controls whether verbose HTTP-level debug logs are emitted. Tests and
+// production code can toggle this to avoid leaking secrets into logs.
+var Debug = false
+
+// SetDebug sets the package debug flag.
+func SetDebug(d bool) {
+	Debug = d
+}
+
+// DebugEnabled returns whether HTTP debug logging is enabled.
+func DebugEnabled() bool {
+	return Debug
+}
+
 func (c HttpClient) post(path string, headers ty.MS, buf *bytes.Buffer, responseData interface{}, auth Auth) error {
 	path = c.url + path
 
-	log.Printf("[POST]%s %s"+ty.LB, path, buf.String())
+	if Debug {
+		log.Printf("[POST]%s %s"+ty.LB, path, buf.String())
+	}
 
 	req, err := http.NewRequest("POST", path, buf)
 	if err != nil {
@@ -45,6 +75,11 @@ func (c HttpClient) post(path string, headers ty.MS, buf *bytes.Buffer, response
 
 	for k, v := range headers {
 		req.Header.Set(k, v)
+	}
+
+	// Log headers but redact sensitive values (Authorization, Cookie, tokens)
+	if Debug {
+		log.Printf("[POST-HEADERS] %s\n", maskHeaderMap(req.Header))
 	}
 
 	if auth != nil {
@@ -81,13 +116,14 @@ func (c HttpClient) PostData(path string, headers ty.MS, body ty.MS, responseDat
 
 	headers["Content-Type"] = "application/x-www-form-urlencoded"
 
-	data := ""
-
+	// Build form-encoded body using url.Values to ensure proper encoding of keys/values
+	values := url.Values{}
 	for k, v := range body {
-		data += k + "=" + v + "&"
+		values.Add(k, v)
 	}
 
-	buf := bytes.NewBuffer([]byte(data))
+	encoded := values.Encode()
+	buf := bytes.NewBufferString(encoded)
 
 	return c.post(path, headers, buf, responseData, auth)
 
@@ -132,7 +168,9 @@ func (c HttpClient) Get(path string, queryParams ty.MS, body interface{}, respon
 		path += "?" + queryParamString
 	}
 
-	log.Printf("[GET]%s %s\n", path, buf.String())
+	if Debug {
+		log.Printf("[GET]%s %s\n", path, buf.String())
+	}
 
 	req, err := http.NewRequest("GET", path, &buf)
 	if err != nil {
@@ -161,7 +199,14 @@ func (c HttpClient) Get(path string, queryParams ty.MS, body interface{}, respon
 		return readErr
 	}
 
-	//println(string(resBody))
+	// Log a truncated GET response body for debugging (avoid huge output)
+	if Debug && len(resBody) > 0 {
+		s := string(resBody)
+		if len(s) > 2000 {
+			s = s[:2000] + "...TRUNCATED"
+		}
+		log.Printf("[GET-RAW] %s", s)
+	}
 
 	jsonErr := json.Unmarshal(resBody, &responseData)
 	if jsonErr != nil {
@@ -191,4 +236,30 @@ func getSpaceClient() http.Client {
 
 	}
 
+}
+
+// maskHeaderMap returns a string representation of headers with sensitive
+// values redacted (keeps first 4 chars for debugging). This avoids leaking
+// secrets into logs while letting us verify headers are present.
+func maskHeaderMap(h http.Header) string {
+	redacted := []string{}
+	for k, vals := range h {
+		v := ""
+		if len(vals) > 0 {
+			val := vals[0]
+			// Redact common sensitive headers
+			switch strings.ToLower(k) {
+			case "authorization", "cookie", "x-splunk-token", "x-auth-token":
+				if len(val) > 4 {
+					v = val[:4] + "...REDACTED"
+				} else {
+					v = "REDACTED"
+				}
+			default:
+				v = val
+			}
+		}
+		redacted = append(redacted, fmt.Sprintf("%s: %s", k, v))
+	}
+	return strings.Join(redacted, "; ")
 }

@@ -1,0 +1,38 @@
+{
+  "clients": {
+    "local-splunk": {
+      "type": "splunk",
+      "options": {
+        "Url": "https://localhost:8089/services",
+        "Headers": {
+          "Authorization": "Basic YWRtaW46cGFzc3dvcmQ="
+        },
+        "SearchBody": {
+          "output_mode": "json"
+        }
+      }
+    }
+  },
+  "searches": {
+    "recent-main": {
+      "printerOptions": {
+        "template": "{{.Message}}"
+      }
+    }
+  },
+  "contexts": {
+    "main-latest": {
+      "client": "local-splunk",
+      "searchInherit": [],
+      "search": {
+        "fields": {
+          "_": "hello",
+          "sourcetype": "httpevent"
+        },
+        "options": {
+          "index": "main"
+        }
+      }
+    }
+  }
+}

@@ -2,7 +2,7 @@ package factory
 
 import (
 	"github.com/berlingoqc/logviewer/pkg/log/client"
-	"github.com/berlingoqc/logviewer/pkg/log/config"
+	"github.com/berlingoqc/logviewer/pkg/log/client/config"
 )
 
 type logSearchFactory struct {
