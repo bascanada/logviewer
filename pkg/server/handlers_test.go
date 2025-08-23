@@ -214,3 +214,46 @@ func TestOpenAPIHandler(t *testing.T) {
 	assert.NotEmpty(t, body)
 	assert.Contains(t, body, "openapi: 3.0.0")
 }
+
+func TestQueryLogsGETHandler(t *testing.T) {
+	cfg := &config.ContextConfig{
+		Contexts: map[string]config.SearchContext{"ctx1": {Client: "c1"}},
+		Clients:  map[string]config.Client{"c1": {Type: "mock"}},
+	}
+	s := newTestServer(t, cfg, &mockSearchFactory{})
+
+	req, err := http.NewRequest("GET", "/query/logs?contextId=ctx1&size=10&fields=level=error", nil)
+	assert.NoError(t, err)
+
+	rr := httptest.NewRecorder()
+	s.router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+
+	var resp LogsResponse
+	err = json.Unmarshal(rr.Body.Bytes(), &resp)
+	assert.NoError(t, err)
+	assert.Len(t, resp.Logs, 1)
+	assert.Equal(t, "test log", resp.Logs[0].Message)
+}
+
+func TestQueryFieldsGETHandler(t *testing.T) {
+	cfg := &config.ContextConfig{
+		Contexts: map[string]config.SearchContext{"ctx1": {Client: "c1"}},
+		Clients:  map[string]config.Client{"c1": {Type: "mock"}},
+	}
+	s := newTestServer(t, cfg, &mockSearchFactory{})
+
+	req, err := http.NewRequest("GET", "/query/fields?contextId=ctx1", nil)
+	assert.NoError(t, err)
+
+	rr := httptest.NewRecorder()
+	s.router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+
+	var resp FieldsResponse
+	err = json.Unmarshal(rr.Body.Bytes(), &resp)
+	assert.NoError(t, err)
+	assert.Len(t, resp.Fields, 1)
+}

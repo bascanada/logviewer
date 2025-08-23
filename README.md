@@ -410,6 +410,28 @@ curl -X POST http://localhost:8080/query/fields \
   }'
 ```
 
+## LLM Tool Integration
+
+For AI tools that can only make GET requests (like Gemini CLI), use the GET endpoints:
+
+### Discovery Pattern
+```bash
+# 1. Find available contexts
+GET /contexts
+
+# 2. Discover fields for a context
+GET /query/fields?contextId=my-context
+
+# 3. Query logs using discovered field names
+GET /query/logs?contextId=my-context&fields=field_name=field_value&last=1h
+```
+
+### Example: Find Error Logs
+```bash
+# Using curl (what Gemini CLI does internally)
+curl "http://localhost:8080/query/logs?contextId=nonprod-api&fields=level=ERROR&last=30m&size=20"
+```
+
 ## Todo
 
 * Mix multiple datasource in the same flow (maybe be complicated to order them correctly)

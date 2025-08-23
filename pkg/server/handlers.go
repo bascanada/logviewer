@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -52,19 +53,108 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-func (s *Server) queryLogsHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		s.writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only POST method is allowed")
+func (s *Server) queryLogsGETHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse required contextId
+	contextId := r.URL.Query().Get("contextId")
+	if contextId == "" {
+		s.writeError(w, http.StatusBadRequest, ErrCodeContextNotFound, "contextId query parameter is required")
 		return
 	}
 
-	var req QueryRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.writeError(w, http.StatusBadRequest, ErrCodeInvalidSearch, "Invalid request body")
+	// Parse optional inherits: "inherit1,inherit2"
+	var inherits []string
+	if inheritsParam := r.URL.Query().Get("inherits"); inheritsParam != "" {
+		inherits = strings.Split(inheritsParam, ",")
+	}
+
+	// Build LogSearch from query parameters
+	search := client.LogSearch{}
+
+	// Parse fields: "field1=value1,field2=value2"
+	if fieldsParam := r.URL.Query().Get("fields"); fieldsParam != "" {
+		fields := make(map[string]string)
+		for _, pair := range strings.Split(fieldsParam, ",") {
+			if kv := strings.SplitN(pair, "=", 2); len(kv) == 2 {
+				key := strings.TrimSpace(kv[0])
+				value := strings.TrimSpace(kv[1])
+				fields[key] = value
+			}
+		}
+		search.Fields = fields
+	}
+
+	// Parse time range
+	if last := r.URL.Query().Get("last"); last != "" {
+		search.Range.Last.S(last)
+	}
+	if gte := r.URL.Query().Get("from"); gte != "" {
+		search.Range.Gte.S(gte)
+	}
+	if lte := r.URL.Query().Get("to"); lte != "" {
+		search.Range.Lte.S(lte)
+	}
+
+	// Parse size
+	if sizeStr := r.URL.Query().Get("size"); sizeStr != "" {
+		if size, err := strconv.Atoi(sizeStr); err == nil && size > 0 {
+			search.Size.S(size)
+		}
+	}
+
+	// Create QueryRequest and reuse existing logic
+	req := QueryRequest{
+		ContextId: contextId,
+		Inherits:  inherits,
+		Search:    search,
+	}
+
+	// Log the GET request
+	s.logger.Info("GET query logs request",
+		"contextId", contextId,
+		"remote_addr", r.RemoteAddr)
+
+	// Process using existing POST handler logic
+	s.processQueryLogsRequest(w, r, &req)
+}
+
+// GET version of /query/fields
+func (s *Server) queryFieldsGETHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse required contextId
+	contextId := r.URL.Query().Get("contextId")
+	if contextId == "" {
+		s.writeError(w, http.StatusBadRequest, ErrCodeContextNotFound, "contextId query parameter is required")
 		return
 	}
 
-	if err := s.validateQueryRequest(&req); err != nil {
+	// Parse optional inherits
+	var inherits []string
+	if inheritsParam := r.URL.Query().Get("inherits"); inheritsParam != "" {
+		inherits = strings.Split(inheritsParam, ",")
+	}
+
+	// Build basic LogSearch for field discovery
+	search := client.LogSearch{}
+
+	// Parse time range for field discovery
+	if last := r.URL.Query().Get("last"); last != "" {
+		search.Range.Last.S(last)
+	}
+
+	// Create QueryRequest
+	req := QueryRequest{
+		ContextId: contextId,
+		Inherits:  inherits,
+		Search:    search,
+	}
+
+	s.logger.Info("GET query fields request", "contextId", contextId)
+
+	// Process using existing POST handler logic
+	s.processQueryFieldsRequest(w, r, &req)
+}
+
+func (s *Server) processQueryLogsRequest(w http.ResponseWriter, r *http.Request, req *QueryRequest) {
+	if err := s.validateQueryRequest(req); err != nil {
 		s.writeError(w, http.StatusBadRequest, ErrCodeValidationError, err.Error())
 		return
 	}
@@ -104,19 +194,39 @@ func (s *Server) queryLogsHandler(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, resp)
 }
 
-func (s *Server) queryFieldsHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		s.writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only POST method is allowed")
-		return
+func (s *Server) queryLogsRouter(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.queryLogsGETHandler(w, r)
+	case http.MethodPost:
+		s.queryLogsHandler(w, r)
+	default:
+		s.writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only GET and POST methods are allowed")
 	}
+}
 
+func (s *Server) queryLogsHandler(w http.ResponseWriter, r *http.Request) {
 	var req QueryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		s.writeError(w, http.StatusBadRequest, ErrCodeInvalidSearch, "Invalid request body")
 		return
 	}
+	s.processQueryLogsRequest(w, r, &req)
+}
 
-	if err := s.validateQueryRequest(&req); err != nil {
+func (s *Server) queryFieldsRouter(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.queryFieldsGETHandler(w, r)
+	case http.MethodPost:
+		s.queryFieldsHandler(w, r)
+	default:
+		s.writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only GET and POST methods are allowed")
+	}
+}
+
+func (s *Server) processQueryFieldsRequest(w http.ResponseWriter, r *http.Request, req *QueryRequest) {
+	if err := s.validateQueryRequest(req); err != nil {
 		s.writeError(w, http.StatusBadRequest, ErrCodeValidationError, err.Error())
 		return
 	}
@@ -154,6 +264,15 @@ func (s *Server) queryFieldsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) queryFieldsHandler(w http.ResponseWriter, r *http.Request) {
+	var req QueryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, http.StatusBadRequest, ErrCodeInvalidSearch, "Invalid request body")
+		return
+	}
+	s.processQueryFieldsRequest(w, r, &req)
 }
 
 func (s *Server) openapiHandler(w http.ResponseWriter, r *http.Request) {

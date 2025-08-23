@@ -51,8 +51,8 @@ func NewServer(host, port string, cfg *config.ContextConfig, logger *slog.Logger
 
 func (s *Server) routes() {
 	s.router.HandleFunc("/health", s.healthHandler)
-	s.router.HandleFunc("/query/logs", s.queryLogsHandler)
-	s.router.HandleFunc("/query/fields", s.queryFieldsHandler)
+	s.router.HandleFunc("/query/logs", s.queryLogsRouter)
+	s.router.HandleFunc("/query/fields", s.queryFieldsRouter)
 	s.router.HandleFunc("/contexts", s.contextsHandler)
 	s.router.HandleFunc("/contexts/", s.contextsHandler)
 	s.router.HandleFunc("/openapi.yaml", s.openapiHandler)

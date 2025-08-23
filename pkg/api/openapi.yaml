@@ -59,9 +59,73 @@ paths:
                 $ref: '#/components/schemas/ContextsResponse'
 
   /query/logs:
+    get:
+      summary: Query Log Entries (GET)
+      description: |
+        Query log entries using URL parameters. This endpoint is designed for tools
+        that can only make GET requests (like many LLM tools).
+
+        For complex queries, use the POST version instead.
+      parameters:
+        - name: contextId
+          in: query
+          required: true
+          description: Context ID from your configuration
+          schema:
+            type: string
+          example: "nonprod-api"
+        - name: fields
+          in: query
+          description: |
+            Field filters in format: field1=value1,field2=value2
+            Use /query/fields to discover available field names first.
+          schema:
+            type: string
+          example: "level=ERROR,service=auth-api"
+        - name: last
+          in: query
+          description: "Relative time range (15m, 2h, 1d)"
+          schema:
+            type: string
+          example: "1h"
+        - name: from
+          in: query
+          description: "Start time (RFC3339 format)"
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: "End time (RFC3339 format)"
+          schema:
+            type: string
+            format: date-time
+        - name: size
+          in: query
+          description: "Maximum number of entries to return"
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10000
+          example: 50
+        - name: inherits
+          in: query
+          description: "Comma-separated list of search configurations to inherit"
+          schema:
+            type: string
+          example: "base-search,error-filter"
+      responses:
+        '200':
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogsResponse'
     post:
-      summary: Query Log Entries
-      description: Query log entries from a specified context with optional filtering and search parameters
+      summary: Query Log Entries (POST)
+      description: |
+        Query log entries using JSON payload. Use this for complex queries
+        or when GET URL length limits are a concern.
       operationId: queryLogs
       requestBody:
         required: true
@@ -122,9 +186,29 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
   /query/fields:
+    get:
+      summary: Discover Available Fields (GET)
+      parameters:
+        - name: contextId
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "nonprod-api"
+        - name: last
+          in: query
+          description: "Time range for field discovery"
+          schema:
+            type: string
+          example: "1h"
+        - name: inherits
+          in: query
+          description: "Comma-separated inherits list"
+          schema:
+            type: string
     post:
-      summary: Query Available Fields
-      description: Query available fields and their values for a specified context
+      summary: Query Available Fields (POST)
+      description: Query available fields and their values for a specified context using a JSON payload.
       operationId: queryFields
       requestBody:
         required: true
