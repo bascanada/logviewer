@@ -8,11 +8,10 @@ import (
 )
 
 type LogEntry struct {
-	Timestamp time.Time
-	Message   string
-	Level     string
-
-	Fields ty.MI
+	Timestamp time.Time `json:"timestamp"`
+	Message   string    `json:"message"`
+	Level     string    `json:"level"`
+	Fields    ty.MI     `json:"fields"`
 }
 
 // Result of the search , may be used to get more log

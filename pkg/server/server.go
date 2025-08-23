@@ -11,28 +11,40 @@ import (
 	"time"
 
 	"github.com/berlingoqc/logviewer/pkg/log/client/config"
+	"github.com/berlingoqc/logviewer/pkg/log/factory"
 )
 
 type Server struct {
-	config     *config.ContextConfig
-	router     *http.ServeMux
-	httpServer *http.Server
-	logger     *slog.Logger
-	port       string
-	host       string
+	config        *config.ContextConfig
+	router        *http.ServeMux
+	httpServer    *http.Server
+	logger        *slog.Logger
+	port          string
+	host          string
+	searchFactory factory.SearchFactory
 }
 
-func NewServer(host, port string, cfg *config.ContextConfig, logger *slog.Logger) *Server {
+func NewServer(host, port string, cfg *config.ContextConfig, logger *slog.Logger) (*Server, error) {
+	clientFactory, err := factory.GetLogClientFactory(cfg.Clients)
+	if err != nil {
+		return nil, err
+	}
+	searchFactory, err := factory.GetLogSearchFactory(clientFactory, *cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	router := http.NewServeMux()
 	s := &Server{
-		config: cfg,
-		router: router,
-		logger: logger,
-		port:   port,
-		host:   host,
+		config:        cfg,
+		router:        router,
+		logger:        logger,
+		port:          port,
+		host:          host,
+		searchFactory: searchFactory,
 	}
 	s.routes()
-	return s
+	return s, nil
 }
 
 func (s *Server) routes() {

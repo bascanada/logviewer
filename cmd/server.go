@@ -1,8 +1,12 @@
 package cmd
 
 import (
-	"fmt"
+	"log/slog"
+	"os"
+	"strconv"
 
+	"github.com/berlingoqc/logviewer/pkg/log/client/config"
+	"github.com/berlingoqc/logviewer/pkg/server"
 	"github.com/spf13/cobra"
 )
 
@@ -18,9 +22,28 @@ var serverCmd = &cobra.Command{
 	Long:  `Starts an HTTP server to query logs, providing a programmatic API.`,
 	PreRun: onCommandStart,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("Starting server on %s:%d\n", host, port)
-		fmt.Printf("Using config file: %s\n", configPath)
-		// Server startup logic will go here
+		// NOTE: This implementation assumes a logger is configured and available via `onCommandStart`.
+		// A basic logger is created here as an example. You should integrate this with your application's logging strategy.
+		logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+		logger.Info("loading configuration", "path", configPath)
+		cfg, err := config.LoadContextConfig(configPath)
+		if err != nil {
+			logger.Error("failed to load configuration", "err", err)
+			os.Exit(1)
+		}
+
+		s, err := server.NewServer(host, strconv.Itoa(port), cfg, logger)
+		if err != nil {
+			logger.Error("failed to create server", "err", err)
+			os.Exit(1)
+		}
+
+		logger.Info("starting server", "host", host, "port", port)
+		if err := s.Start(); err != nil {
+			logger.Error("server failed to start", "err", err)
+			os.Exit(1)
+		}
 	},
 }
 

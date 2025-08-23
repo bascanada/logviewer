@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/berlingoqc/logviewer/pkg/log/client"
-	"github.com/berlingoqc/logviewer/pkg/log/factory"
 )
 
 // Base request structure for query endpoints
@@ -19,15 +18,13 @@ type QueryRequest struct {
 
 // Response for /query/logs endpoint
 type LogsResponse struct {
-	Logs  []client.LogEntry `json:"logs,omitempty"`
-	Error string            `json:"error,omitempty"`
-	Meta  QueryMetadata     `json:"meta,omitempty"`
+	Logs []client.LogEntry `json:"logs,omitempty"`
+	Meta QueryMetadata     `json:"meta,omitempty"`
 }
 
 // Response for /query/fields endpoint
 type FieldsResponse struct {
 	Fields map[string][]string `json:"fields,omitempty"` // field_name -> [possible_values]
-	Error  string              `json:"error,omitempty"`
 	Meta   QueryMetadata       `json:"meta,omitempty"`
 }
 
@@ -74,21 +71,7 @@ func (s *Server) queryLogsHandler(w http.ResponseWriter, r *http.Request) {
 
 	startTime := time.Now()
 
-	clientFactory, err := factory.GetLogClientFactory(s.config.Clients)
-	if err != nil {
-		s.logger.Error("failed to get log client factory", "err", err)
-		s.writeError(w, http.StatusInternalServerError, ErrCodeConfigError, "Internal server error")
-		return
-	}
-
-	searchFactory, err := factory.GetLogSearchFactory(clientFactory, *s.config)
-	if err != nil {
-		s.logger.Error("failed to get log search factory", "err", err)
-		s.writeError(w, http.StatusInternalServerError, ErrCodeConfigError, "Internal server error")
-		return
-	}
-
-	searchResult, err := searchFactory.GetSearchResult(req.ContextId, req.Inherits, req.Search)
+	searchResult, err := s.searchFactory.GetSearchResult(req.ContextId, req.Inherits, req.Search)
 	if err != nil {
 		s.logger.Error("failed to get search result", "err", err, "contextId", req.ContextId)
 		s.writeError(w, http.StatusBadRequest, ErrCodeInvalidSearch, err.Error())
@@ -140,28 +123,12 @@ func (s *Server) queryFieldsHandler(w http.ResponseWriter, r *http.Request) {
 
 	startTime := time.Now()
 
-	clientFactory, err := factory.GetLogClientFactory(s.config.Clients)
-	if err != nil {
-		s.logger.Error("failed to get log client factory", "err", err)
-		s.writeError(w, http.StatusInternalServerError, ErrCodeConfigError, "Internal server error")
-		return
-	}
-
-	searchFactory, err := factory.GetLogSearchFactory(clientFactory, *s.config)
-	if err != nil {
-		s.logger.Error("failed to get log search factory", "err", err)
-		s.writeError(w, http.StatusInternalServerError, ErrCodeConfigError, "Internal server error")
-		return
-	}
-
-	searchResult, err := searchFactory.GetSearchResult(req.ContextId, req.Inherits, req.Search)
+	searchResult, err := s.searchFactory.GetSearchResult(req.ContextId, req.Inherits, req.Search)
 	if err != nil {
 		s.logger.Error("failed to get search result", "err", err, "contextId", req.ContextId)
 		s.writeError(w, http.StatusBadRequest, ErrCodeInvalidSearch, err.Error())
 		return
 	}
-
-	_, _, _ = searchResult.GetEntries(r.Context())
 
 	fields, _, err := searchResult.GetFields()
 	if err != nil {

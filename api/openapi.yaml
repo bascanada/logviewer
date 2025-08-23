@@ -287,14 +287,14 @@ components:
     LogEntry:
       type: object
       properties:
-        Timestamp:
+        timestamp:
           type: string
           format: date-time
-        Message:
+        message:
           type: string
-        Level:
+        level:
           type: string
-        Fields:
+        fields:
           type: object
           additionalProperties: true
 

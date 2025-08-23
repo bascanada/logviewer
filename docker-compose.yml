@@ -8,6 +8,5 @@ services:
       - "8080:8080"
     volumes:
       - ./config.json:/config/config.json:ro
-    environment:
-      - LOG_LEVEL=INFO
+    command: ["--config", "/config/config.json", "--logging-level", "info", "--logging-stdout"]
     restart: unless-stopped
