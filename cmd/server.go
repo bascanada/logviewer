@@ -40,7 +40,6 @@ var serverCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		logger.Info("starting server", "host", host, "port", port)
 		if err := s.Start(); err != nil {
 			logger.Error("server failed to start", "err", err)
 			os.Exit(1)
@@ -49,8 +48,8 @@ var serverCmd = &cobra.Command{
 }
 
 func init() {
-	serverCmd.Flags().IntVar(&port, "port", 8080, "Port to listen on")
-	serverCmd.Flags().StringVar(&host, "host", "0.0.0.0", "Host to bind to")
-	serverCmd.Flags().StringVar(&configPath, "config", "", "Path to the config.json file (required)")
+	serverCmd.Flags().IntVarP(&port, "port", "p", 8080, "Port to listen on")
+	serverCmd.Flags().StringVarP(&host, "host", "H", "0.0.0.0", "Host to bind to")
+	serverCmd.Flags().StringVarP(&configPath, "config", "c", "", "Path to the config.json file (required)")
 	serverCmd.MarkFlagRequired("config")
 }
