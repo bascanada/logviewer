@@ -59,7 +59,7 @@ func (s *Server) routes() {
 }
 
 func (s *Server) Start() error {
-	handler := s.chainMiddleware(s.router, s.corsMiddleware, s.requestIDMiddleware, s.loggingMiddleware, s.recoveryMiddleware)
+	handler := s.chainMiddleware(s.router, s.recoveryMiddleware, s.corsMiddleware, s.requestIDMiddleware, s.loggingMiddleware)
 
 	s.httpServer = &http.Server{
 		Addr:    fmt.Sprintf("%s:%s", s.host, s.port),
