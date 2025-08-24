@@ -56,7 +56,7 @@ func (sr ElkSearchResult) GetEntries(context context.Context) ([]client.LogEntry
 	return entries, c, err
 }
 
-func (sr ElkSearchResult) GetFields() (ty.UniSet[string], chan ty.UniSet[string], error) {
+func (sr ElkSearchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 
 	fields := ty.UniSet[string]{}
 
@@ -137,7 +137,7 @@ func (sr ElkSearchResult) onChange(ctx context.Context) (chan []client.LogEntry,
 					date = date.Add(time.Second * 1)
 					sr.search.Range.Gte.Value = date.Format(time.RFC3339)
 					sr.search.Range.Lte.Value = time.Now().Format(time.RFC3339)
-					result, err1 := sr.client.Get(sr.search)
+					result, err1 := sr.client.Get(ctx, sr.search)
 					if err1 != nil {
 						fmt.Println("failed to get new logs " + err1.Error())
 					}

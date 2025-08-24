@@ -58,7 +58,7 @@ func createLogTextView(app *tview.Application, name string) *tviewWrapper {
 	parentFlex.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyCtrlB {
 			if wrapper.fields == nil {
-				fields, _, err := wrapper.result.GetFields()
+				fields, _, err := wrapper.result.GetFields(context.Background())
 				if err != nil {
 					log.Println(err.Error())
 					return event
@@ -138,7 +138,7 @@ func RunQueryViewApp(config config.ContextConfig, searchIds []string) error {
 	//defer cancel()
 
 	for k, v := range wrappers {
-		result, err := searchFactory.GetSearchResult(k, []string{}, client.LogSearch{})
+		result, err := searchFactory.GetSearchResult(ctx, k, []string{}, client.LogSearch{})
 		v.result = result
 		if err != nil {
 			return err

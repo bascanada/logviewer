@@ -21,6 +21,7 @@ import (
 	// Import all auth plugins (incl. exec, OIDC, GCP, Azure, etc.) so kubeconfigs
 	// referencing them (e.g. auth-provider: oidc) are supported without extra code.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+
 )
 
 const (
@@ -46,7 +47,7 @@ type k8sLogClient struct {
 	clientset *kubernetes.Clientset
 }
 
-func (lc k8sLogClient) Get(search *client.LogSearch) (client.LogSearchResult, error) {
+func (lc k8sLogClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
 
 	namespace := search.Options.GetString(FieldNamespace)
 	pod := search.Options.GetString(FieldPod)
@@ -85,8 +86,6 @@ func (lc k8sLogClient) Get(search *client.LogSearch) (client.LogSearchResult, er
 	}
 
 	req := ipod.GetLogs(pod, &logOptions)
-
-	ctx := context.Background()
 
 	podLogs, err2 := req.Stream(ctx)
 	if err2 != nil {

@@ -195,12 +195,12 @@ You may skip this and directly call query_logs. If a query returns no results, c
 				search.Range.Last.S("15m")
 			}
 
-			searchResult, err := searchFactory.GetSearchResult(contextId, []string{}, search)
+			searchResult, err := searchFactory.GetSearchResult(ctx, contextId, []string{}, search)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			fields, _, err := searchResult.GetFields()
+			fields, _, err := searchResult.GetFields(ctx)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -268,7 +268,7 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 					searchRequest.Range.Last.S("15m")
 				}
 
-			searchResult, err := searchFactory.GetSearchResult(contextId, []string{}, searchRequest)
+			searchResult, err := searchFactory.GetSearchResult(ctx, contextId, []string{}, searchRequest)
 			if err != nil {
 				if errors.Is(err, config.ErrContextNotFound) {
 					all := make([]string, 0, len(cfg.Contexts))

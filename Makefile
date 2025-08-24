@@ -10,15 +10,34 @@ K3S_KUBECONFIG=integration/k8s/k3s.yaml
 # Build targets
 
 build:
-	@echo "building version $(VERSION) for current platform"
+	@echo "building (debug-friendly) version $(VERSION) for current platform"
 	@go build -ldflags "-X github.com/berlingoqc/logviewer/cmd.sha1ver=$(VERSION)" -o build/logviewer
 
+# Optimized / stripped release build (smaller binary, no DWARF/debug, trimmed paths)
+# Usage: make release [VERSION=...] [CGO_ENABLED=0]
+release:
+	@echo "building optimized release version $(VERSION)"
+	@mkdir -p build
+	@CGO_ENABLED=${CGO_ENABLED-0} go build -trimpath -buildvcs=false \
+		-ldflags "-s -w -X github.com/berlingoqc/logviewer/cmd.sha1ver=$(VERSION)" \
+		-o build/logviewer
+	@echo "binary size: $$(wc -c < build/logviewer) bytes"
+	@echo "(add optional compression: upx --best build/logviewer)"
+
 build/all:
-	@echo "building version $(VERSION) for all platforms"
+	@echo "building (debug-friendly) version $(VERSION) for all platforms"
 	@GOOS=linux GOARCH=arm64 go build -ldflags "-X github.com/berlingoqc/logviewer/cmd.sha1ver=$(VERSION)" -o build/logviewer-linux-arm64
 	@GOOS=linux GOARCH=amd64 go build -ldflags "-X github.com/berlingoqc/logviewer/cmd.sha1ver=$(VERSION)" -o build/logviewer-linux-amd64
 	@GOOS=darwin GOARCH=arm64 go build -ldflags "-X github.com/berlingoqc/logviewer/cmd.sha1ver=$(VERSION)" -o build/logviewer-darwin-arm64
 	@GOOS=darwin GOARCH=amd64 go build -ldflags "-X github.com/berlingoqc/logviewer/cmd.sha1ver=$(VERSION)" -o build/logviewer-darwin-amd64
+
+# Optimized multi-platform build (stripped)
+release/all:
+	@echo "building optimized release version $(VERSION) for all platforms"
+	@GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "-s -w -X github.com/berlingoqc/logviewer/cmd.sha1ver=$(VERSION)" -o build/logviewer-linux-arm64
+	@GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "-s -w -X github.com/berlingoqc/logviewer/cmd.sha1ver=$(VERSION)" -o build/logviewer-linux-amd64
+	@GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "-s -w -X github.com/berlingoqc/logviewer/cmd.sha1ver=$(VERSION)" -o build/logviewer-darwin-arm64
+	@GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "-s -w -X github.com/berlingoqc/logviewer/cmd.sha1ver=$(VERSION)" -o build/logviewer-darwin-amd64
 
 
 # Unit tests
@@ -27,7 +46,9 @@ test:
 	@go test ./...
 
 test/coverage:
-	@go test -coverprofile=coverage.txt -covermode count ./... && cat coverage.txt | gocover-cobertura > coverage.xml
+	@command -v gocover-cobertura >/dev/null 2>&1 || { echo "Installing gocover-cobertura"; go install github.com/boumenot/gocover-cobertura@latest; }
+	@go test -coverprofile=coverage.txt -covermode count ./...
+	@cat coverage.txt | gocover-cobertura > coverage.xml
 
 
 # Integration Environment Management
@@ -77,8 +98,21 @@ integration/stop/k8s:
 	@echo "Stopping k3s server..."
 	@cd integration && docker-compose stop k3s-server && docker-compose rm -fv k3s-server
 
+# Service-specific start/stop
+integration/start/cloudwatch:
+	@echo "Starting LocalStack for CloudWatch..."
+	@cd integration && docker-compose up -d localstack
+
+integration/stop/cloudwatch:
+	@echo "Stopping LocalStack..."
+	@cd integration && docker-compose stop localstack && docker-compose rm -f localstack
+
 # Log Generation and Uploading
-integration/logs: integration/logs/splunk integration/logs/opensearch integration/logs/ssh
+integration/logs: integration/logs/splunk integration/logs/opensearch integration/logs/ssh integration/logs/cloudwatch
+
+integration/logs/cloudwatch:
+	@echo "Sending logs to CloudWatch..."
+	@cd integration/cloudwatch && ./send-logs.sh
 
 integration/logs/splunk:
 	@echo "Sending logs to Splunk..."
@@ -106,3 +140,5 @@ integration/tests: build
 	@echo "Querying logs for k3s coredns"
 	@COREDNS_POD=$$(KUBECONFIG=$(K3S_KUBECONFIG) kubectl get pods -n kube-system -l k8s-app=kube-dns -o jsonpath='{.items[0].metadata.name}') \
 		build/logviewer query log -c ./config.json -i k3s-coredns --size 200
+	@echo "Querying logs from localstack"
+	@build/logviewer query log -c ./config.json -i cloudwatch-app-logs --last 24h --size 3	

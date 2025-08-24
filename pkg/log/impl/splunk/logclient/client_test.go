@@ -74,12 +74,12 @@ func TestSplunkLogClient(t *testing.T) {
 	logSearch.Fields["application_name"] = "wq.services.pet"
 	logSearch.Options["index"] = "prd3392"
 
-	result, err := logClient.Get(&logSearch)
+	result, err := logClient.Get(context.Background(), &logSearch)
 	if err != nil {
 		t.Error(err)
 	}
 
-	fields, _, err := result.GetFields()
+	fields, _, err := result.GetFields(context.Background())
 	if err != nil {
 		t.Error(err)
 	}

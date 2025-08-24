@@ -161,7 +161,7 @@ func (s *Server) processQueryLogsRequest(w http.ResponseWriter, r *http.Request,
 
 	startTime := time.Now()
 
-	searchResult, err := s.searchFactory.GetSearchResult(req.ContextId, req.Inherits, req.Search)
+	searchResult, err := s.searchFactory.GetSearchResult(r.Context(), req.ContextId, req.Inherits, req.Search)
 	if err != nil {
 		s.logger.Error("failed to get search result", "err", err, "contextId", req.ContextId)
 		s.writeError(w, http.StatusBadRequest, ErrCodeInvalidSearch, err.Error())
@@ -233,14 +233,14 @@ func (s *Server) processQueryFieldsRequest(w http.ResponseWriter, r *http.Reques
 
 	startTime := time.Now()
 
-	searchResult, err := s.searchFactory.GetSearchResult(req.ContextId, req.Inherits, req.Search)
+	searchResult, err := s.searchFactory.GetSearchResult(r.Context(), req.ContextId, req.Inherits, req.Search)
 	if err != nil {
 		s.logger.Error("failed to get search result", "err", err, "contextId", req.ContextId)
 		s.writeError(w, http.StatusBadRequest, ErrCodeInvalidSearch, err.Error())
 		return
 	}
 
-	fields, _, err := searchResult.GetFields()
+	fields, _, err := searchResult.GetFields(r.Context())
 	if err != nil {
 		s.logger.Error("failed to get fields", "err", err)
 		s.writeError(w, http.StatusInternalServerError, ErrCodeBackendError, "Failed to retrieve fields from backend")

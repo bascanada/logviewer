@@ -1,6 +1,7 @@
 package kibana
 
 import (
+	"context"
 	"errors"
 
 	"github.com/berlingoqc/logviewer/pkg/http"
@@ -18,7 +19,7 @@ type kibanaClient struct {
 	client http.HttpClient
 }
 
-func (kc kibanaClient) Get(search *client.LogSearch) (client.LogSearchResult, error) {
+func (kc kibanaClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
 	var searchResponse SearchResponse
 
 	request, err := getSearchRequest(search)

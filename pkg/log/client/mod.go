@@ -19,10 +19,10 @@ type LogEntry struct {
 type LogSearchResult interface {
 	GetSearch() *LogSearch
 	GetEntries(context context.Context) ([]LogEntry, chan []LogEntry, error)
-	GetFields() (ty.UniSet[string], chan ty.UniSet[string], error)
+	GetFields(context context.Context) (ty.UniSet[string], chan ty.UniSet[string], error)
 }
 
 // Client to start a log search
 type LogClient interface {
-	Get(search *LogSearch) (LogSearchResult, error)
+	Get(ctx context.Context, search *LogSearch) (LogSearchResult, error)
 }
