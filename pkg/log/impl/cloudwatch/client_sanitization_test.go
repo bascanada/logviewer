@@ -24,6 +24,9 @@ func (m *mockCWClientSanitize) StartQuery(ctx context.Context, params *cloudwatc
 func (m *mockCWClientSanitize) GetQueryResults(ctx context.Context, params *cloudwatchlogs.GetQueryResultsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error) {
     return &cloudwatchlogs.GetQueryResultsOutput{}, nil
 }
+func (m *mockCWClientSanitize) FilterLogEvents(ctx context.Context, params *cloudwatchlogs.FilterLogEventsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.FilterLogEventsOutput, error) {
+    return &cloudwatchlogs.FilterLogEventsOutput{}, nil
+}
 
 func TestSanitizeQueryValue(t *testing.T) {
     in := "value'with"

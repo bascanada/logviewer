@@ -115,7 +115,7 @@ func (lr ReaderLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, ch
 	}
 }
 
-func (lr ReaderLogResult) GetFields() (ty.UniSet[string], chan ty.UniSet[string], error) {
+func (lr ReaderLogResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 	return lr.fields, nil, nil
 }
 

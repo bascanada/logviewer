@@ -2,7 +2,8 @@ package cloudwatch
 
 import (
 	"context"
-	"log"
+	"log/slog"
+	"math"
 	"strconv"
 	"time"
 
@@ -16,6 +17,7 @@ type CloudWatchLogSearchResult struct {
 	client  CWClient
 	queryId string
 	search  *client.LogSearch
+	logger  *slog.Logger
 
 	// cached results
 	entries []client.LogEntry
@@ -32,9 +34,29 @@ func (r *CloudWatchLogSearchResult) fetchEntries(ctx context.Context) error {
 		return nil
 	}
 	var results *cloudwatchlogs.GetQueryResultsOutput
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-	for {
+	// Determine base polling interval from options; default 1s. Allow override via option: cloudwatchPollInterval (duration string)
+	baseInterval := time.Second
+	if ivStr, ok := r.search.Options.GetStringOk("cloudwatchPollInterval"); ok && ivStr != "" {
+		if d, err := time.ParseDuration(ivStr); err == nil && d > 0 {
+			baseInterval = d
+		}
+	}
+	// Optional max interval (cap) for backoff
+	maxInterval := 10 * time.Second
+	if mxStr, ok := r.search.Options.GetStringOk("cloudwatchMaxPollInterval"); ok && mxStr != "" {
+		if d, err := time.ParseDuration(mxStr); err == nil && d >= baseInterval {
+			maxInterval = d
+		}
+	}
+	// Backoff factor (default 1.5)
+	backoffFactor := 1.5
+	if bfStr, ok := r.search.Options.GetStringOk("cloudwatchPollBackoff"); ok && bfStr != "" {
+		if f, err := strconv.ParseFloat(bfStr, 64); err == nil && f >= 1.0 && f <= 5.0 {
+			backoffFactor = f
+		}
+	}
+	interval := baseInterval
+	for attempt := 0; ; attempt++ {
 		var err error
 		results, err = r.client.GetQueryResults(ctx, &cloudwatchlogs.GetQueryResultsInput{QueryId: &r.queryId})
 		if err != nil {
@@ -44,8 +66,9 @@ func (r *CloudWatchLogSearchResult) fetchEntries(ctx context.Context) error {
 			break
 		}
 		select {
-		case <-ticker.C:
-			continue
+		case <-time.After(interval):
+			// Increase interval with backoff (exponential) until max
+			interval = time.Duration(math.Min(float64(maxInterval), float64(interval)*backoffFactor))
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -63,7 +86,9 @@ func (r *CloudWatchLogSearchResult) fetchEntries(ctx context.Context) error {
 				if ts, ok := parseCloudWatchTimestamp(fVal); ok {
 					entry.Timestamp = ts
 				} else {
-					log.Printf("cloudwatch: failed to parse timestamp '%s'", fVal)
+					if r.logger != nil {
+						r.logger.Warn("cloudwatch: failed to parse timestamp", "value", fVal)
+					}
 				}
 			case "@message":
 				entry.Message = fVal
@@ -83,14 +108,16 @@ func (r *CloudWatchLogSearchResult) GetEntries(ctx context.Context) ([]client.Lo
 	return r.entries, nil, nil
 }
 
-func (r *CloudWatchLogSearchResult) GetFields() (ty.UniSet[string], chan ty.UniSet[string], error) {
+func (r *CloudWatchLogSearchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 	// If already computed, return cached
 	if len(r.fields) > 0 {
 		return r.fields, nil, nil
 	}
-	// Ensure entries are loaded. Use background context since interface lacks ctx.
+	// Ensure entries are loaded with passed context for proper cancellation.
 	if len(r.entries) == 0 {
-		_ = r.fetchEntries(context.Background())
+		if err := r.fetchEntries(ctx); err != nil {
+			return nil, nil, err
+		}
 	}
 	fields := ty.UniSet[string]{}
 	for _, e := range r.entries {

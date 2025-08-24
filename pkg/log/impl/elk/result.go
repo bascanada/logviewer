@@ -56,7 +56,7 @@ func (sr ElkSearchResult) GetEntries(context context.Context) ([]client.LogEntry
 	return entries, c, err
 }
 
-func (sr ElkSearchResult) GetFields() (ty.UniSet[string], chan ty.UniSet[string], error) {
+func (sr ElkSearchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 
 	fields := ty.UniSet[string]{}
 

@@ -28,7 +28,7 @@ func (s SplunkLogSearchResult) GetEntries(context context.Context) ([]client.Log
 	return s.parseResults(&s.results[0]), nil, nil
 }
 
-func (s SplunkLogSearchResult) GetFields() (ty.UniSet[string], chan ty.UniSet[string], error) {
+func (s SplunkLogSearchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 	fields := ty.UniSet[string]{}
 
 	for _, resultEntry := range s.results {

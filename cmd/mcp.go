@@ -200,7 +200,7 @@ You may skip this and directly call query_logs. If a query returns no results, c
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			fields, _, err := searchResult.GetFields()
+			fields, _, err := searchResult.GetFields(ctx)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}

@@ -79,7 +79,7 @@ func TestSplunkLogClient(t *testing.T) {
 		t.Error(err)
 	}
 
-	fields, _, err := result.GetFields()
+	fields, _, err := result.GetFields(context.Background())
 	if err != nil {
 		t.Error(err)
 	}

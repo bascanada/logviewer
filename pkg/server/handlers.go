@@ -240,7 +240,7 @@ func (s *Server) processQueryFieldsRequest(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	fields, _, err := searchResult.GetFields()
+	fields, _, err := searchResult.GetFields(r.Context())
 	if err != nil {
 		s.logger.Error("failed to get fields", "err", err)
 		s.writeError(w, http.StatusInternalServerError, ErrCodeBackendError, "Failed to retrieve fields from backend")

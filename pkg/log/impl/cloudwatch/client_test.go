@@ -17,6 +17,7 @@ import (
 type mockCWClient struct {
 	StartQueryFunc      func(ctx context.Context, params *cloudwatchlogs.StartQueryInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.StartQueryOutput, error)
 	GetQueryResultsFunc func(ctx context.Context, params *cloudwatchlogs.GetQueryResultsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error)
+	FilterLogEventsFunc func(ctx context.Context, params *cloudwatchlogs.FilterLogEventsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.FilterLogEventsOutput, error)
 }
 
 func (m *mockCWClient) StartQuery(ctx context.Context, params *cloudwatchlogs.StartQueryInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.StartQueryOutput, error) {
@@ -25,6 +26,10 @@ func (m *mockCWClient) StartQuery(ctx context.Context, params *cloudwatchlogs.St
 
 func (m *mockCWClient) GetQueryResults(ctx context.Context, params *cloudwatchlogs.GetQueryResultsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error) {
 	return m.GetQueryResultsFunc(ctx, params, optFns...)
+}
+func (m *mockCWClient) FilterLogEvents(ctx context.Context, params *cloudwatchlogs.FilterLogEventsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.FilterLogEventsOutput, error) {
+	if m.FilterLogEventsFunc != nil { return m.FilterLogEventsFunc(ctx, params, optFns...) }
+	return &cloudwatchlogs.FilterLogEventsOutput{}, nil
 }
 
 func TestGetLogClient(t *testing.T) {
@@ -170,7 +175,7 @@ func TestCloudWatch_GetFields(t *testing.T) {
 	// Ensure entries loaded
 	_, _, err := sr.GetEntries(context.Background())
 	assert.NoError(t, err)
-	fields, _, err := sr.GetFields()
+	fields, _, err := sr.GetFields(context.Background())
 	assert.NoError(t, err)
 	// Expect level INFO, DEBUG and service auth
 	assert.Contains(t, fields["level"], "INFO")

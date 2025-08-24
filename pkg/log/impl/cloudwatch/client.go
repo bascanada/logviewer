@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 	"unicode"
@@ -26,6 +27,7 @@ type CWClient interface {
 // CloudWatchLogClient implements the client.LogClient interface for AWS CloudWatch.
 type CloudWatchLogClient struct {
 	client CWClient
+	logger *slog.Logger
 }
 
 // sanitizeQueryValue escapes single quotes in user provided values to safely embed them
@@ -128,7 +130,8 @@ func (c *CloudWatchLogClient) Get(ctx context.Context, search *client.LogSearch)
 	}
 	// Ensure start <= end; if not, swap
 	if startTime.After(endTime) {
-		startTime, endTime = endTime.Add(-1*time.Hour), endTime
+		// If user supplied an inverted range, simply swap to preserve intent.
+		startTime, endTime = endTime, startTime
 	}
 
 	// 3. Execute either Insights query or FilterLogEvents fallback
@@ -145,7 +148,7 @@ func (c *CloudWatchLogClient) Get(ctx context.Context, search *client.LogSearch)
 		if startQueryOutput.QueryId == nil {
 			return nil, errors.New("StartQuery did not return a QueryId")
 		}
-		return &CloudWatchLogSearchResult{client: c.client, queryId: *startQueryOutput.QueryId, search: search}, nil
+		return &CloudWatchLogSearchResult{client: c.client, queryId: *startQueryOutput.QueryId, search: search, logger: c.logger}, nil
 	}
 
 	// FilterLogEvents fallback
@@ -200,7 +203,7 @@ func (c *CloudWatchLogClient) Get(ctx context.Context, search *client.LogSearch)
 type staticCloudWatchResult struct { entries []client.LogEntry; search *client.LogSearch }
 func (r *staticCloudWatchResult) GetSearch() *client.LogSearch { return r.search }
 func (r *staticCloudWatchResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) { return r.entries, nil, nil }
-func (r *staticCloudWatchResult) GetFields() (ty.UniSet[string], chan ty.UniSet[string], error) { return ty.UniSet[string]{}, nil, nil }
+func (r *staticCloudWatchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) { return ty.UniSet[string]{}, nil, nil }
 
 // GetLogClient creates a new CloudWatch Logs client.
 // It uses the 'region' and 'profile' from the options if provided.
@@ -234,5 +237,5 @@ func GetLogClient(options ty.MI) (client.LogClient, error) {
 		return nil, err
 	}
 
-	return &CloudWatchLogClient{client: cloudwatchlogs.NewFromConfig(cfg)}, nil
+	return &CloudWatchLogClient{client: cloudwatchlogs.NewFromConfig(cfg), logger: slog.Default()}, nil
 }

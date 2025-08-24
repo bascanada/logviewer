@@ -265,7 +265,7 @@ var queryFieldCommand = &cobra.Command{
 			panic(err1)
 		}
 		searchResult.GetEntries(context.Background())
-		fields, _, _ := searchResult.GetFields()
+		fields, _, _ := searchResult.GetFields(context.Background())
 
 		for k, b := range fields {
 			fmt.Printf("%s \n", k)

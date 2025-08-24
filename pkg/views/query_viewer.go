@@ -58,7 +58,7 @@ func createLogTextView(app *tview.Application, name string) *tviewWrapper {
 	parentFlex.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyCtrlB {
 			if wrapper.fields == nil {
-				fields, _, err := wrapper.result.GetFields()
+				fields, _, err := wrapper.result.GetFields(context.Background())
 				if err != nil {
 					log.Println(err.Error())
 					return event

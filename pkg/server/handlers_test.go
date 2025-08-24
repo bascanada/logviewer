@@ -36,7 +36,7 @@ type mockLogSearchResult struct {
 func (m *mockLogSearchResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
 	return []client.LogEntry{{Message: "test log"}}, nil, nil
 }
-func (m *mockLogSearchResult) GetFields() (ty.UniSet[string], chan ty.UniSet[string], error) {
+func (m *mockLogSearchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 	return ty.UniSet[string]{"field1": {"value1"}}, nil, nil
 }
 
