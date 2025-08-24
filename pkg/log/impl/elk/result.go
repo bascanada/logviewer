@@ -86,7 +86,15 @@ func (sr ElkSearchResult) parseResults() []client.LogEntry {
 			continue
 		}
 		if timestamp, b1 := h.Source["@timestamp"].(string); b1 {
-			date, _ := time.Parse(ty.Format, timestamp)
+			// Try high precision first, then standard RFC3339
+			var date time.Time
+			var err error
+			if date, err = time.Parse(time.RFC3339Nano, timestamp); err != nil {
+				if date, err = time.Parse(ty.Format, timestamp); err != nil {
+					// Fallback: leave zero-value time (or set to now)
+					date = time.Time{}
+				}
+			}
 
 			var level string
 			if h.Source["level"] != nil {
