@@ -42,8 +42,11 @@ jobs:
         run: docker push ghcr.io/bascanada/logviewer:${VERSION}
         env:
           VERSION: ${{ steps.tag.outputs.tag }}
-      - name: Release
-        uses: softprops/action-gh-release@v1
+      - uses: "marvinpinto/action-automatic-releases@latest"
         with:
-          files: ./build/*
-          draft: true
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "${{ steps.tag.outputs.tag }}"
+          prerelease: false
+          title: "Version ${{ steps.tag.outputs.tag }}"
+          files: |
+            ./build/*
