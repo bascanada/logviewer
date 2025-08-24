@@ -33,6 +33,10 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 	logClientFactory.clients = make(ty.LazyMap[string, client.LogClient])
 
 	for k, v := range clients {
+		// IMPORTANT: shadow loop variable so each closure below captures its own copy.
+		v := v
+		// Resolve environment variables inside client option values (string only)
+		v.Options = v.Options.ResolveVariables()
 		switch v.Type {
 		case "opensearch":
 			options := v.Options
@@ -78,10 +82,13 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 			})
 		case "ssh":
 			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
+				user := v.Options.GetString("User")
+				addr := v.Options.GetString("Addr")
+				pk := v.Options.GetString("PrivateKey")
 				vv, err := ssh.GetLogClient(ssh.SSHLogClientOptions{
-					User:       v.Options.GetString("User"),
-					Addr:       v.Options.GetString("Addr"),
-					PrivateKey: v.Options.GetString("PrivateKey"),
+					User:       user,
+					Addr:       addr,
+					PrivateKey: pk,
 				})
 				if err != nil {
 					return nil, err
@@ -104,8 +111,12 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 			})
 		case "docker":
 			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
-				vv, err := docker.GetLogClient(v.Options.GetString("Host"))
-
+				host := v.Options.GetString("Host")
+				if host == "" {
+					// Fallback to default local docker socket
+					host = "unix:///var/run/docker.sock"
+				}
+				vv, err := docker.GetLogClient(host)
 				return &vv, err
 			})
 		default:
