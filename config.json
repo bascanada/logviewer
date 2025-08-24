@@ -11,11 +11,37 @@
           "output_mode": "json"
         }
       }
+    },
+    "local-ssh": {
+      "type": "ssh",
+      "options": {
+        "User": "testuser",
+        "Addr": "127.0.0.1:2222",
+        "PrivateKey": "integration/ssh/id_rsa"
+      }
+    },
+    "local-opensearch": {
+      "type": "opensearch",
+      "options": {
+        "Endpoint": "http://localhost:9200"
+      }
+    },
+    "local-docker": {
+      "type": "docker",
+      "options": {
+        "Host": "unix:///var/run/docker.sock"
+      }
+    },
+    "local-k3s": {
+      "type": "k8s",
+      "options": {
+        "KubeConfig": "integration/k8s/k3s.yaml"
+      }
     }
   },
   "contexts": {
-    "splunk-main": {
-      "client": "splunk",
+    "splunk-app-logs": {
+      "client": "local-splunk",
       "searchInherit": [],
       "search": {
         "fields": {
@@ -23,6 +49,52 @@
         },
         "options": {
           "index": "main"
+        }
+      }
+    },
+    "ssh-app-log": {
+      "client": "local-ssh",
+      "searchInherit": [],
+      "search": {
+        "fields": {},
+        "options": {
+          "Cmd": "tail -n 200 app.log"
+        }
+      }
+    },
+    "opensearch-app-logs": {
+      "client": "local-opensearch",
+      "searchInherit": [],
+      "search": {
+        "fields": {},
+        "options": {
+          "Index": "app-logs"
+        }
+      }
+    },
+    "docker-sample-container": {
+      "client": "local-docker",
+      "searchInherit": [],
+      "search": {
+        "fields": {},
+        "options": {
+          "Container": "${DOCKER_CID}",
+          "ShowStdout": true,
+          "ShowStderr": true,
+          "Timestamps": true,
+          "Details": false
+        }
+      }
+    },
+    "k3s-coredns": {
+      "client": "local-k3s",
+      "searchInherit": [],
+      "search": {
+        "fields": {},
+        "options": {
+          "namespace": "kube-system",
+          "pod": "${COREDNS_POD}",
+          "timestamp": true
         }
       }
     }

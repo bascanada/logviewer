@@ -3,3 +3,7 @@ build/
 .hec_token
 
 coverage.*
+integration/k8s/k3s.yaml
+integration/ssh/id_rsa
+integration/ssh/id_rsa.pub
+integration/ssh/authorized_keys

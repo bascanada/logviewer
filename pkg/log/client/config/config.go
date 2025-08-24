@@ -74,6 +74,9 @@ func (cc ContextConfig) GetSearchContext(contextId string, inherits []string, lo
 
 		searchContext.Search.MergeInto(&logSearch)
 
+		// Resolve env vars inside search options (MI)
+		searchContext.Search.Options = searchContext.Search.Options.ResolveVariables()
+
 		return searchContext, nil
 	} else {
 		return SearchContext{}, fmt.Errorf("%w: %s", ErrContextNotFound, contextId)

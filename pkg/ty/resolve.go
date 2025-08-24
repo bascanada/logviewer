@@ -34,3 +34,19 @@ func (ms MS) ResolveVariables() MS {
 
 	return msResolved
 }
+
+// ResolveVariables on MI resolves any string values containing shell-style
+// ${VAR} or ${VAR:-default} / $VAR patterns using the same underlying logic as MS.
+// Non-string values are copied unchanged.
+func (mi MI) ResolveVariables() MI {
+	resolved := MI{}
+	for k, v := range mi {
+		switch vv := v.(type) {
+		case string:
+			resolved[k] = resolveEnvVarsWithDefault(vv)
+		default:
+			resolved[k] = v
+		}
+	}
+	return resolved
+}
