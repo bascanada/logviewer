@@ -8,6 +8,7 @@ import (
 	"github.com/berlingoqc/logviewer/pkg/log/impl/docker"
 	"github.com/berlingoqc/logviewer/pkg/log/impl/elk/kibana"
 	"github.com/berlingoqc/logviewer/pkg/log/impl/elk/opensearch"
+	"github.com/berlingoqc/logviewer/pkg/log/impl/cloudwatch"
 	"github.com/berlingoqc/logviewer/pkg/log/impl/k8s"
 	"github.com/berlingoqc/logviewer/pkg/log/impl/local"
 	splunk "github.com/berlingoqc/logviewer/pkg/log/impl/splunk/logclient"
@@ -107,6 +108,15 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 				vv, err := docker.GetLogClient(v.Options.GetString("Host"))
 
 				return &vv, err
+			})
+		case "cloudwatch":
+			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
+				// Pass the client-specific options to our new factory function
+				vv, err := cloudwatch.GetLogClient(v.Options)
+				if err != nil {
+					return nil, err
+				}
+				return &vv, nil
 			})
 		default:
 			return nil, errors.New("invalid type for client : " + v.Type)
