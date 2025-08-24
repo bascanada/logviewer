@@ -63,8 +63,23 @@ services:
       - k3s-data:/var/lib/rancher/k3s
     command: server --disable traefik --write-kubeconfig-mode 644
 
+  localstack:
+    image: localstack/localstack:latest
+    container_name: localstack
+    ports:
+      - "4566:4566"            # LocalStack Gateway
+      - "4510-4559:4510-4559"  # External services
+    environment:
+      - SERVICES=logs
+      - DEBUG=1
+      - DATA_DIR=/tmp/localstack/data
+    volumes:
+      - localstack-data:/var/lib/localstack
+      - "/var/run/docker.sock:/var/run/docker.sock"
+
 volumes:
   splunk-etc:
   splunk-var:
   opensearch-data:
   k3s-data:
+  localstack-data:

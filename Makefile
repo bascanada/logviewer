@@ -77,8 +77,21 @@ integration/stop/k8s:
 	@echo "Stopping k3s server..."
 	@cd integration && docker-compose stop k3s-server && docker-compose rm -fv k3s-server
 
+# Service-specific start/stop
+integration/start/cloudwatch:
+	@echo "Starting LocalStack for CloudWatch..."
+	@cd integration && docker-compose up -d localstack
+
+integration/stop/cloudwatch:
+	@echo "Stopping LocalStack..."
+	@cd integration && docker-compose stop localstack && docker-compose rm -f localstack
+
 # Log Generation and Uploading
 integration/logs: integration/logs/splunk integration/logs/opensearch integration/logs/ssh
+
+integration/logs/cloudwatch:
+	@echo "Sending logs to CloudWatch..."
+	@cd integration/cloudwatch && ./send-logs.sh
 
 integration/logs/splunk:
 	@echo "Sending logs to Splunk..."
