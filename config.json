@@ -11,6 +11,20 @@
           "output_mode": "json"
         }
       }
+    },
+    "local-ssh": {
+      "type": "ssh",
+      "options": {
+        "User": "testuser",
+        "Addr": "127.0.0.1:2222",
+        "PrivateKey": "integration/ssh/id_rsa"
+      }
+    },
+    "local-opensearch": {
+      "type": "opensearch",
+      "options": {
+        "Endpoint": "http://localhost:9200"
+      }
     }
   },
   "searches": {
@@ -31,6 +45,26 @@
         },
         "options": {
           "index": "main"
+        }
+      }
+    },
+    "ssh-app-log": {
+      "client": "local-ssh",
+      "searchInherit": [],
+      "search": {
+        "fields": {},
+        "options": {
+          "Cmd": "tail -n 200 app.log"
+        }
+      }
+    },
+    "opensearch-app-logs": {
+      "client": "local-opensearch",
+      "searchInherit": [],
+      "search": {
+        "fields": {},
+        "options": {
+          "Index": "app-logs"
         }
       }
     }

@@ -62,11 +62,11 @@ integration/stop/ssh:
 	@echo "Stopping SSH server..."
 	@cd integration && docker-compose stop ssh-server && docker-compose rm -f ssh-server
 
-integration/start/k3s:
+integration/start/k8s:
 	@echo "Starting k3s server..."
 	@cd integration && docker-compose up -d k3s-server
 
-integration/stop/k3s:
+integration/stop/k8s:
 	@echo "Stopping k3s server..."
 	@cd integration && docker-compose stop k3s-server && docker-compose rm -f k3s-server
 
@@ -86,7 +86,6 @@ integration/logs/ssh:
 # Kubernetes Management
 integration/k8s/configure:
 	@echo "Configuring kubectl for k3s..."
-	@chmod +x integration/k8s/configure-kubeconfig.sh
 	@./integration/k8s/configure-kubeconfig.sh
 
 integration/k8s/deploy:

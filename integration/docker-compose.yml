@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   splunk:
     platform: linux/amd64
@@ -22,6 +20,7 @@ services:
     environment:
       - discovery.type=single-node
       - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - DISABLE_SECURITY_PLUGIN=true
     ports:
       - "9200:9200"
       - "9600:9600"
@@ -35,6 +34,7 @@ services:
       - "5601:5601"
     environment:
       OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
     depends_on:
       - opensearch
 
@@ -44,7 +44,7 @@ services:
     ports:
       - "2222:2222"
     volumes:
-      - ./ssh/authorized_keys:/config/authorized_keys:ro
+      - ./ssh/authorized_keys:/config/authorized_keys:rw
     environment:
       - PUID=1000
       - PGID=1000
