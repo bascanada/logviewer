@@ -30,6 +30,8 @@ var mcpCmd = &cobra.Command{
 		s := server.NewMCPServer(
 			"logviewer",
 			"1.0.0",
+			server.WithToolCapabilities(true),
+			server.WithRecovery(),
 		)
 
 		listContextsTool := mcp.NewTool("list_contexts",
@@ -143,7 +145,6 @@ var mcpCmd = &cobra.Command{
 			return mcp.NewToolResultError("not implemented"), nil
 		})
 
-		log.Printf("Starting MCP server on stdio")
 		if err := server.ServeStdio(s); err != nil {
 			log.Fatalf("failed to start server: %v", err)
 		}
