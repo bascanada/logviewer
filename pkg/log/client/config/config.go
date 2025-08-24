@@ -9,6 +9,9 @@ import (
 	"github.com/berlingoqc/logviewer/pkg/ty"
 )
 
+// ErrContextNotFound is a sentinel error allowing callers to detect missing contexts via errors.Is.
+var ErrContextNotFound = errors.New("context not found")
+
 func LoadContextConfig(configPath string) (*ContextConfig, error) {
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("config file not found at path: %s", configPath)
@@ -76,6 +79,6 @@ func (cc ContextConfig) GetSearchContext(contextId string, inherits []string, lo
 
 		return searchContext, nil
 	} else {
-		return SearchContext{}, errors.New("cant find context : " + contextId)
+		return SearchContext{}, fmt.Errorf("%w: %s", ErrContextNotFound, contextId)
 	}
 }
