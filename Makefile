@@ -1,4 +1,4 @@
-.PHONY: build build/all splunk/dev/start splunk/dev/stop splunk/test test test/coverage
+.PHONY: build build/all splunk/test test test/coverage
 
 SHA=$(shell git rev-parse --short HEAD)
 VERSION?=$(SHA)
@@ -28,13 +28,75 @@ test/coverage:
 	@go test -coverprofile=coverage.txt -covermode count ./... && cat coverage.txt | gocover-cobertura > coverage.xml
 
 
-# Integration tests
+# Integration Environment Management
+integration/start:
+	@echo "Starting all integration services..."
+	@cd integration && docker-compose up -d
 
+integration/stop:
+	@echo "Stopping all integration services..."
+	@cd integration && docker-compose down
 
-splunk/dev/start:
-	@echo "Starting Splunk for development..."
-	@cd integration/splunk && ./start-splunk-dev.sh
+# Service-specific start/stop
+integration/start/splunk:
+	@echo "Starting Splunk..."
+	@cd integration && docker-compose up -d splunk
 
-splunk/dev/stop:
-	@echo "Stopping Splunk for development..."
-	@cd integration/splunk && docker-compose down
+integration/stop/splunk:
+	@echo "Stopping Splunk..."
+	@cd integration && docker-compose stop splunk && docker-compose rm -f splunk
+
+integration/start/opensearch:
+	@echo "Starting OpenSearch and Dashboards..."
+	@cd integration && docker-compose up -d opensearch opensearch-dashboards
+
+integration/stop/opensearch:
+	@echo "Stopping OpenSearch and Dashboards..."
+	@cd integration && docker-compose stop opensearch opensearch-dashboards && docker-compose rm -f opensearch opensearch-dashboards
+
+integration/start/ssh:
+	@echo "Starting SSH server..."
+	@cd integration && docker-compose up -d ssh-server
+
+integration/stop/ssh:
+	@echo "Stopping SSH server..."
+	@cd integration && docker-compose stop ssh-server && docker-compose rm -f ssh-server
+
+integration/start/k3s:
+	@echo "Starting k3s server..."
+	@cd integration && docker-compose up -d k3s-server
+
+integration/stop/k3s:
+	@echo "Stopping k3s server..."
+	@cd integration && docker-compose stop k3s-server && docker-compose rm -f k3s-server
+
+# Log Generation and Uploading
+integration/logs/splunk:
+	@echo "Sending logs to Splunk..."
+	@cd integration/splunk && ./send-logs.sh
+
+integration/logs/opensearch:
+	@echo "Sending logs to OpenSearch..."
+	@cd integration/opensearch && ./send-logs.sh
+
+integration/logs/ssh:
+	@echo "Uploading logs to SSH server..."
+	@cd integration/ssh && ./upload-log.sh
+
+# Kubernetes Management
+integration/k8s/configure:
+	@echo "Configuring kubectl for k3s..."
+	@chmod +x integration/k8s/configure-kubeconfig.sh
+	@./integration/k8s/configure-kubeconfig.sh
+
+integration/k8s/deploy:
+	@echo "Deploying log-emitter pod to k3s..."
+	@KUBECONFIG=$$HOME/.kube/k3s.yaml kubectl apply -f integration/k8s/log-emitter.yml
+
+integration/k8s/delete:
+	@echo "Deleting log-emitter pod from k3s..."
+	@KUBECONFIG=$$HOME/.kube/k3s.yaml kubectl delete -f integration/k8s/log-emitter.yml
+
+integration/k8s/logs:
+	@echo "Tailing logs from log-emitter pod..."
+	@KUBECONFIG=$$HOME/.kube/k3s.yaml kubectl logs -f log-emitter
