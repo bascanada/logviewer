@@ -12,11 +12,6 @@ HEC_TOKEN_FILE=".hec_token"
 
 # --- Main Script ---
 
-# Start Splunk
-echo "Starting Splunk..."
-docker-compose up -d
-
-
 # Wait for Splunk to be ready
 echo "Waiting for Splunk to be ready..."
 MAX_ATTEMPTS=60

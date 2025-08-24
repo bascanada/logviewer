@@ -86,6 +86,13 @@ func (lc sshLogClient) Get(search *client.LogSearch) (client.LogSearchResult, er
 
 func GetLogClient(options SSHLogClientOptions) (client.LogClient, error) {
 
+	if options.Addr == "" {
+		return nil, errors.New("ssh address (Addr) is empty")
+	}
+	if options.User == "" {
+		return nil, errors.New("ssh user (User) is empty")
+	}
+
 	var privateKeyFile string
 	if options.PrivateKey != "" {
 		privateKeyFile = options.PrivateKey

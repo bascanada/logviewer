@@ -4,6 +4,7 @@ services:
     image: splunk/splunk:latest
     container_name: splunk
     environment:
+      - SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com
       - SPLUNK_START_ARGS=--accept-license
       - SPLUNK_PASSWORD=password
     ports:
@@ -60,7 +61,7 @@ services:
       - "6443:6443"
     volumes:
       - k3s-data:/var/lib/rancher/k3s
-    command: server --disable-traefik --write-kubeconfig-mode 644
+    command: server --disable traefik --write-kubeconfig-mode 644
 
 volumes:
   splunk-etc:
