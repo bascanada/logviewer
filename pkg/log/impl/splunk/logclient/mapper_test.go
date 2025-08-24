@@ -3,9 +3,9 @@ package logclient
 import (
 	"testing"
 
-	"github.com/berlingoqc/logviewer/pkg/log/client"
-	"github.com/berlingoqc/logviewer/pkg/log/client/operator"
-	"github.com/berlingoqc/logviewer/pkg/ty"
+	"github.com/bascanada/logviewer/pkg/log/client"
+	"github.com/bascanada/logviewer/pkg/log/client/operator"
+	"github.com/bascanada/logviewer/pkg/ty"
 	"github.com/stretchr/testify/assert"
 )
 

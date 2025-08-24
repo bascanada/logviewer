@@ -3,17 +3,17 @@ package factory
 import (
 	"errors"
 
-	"github.com/berlingoqc/logviewer/pkg/log/client"
-	"github.com/berlingoqc/logviewer/pkg/log/client/config"
-	"github.com/berlingoqc/logviewer/pkg/log/impl/docker"
-	"github.com/berlingoqc/logviewer/pkg/log/impl/elk/kibana"
-	"github.com/berlingoqc/logviewer/pkg/log/impl/elk/opensearch"
-	"github.com/berlingoqc/logviewer/pkg/log/impl/cloudwatch"
-	"github.com/berlingoqc/logviewer/pkg/log/impl/k8s"
-	"github.com/berlingoqc/logviewer/pkg/log/impl/local"
-	splunk "github.com/berlingoqc/logviewer/pkg/log/impl/splunk/logclient"
-	"github.com/berlingoqc/logviewer/pkg/log/impl/ssh"
-	"github.com/berlingoqc/logviewer/pkg/ty"
+	"github.com/bascanada/logviewer/pkg/log/client"
+	"github.com/bascanada/logviewer/pkg/log/client/config"
+	"github.com/bascanada/logviewer/pkg/log/impl/docker"
+	"github.com/bascanada/logviewer/pkg/log/impl/elk/kibana"
+	"github.com/bascanada/logviewer/pkg/log/impl/elk/opensearch"
+	"github.com/bascanada/logviewer/pkg/log/impl/cloudwatch"
+	"github.com/bascanada/logviewer/pkg/log/impl/k8s"
+	"github.com/bascanada/logviewer/pkg/log/impl/local"
+	splunk "github.com/bascanada/logviewer/pkg/log/impl/splunk/logclient"
+	"github.com/bascanada/logviewer/pkg/log/impl/ssh"
+	"github.com/bascanada/logviewer/pkg/ty"
 )
 
 type LogClientFactory interface {

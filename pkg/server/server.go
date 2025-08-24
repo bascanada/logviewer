@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/berlingoqc/logviewer/pkg/log/client/config"
-	"github.com/berlingoqc/logviewer/pkg/log/factory"
+	"github.com/bascanada/logviewer/pkg/log/client/config"
+	"github.com/bascanada/logviewer/pkg/log/factory"
 )
 
 type Server struct {

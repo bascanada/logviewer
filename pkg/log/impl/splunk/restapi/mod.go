@@ -5,8 +5,8 @@ import (
 	"log"
 	"strconv"
 
-	"github.com/berlingoqc/logviewer/pkg/http"
-	"github.com/berlingoqc/logviewer/pkg/ty"
+	"github.com/bascanada/logviewer/pkg/http"
+	"github.com/bascanada/logviewer/pkg/ty"
 )
 
 // Struct to hold search job response

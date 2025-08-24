@@ -1,9 +1,9 @@
 package cmd
 
 import (
-	httpPkg "github.com/berlingoqc/logviewer/pkg/http"
-	"github.com/berlingoqc/logviewer/pkg/log"
-	"github.com/berlingoqc/logviewer/pkg/log/impl/ssh"
+	httpPkg "github.com/bascanada/logviewer/pkg/http"
+	"github.com/bascanada/logviewer/pkg/log"
+	"github.com/bascanada/logviewer/pkg/log/impl/ssh"
 	"github.com/spf13/cobra"
 )
 

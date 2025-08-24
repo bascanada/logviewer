@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/berlingoqc/logviewer/pkg/log/client"
-	"github.com/berlingoqc/logviewer/pkg/ty"
+	"github.com/bascanada/logviewer/pkg/log/client"
+	"github.com/bascanada/logviewer/pkg/ty"
 )
 
 // ErrContextNotFound is a sentinel error allowing callers to detect missing contexts via errors.Is.

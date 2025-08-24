@@ -7,8 +7,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/berlingoqc/logviewer/pkg/log/client"
-	"github.com/berlingoqc/logviewer/pkg/log/reader"
+	"github.com/bascanada/logviewer/pkg/log/client"
+	"github.com/bascanada/logviewer/pkg/log/reader"
 )
 
 const (

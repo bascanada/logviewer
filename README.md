@@ -21,17 +21,17 @@ Possible future source:
 
 ## How to install
 
-You can check [the release folder](https://github.com/berlingoqc/logviewer/releases) for prebuild binary.
+You can check [the release folder](https://github.com/bascanada/logviewer/releases) for prebuild binary.
 You can use the development build or the standard release.
 
 Other option is to use docker to run the application
 
 ```bash
 logviewer() {
-   docker run -it -v $HOME/.logviewer/config.json:/config.json -v $HOME/.ssh:/.ssh ghcr.io/berlingoqc/logviewer:latest "$@"
+   docker run -it -v $HOME/.logviewer/config.json:/config.json -v $HOME/.ssh:/.ssh ghcr.io/bascanada/logviewer:latest "$@"
 }
 logviewer_update() {
-   docker pull ghcr.io/berlingoqc/logviewer:latest
+   docker pull ghcr.io/bascanada/logviewer:latest
 }
 ```
 

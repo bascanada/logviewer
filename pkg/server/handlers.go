@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/berlingoqc/logviewer/pkg/log/client"
+	"github.com/bascanada/logviewer/pkg/log/client"
 )
 
 // Base request structure for query endpoints

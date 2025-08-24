@@ -5,8 +5,8 @@ import (
 	"context"
 	"fmt"
 
-	logclient "github.com/berlingoqc/logviewer/pkg/log/client"
-	"github.com/berlingoqc/logviewer/pkg/log/reader"
+	logclient "github.com/bascanadaogviewer/pkg/log/client"
+	"github.com/bascanadaogviewer/pkg/log/reader"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 )

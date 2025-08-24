@@ -5,9 +5,9 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/berlingoqc/logviewer/pkg/api"
-	"github.com/berlingoqc/logviewer/pkg/log/client/config"
-	"github.com/berlingoqc/logviewer/pkg/server"
+	"github.com/bascanada/logviewer/pkg/api"
+	"github.com/bascanada/logviewer/pkg/log/client/config"
+	"github.com/bascanada/logviewer/pkg/server"
 	"github.com/spf13/cobra"
 )
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 
-	"github.com/berlingoqc/logviewer/pkg/log/client"
+	"github.com/bascanada/logviewer/pkg/log/client"
 )
 
 type PrintPrinter struct{}

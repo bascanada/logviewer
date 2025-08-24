@@ -1,6 +1,6 @@
 package client
 
-import "github.com/berlingoqc/logviewer/pkg/ty"
+import "github.com/bascanada/logviewer/pkg/ty"
 
 type FieldRemapping struct{}
 

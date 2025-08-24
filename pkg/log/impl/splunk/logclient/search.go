@@ -5,9 +5,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/berlingoqc/logviewer/pkg/log/client"
-	"github.com/berlingoqc/logviewer/pkg/log/impl/splunk/restapi"
-	"github.com/berlingoqc/logviewer/pkg/ty"
+	"github.com/bascanada/logviewer/pkg/log/client"
+	"github.com/bascanada/logviewer/pkg/log/impl/splunk/restapi"
+	"github.com/bascanada/logviewer/pkg/ty"
 )
 
 type SplunkLogSearchResult struct {

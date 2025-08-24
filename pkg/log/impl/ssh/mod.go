@@ -9,8 +9,8 @@ import (
 	"net"
 	"path/filepath"
 
-	"github.com/berlingoqc/logviewer/pkg/log/client"
-	"github.com/berlingoqc/logviewer/pkg/log/reader"
+	"github.com/bascanada/logviewer/pkg/log/client"
+	"github.com/bascanada/logviewer/pkg/log/reader"
 	sshc "golang.org/x/crypto/ssh"
 	"k8s.io/client-go/util/homedir"
 )

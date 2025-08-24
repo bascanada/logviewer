@@ -6,10 +6,10 @@ import (
 	"log"
 	"time"
 
-	httpPkg "github.com/berlingoqc/logviewer/pkg/http"
-	"github.com/berlingoqc/logviewer/pkg/log/client"
-	"github.com/berlingoqc/logviewer/pkg/log/impl/splunk/restapi"
-	"github.com/berlingoqc/logviewer/pkg/ty"
+	httpPkg "github.com/bascanada/logviewer/pkg/http"
+	"github.com/bascanada/logviewer/pkg/log/client"
+	"github.com/bascanada/logviewer/pkg/log/impl/splunk/restapi"
+	"github.com/bascanada/logviewer/pkg/ty"
 )
 
 // Increase the retry limit because Splunk search jobs can take several seconds

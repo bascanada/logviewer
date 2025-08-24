@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/berlingoqc/logviewer/pkg/log/client"
-	"github.com/berlingoqc/logviewer/pkg/log/reader"
+	"github.com/bascanadalogviewer/pkg/log/client"
+	"github.com/bascanadalogviewer/pkg/log/reader"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

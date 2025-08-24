@@ -2,8 +2,8 @@ package factory
 
 import (
 	"context"
-	"github.com/berlingoqc/logviewer/pkg/log/client"
-	"github.com/berlingoqc/logviewer/pkg/log/client/config"
+	"github.com/bascanada/logviewer/pkg/log/client"
+	"github.com/bascanada/logviewer/pkg/log/client/config"
 )
 
 type SearchFactory interface {

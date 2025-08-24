@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/berlingoqc/logviewer/pkg/log/client"
-	"github.com/berlingoqc/logviewer/pkg/log/client/config"
-	"github.com/berlingoqc/logviewer/pkg/log/factory"
-	"github.com/berlingoqc/logviewer/pkg/ty"
+	"github.com/bascanada/logviewer/pkg/log/client"
+	"github.com/bascanada/logviewer/pkg/log/client/config"
+	"github.com/bascanada/logviewer/pkg/log/factory"
+	"github.com/bascanada/logviewer/pkg/ty"
 	"github.com/stretchr/testify/assert"
 )
 

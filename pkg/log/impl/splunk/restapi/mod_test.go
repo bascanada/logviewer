@@ -3,7 +3,7 @@ package restapi
 import (
     "testing"
 
-    "github.com/berlingoqc/logviewer/pkg/ty"
+    "github.com/bascanada/logviewer/pkg/ty"
     "github.com/stretchr/testify/assert"
 )
 

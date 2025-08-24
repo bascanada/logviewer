@@ -12,7 +12,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/berlingoqc/logviewer/pkg/ty"
+	"github.com/bascanada/logviewer/pkg/ty"
 )
 
 type Auth interface {

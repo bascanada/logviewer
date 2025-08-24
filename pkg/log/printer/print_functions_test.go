@@ -3,7 +3,7 @@ package printer_test
 import (
 	"testing"
 
-	"github.com/berlingoqc/logviewer/pkg/log/printer"
+	"github.com/bascanada/logviewer/pkg/log/printer"
 	"github.com/stretchr/testify/assert"
 )
 

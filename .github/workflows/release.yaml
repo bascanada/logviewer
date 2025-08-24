@@ -11,10 +11,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Set up Go 1.21
+      - name: Set up Go 1.23
         uses: actions/setup-go@v5
         with:
-          go-version: 1.21
+          go-version: 1.23
       - name: Get the version
         id: tag
         run: echo "tag=${GITHUB_REF#refs/*/}" >> $GITHUB_OUTPUT
@@ -23,19 +23,19 @@ jobs:
         env:
           VERSION: ${{ steps.tag.outputs.tag }}
       - name: Build for all plateform
-        run: make build/all
+        run: make release/all
         env:
           VERSION: ${{ steps.tag.outputs.tag }}
       - name: Login docker
-        run: docker login https://ghcr.io -u berlingoqc -p $GITHUB_ACCESS_TOKEN
+        run: docker login https://ghcr.io -u wquintal -p $GITHUB_ACCESS_TOKEN
         env:
-          GITHUB_ACCESS_TOKEN: ${{ secrets.PAT }}
+          GITHUB_ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
       - name: Docker build
-        run: docker build -t ghcr.io/berlingoqc/logviewer:${VERSION} .
+        run: docker build -t ghcr.io/bascanada/logviewer:${VERSION} .
         env:
           VERSION: ${{ steps.tag.outputs.tag }}
       - name: Docker push
-        run: docker push ghcr.io/berlingoqc/logviewer:${VERSION}
+        run: docker push ghcr.io/bascanada/logviewer:${VERSION}
         env:
           VERSION: ${{ steps.tag.outputs.tag }}
       - name: Release

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/berlingoqc/logviewer/pkg/log/client"
-	"github.com/berlingoqc/logviewer/pkg/ty"
+	"github.com/bascanada/logviewer/pkg/log/client"
+	"github.com/bascanada/logviewer/pkg/ty"
 )
 
 func TestBody(t *testing.T) {

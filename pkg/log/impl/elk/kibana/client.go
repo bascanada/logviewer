@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 
-	"github.com/berlingoqc/logviewer/pkg/http"
-	"github.com/berlingoqc/logviewer/pkg/log/client"
-	"github.com/berlingoqc/logviewer/pkg/log/impl/elk"
-	"github.com/berlingoqc/logviewer/pkg/ty"
+	"github.com/bascanadalogviewer/pkg/http"
+	"github.com/bascanadalogviewer/pkg/log/client"
+	"github.com/bascanadalogviewer/pkg/log/impl/elk"
+	"github.com/bascanadalogviewer/pkg/ty"
 )
 
 type KibanaTarget struct {

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/berlingoqc/logviewer/pkg/log/client"
-	"github.com/berlingoqc/logviewer/pkg/ty"
+	"github.com/bascanadalogviewer/pkg/log/client"
+	"github.com/bascanadalogviewer/pkg/ty"
 	"github.com/h2non/gock"
 	"github.com/stretchr/testify/assert"
 )

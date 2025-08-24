@@ -11,13 +11,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Login docker
-        run: docker login https://ghcr.io -u berlingoqc -p $GITHUB_ACCESS_TOKEN
+        run: docker login https://ghcr.io -u wquintal -p $GITHUB_ACCESS_TOKEN
         env:
-          GITHUB_ACCESS_TOKEN: ${{ secrets.PAT }}
-      - name: Set up Go 1.21
+          GITHUB_ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+      - name: Set up Go 1.23
         uses: actions/setup-go@v5
         with:
-          go-version: 1.21
+          go-version: 1.23
           check-latest: true
           cache-dependency-path: |
             go.sum
@@ -26,11 +26,11 @@ jobs:
       - name: Test
         run: go test -coverprofile=coverage.txt -covermode count ./... && cat coverage.txt | gocover-cobertura > coverage.xml
       - name: Build for all plateform
-        run: make build/all
+        run: make release/all
       - name: Docker build
-        run: docker build -t ghcr.io/berlingoqc/logviewer:latest .
+        run: docker build -t ghcr.io/bascanada/logviewer:latest .
       - name: Docker push
-        run: docker push ghcr.io/berlingoqc/logviewer:latest
+        run: docker push ghcr.io/bascanada/logviewer:latest
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"

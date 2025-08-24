@@ -5,10 +5,10 @@ import (
 	"errors"
 	"log"
 
-	"github.com/berlingoqc/logviewer/pkg/log/client"
-	"github.com/berlingoqc/logviewer/pkg/log/client/config"
-	"github.com/berlingoqc/logviewer/pkg/log/factory"
-	"github.com/berlingoqc/logviewer/pkg/log/printer"
+	"github.com/bascanada/logviewer/pkg/log/client"
+	"github.com/bascanada/logviewer/pkg/log/client/config"
+	"github.com/bascanada/logviewer/pkg/log/factory"
+	"github.com/bascanada/logviewer/pkg/log/printer"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )

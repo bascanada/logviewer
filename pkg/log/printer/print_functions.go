@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/TylerBrock/colorjson"
-	"github.com/berlingoqc/logviewer/pkg/ty"
+	"github.com/bascanada/logviewer/pkg/ty"
 )
 
 const (
