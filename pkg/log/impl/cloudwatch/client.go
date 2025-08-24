@@ -14,9 +14,16 @@ import (
 	"github.com/berlingoqc/logviewer/pkg/ty"
 )
 
+// CWClient defines the interface for the AWS CloudWatch Logs client.
+// This is used to allow for mocking in tests.
+type CWClient interface {
+	StartQuery(ctx context.Context, params *cloudwatchlogs.StartQueryInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.StartQueryOutput, error)
+	GetQueryResults(ctx context.Context, params *cloudwatchlogs.GetQueryResultsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error)
+}
+
 // CloudWatchLogClient implements the client.LogClient interface for AWS CloudWatch.
 type CloudWatchLogClient struct {
-	client *cloudwatchlogs.Client
+	client CWClient
 }
 
 // Get will be implemented in Phase 2.

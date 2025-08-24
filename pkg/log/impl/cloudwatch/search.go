@@ -11,7 +11,7 @@ import (
 )
 
 type CloudWatchLogSearchResult struct {
-	client  *cloudwatchlogs.Client
+	client  CWClient
 	queryId string
 	search  *client.LogSearch
 }

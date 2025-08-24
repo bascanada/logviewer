@@ -25,7 +25,7 @@ test:
 	@go test ./...
 
 test/coverage:
-	@go test -coverprofile=coverage.txt -covermode count ./... && cat coverage.txt | gocover-cobertura > coverage.xml
+	@go test -coverprofile=coverage.txt -covermode count ./... && cat coverage.txt | /home/jules/go/bin/gocover-cobertura > coverage.xml
 
 
 # Integration tests
