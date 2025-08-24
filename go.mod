@@ -1,4 +1,4 @@
-module github.com/berlingoqc/logviewer
+module github.com/bascanada/logviewer
 
 go 1.23.0
 
@@ -44,7 +44,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.33.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.38.0 // indirect
 	github.com/aws/smithy-go v1.22.5 // indirect
-	github.com/boumenot/gocover-cobertura v1.2.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/containerd/log v0.1.0 // indirect

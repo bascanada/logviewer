@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/bascanadalogviewer/pkg/http"
-	"github.com/bascanadalogviewer/pkg/log/client"
-	"github.com/bascanadalogviewer/pkg/log/impl/elk"
-	"github.com/bascanadalogviewer/pkg/ty"
+	"github.com/bascanada/logviewer/pkg/http"
+	"github.com/bascanada/logviewer/pkg/log/client"
+	"github.com/bascanada/logviewer/pkg/log/impl/elk"
+	"github.com/bascanada/logviewer/pkg/ty"
 )
 
 type OpenSearchTarget struct {

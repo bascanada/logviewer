@@ -1,6 +1,6 @@
 package client
 
-import "github.com/bascanadalogviewer/pkg/ty"
+import "github.com/bascanada/logviewer/pkg/ty"
 
 type SearchRange struct {
 	Lte  ty.Opt[string] `json:"lte"`

@@ -4,8 +4,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/bascanadalogviewer/pkg/log/client"
-	"github.com/bascanadalogviewer/pkg/ty"
+	"github.com/bascanada/logviewer/pkg/log/client"
+	"github.com/bascanada/logviewer/pkg/ty"
 )
 
 func GetDateRange(search *client.LogSearch) (string, string, error) {

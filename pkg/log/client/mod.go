@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/bascanadalogviewer/pkg/ty"
+	"github.com/bascanada/logviewer/pkg/ty"
 )
 
 type LogEntry struct {

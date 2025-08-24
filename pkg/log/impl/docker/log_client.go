@@ -5,8 +5,8 @@ import (
 	"context"
 	"fmt"
 
-	logclient "github.com/bascanadaogviewer/pkg/log/client"
-	"github.com/bascanadaogviewer/pkg/log/reader"
+	logclient "github.com/bascanada/logviewer/pkg/log/client"
+	"github.com/bascanada/logviewer/pkg/log/reader"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 )

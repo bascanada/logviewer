@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bascanadalogviewer/pkg/log/client"
-	"github.com/bascanadalogviewer/pkg/ty"
+	"github.com/bascanada/logviewer/pkg/log/client"
+	"github.com/bascanada/logviewer/pkg/ty"
 	"github.com/h2non/gock"
 	"github.com/stretchr/testify/assert"
 )
