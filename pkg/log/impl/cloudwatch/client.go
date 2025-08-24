@@ -20,6 +20,7 @@ import (
 type CWClient interface {
 	StartQuery(ctx context.Context, params *cloudwatchlogs.StartQueryInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.StartQueryOutput, error)
 	GetQueryResults(ctx context.Context, params *cloudwatchlogs.GetQueryResultsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error)
+	FilterLogEvents(ctx context.Context, params *cloudwatchlogs.FilterLogEventsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.FilterLogEventsOutput, error)
 }
 
 // CloudWatchLogClient implements the client.LogClient interface for AWS CloudWatch.
@@ -55,6 +56,14 @@ func (c *CloudWatchLogClient) Get(ctx context.Context, search *client.LogSearch)
 	logGroupName, ok := search.Options.GetStringOk("logGroupName")
 	if !ok {
 		return nil, errors.New("logGroupName is required in options for CloudWatch Logs")
+	}
+
+	// Optional flag to disable Insights query (e.g., LocalStack) and fall back to FilterLogEvents API
+	useInsights := true
+	if v, ok := search.Options.GetStringOk("useInsights"); ok {
+		if strings.EqualFold(v, "false") || v == "0" || strings.EqualFold(v, "no") {
+			useInsights = false
+		}
 	}
 
 	// 1. Build the query string
@@ -122,47 +131,108 @@ func (c *CloudWatchLogClient) Get(ctx context.Context, search *client.LogSearch)
 		startTime, endTime = endTime.Add(-1*time.Hour), endTime
 	}
 
-	// 3. Start the query
-	startQueryOutput, err := c.client.StartQuery(ctx, &cloudwatchlogs.StartQueryInput{
-		LogGroupName:  aws.String(logGroupName),
-		QueryString:   aws.String(queryString),
-		StartTime:     aws.Int64(startTime.UnixMilli()),
-		EndTime:       aws.Int64(endTime.UnixMilli()),
-	})
-	if err != nil {
-		return nil, err
+	// 3. Execute either Insights query or FilterLogEvents fallback
+	if useInsights {
+		startQueryOutput, err := c.client.StartQuery(ctx, &cloudwatchlogs.StartQueryInput{
+			LogGroupName:  aws.String(logGroupName),
+			QueryString:   aws.String(queryString),
+			StartTime:     aws.Int64(startTime.UnixMilli()),
+			EndTime:       aws.Int64(endTime.UnixMilli()),
+		})
+		if err != nil {
+			return nil, err
+		}
+		if startQueryOutput.QueryId == nil {
+			return nil, errors.New("StartQuery did not return a QueryId")
+		}
+		return &CloudWatchLogSearchResult{client: c.client, queryId: *startQueryOutput.QueryId, search: search}, nil
 	}
 
-	if startQueryOutput.QueryId == nil {
-		return nil, errors.New("StartQuery did not return a QueryId")
+	// FilterLogEvents fallback
+	input := &cloudwatchlogs.FilterLogEventsInput{
+		LogGroupName: aws.String(logGroupName),
+		StartTime:    aws.Int64(startTime.UnixMilli()),
+		EndTime:      aws.Int64(endTime.UnixMilli()),
 	}
-
-	// 4. Return the result handler
-	return &CloudWatchLogSearchResult{client: c.client, queryId: *startQueryOutput.QueryId, search: search}, nil
+	// Add filter pattern if simple equality filters are present (combine as AND)
+	if len(search.Fields) > 0 {
+		var parts []string
+		for k, v := range search.Fields {
+			if isSafeFieldName(k) {
+				parts = append(parts, fmt.Sprintf("%s=\"%s\"", k, sanitizeQueryValue(v)))
+			}
+		}
+		if len(parts) > 0 {
+			p := strings.Join(parts, " ")
+			input.FilterPattern = aws.String(p)
+		}
+	}
+	// Page through results until size reached or no more
+	entries := []client.LogEntry{}
+	nextToken := aws.String("")
+	for {
+		if nextToken != nil && *nextToken != "" {
+			input.NextToken = nextToken
+		}
+		out, err := c.client.FilterLogEvents(ctx, input)
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range out.Events {
+			msg := ""
+			if e.Message != nil { msg = *e.Message }
+			ts := time.Unix(0, *e.Timestamp*int64(time.Millisecond))
+			entries = append(entries, client.LogEntry{Timestamp: ts, Message: msg, Fields: ty.MI{}})
+			if search.Size.Set && len(entries) >= search.Size.Value { break }
+		}
+		if search.Size.Set && len(entries) >= search.Size.Value { break }
+		if out.NextToken == nil || (nextToken != nil && out.NextToken != nil && *out.NextToken == *nextToken) { // no forward progress
+			break
+		}
+		nextToken = out.NextToken
+		if nextToken == nil || *nextToken == "" { break }
+	}
+	// wrap entries in a simple LogSearchResult implementation
+	return &staticCloudWatchResult{entries: entries, search: search}, nil
 }
+
+// staticCloudWatchResult is returned when using FilterLogEvents fallback (no async polling)
+type staticCloudWatchResult struct { entries []client.LogEntry; search *client.LogSearch }
+func (r *staticCloudWatchResult) GetSearch() *client.LogSearch { return r.search }
+func (r *staticCloudWatchResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) { return r.entries, nil, nil }
+func (r *staticCloudWatchResult) GetFields() (ty.UniSet[string], chan ty.UniSet[string], error) { return ty.UniSet[string]{}, nil, nil }
 
 // GetLogClient creates a new CloudWatch Logs client.
 // It uses the 'region' and 'profile' from the options if provided.
 func GetLogClient(options ty.MI) (client.LogClient, error) {
 	var cfgOptions []func(*config.LoadOptions) error
 
-	// If a region is specified in the config, add it to the SDK options.
+	// Region support (required for AWS SDK)
 	if region, ok := options.GetStringOk("region"); ok {
 		cfgOptions = append(cfgOptions, config.WithRegion(region))
 	}
 
-	// If a profile is specified, add it to the SDK options.
+	// Shared profile support
 	if profile, ok := options.GetStringOk("profile"); ok {
 		cfgOptions = append(cfgOptions, config.WithSharedConfigProfile(profile))
 	}
 
-	// Load the default AWS configuration, applying our custom options.
+	// Optional custom endpoint (e.g. LocalStack) for integration tests
+	// Key name: "endpoint" (lowercase) to be consistent with region/profile
+	if endpoint, ok := options.GetStringOk("endpoint"); ok && endpoint != "" {
+		resolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, _ ...interface{}) (aws.Endpoint, error) {
+			if strings.Contains(strings.ToLower(service), "logs") {
+				return aws.Endpoint{URL: endpoint, PartitionID: "aws", SigningRegion: region}, nil
+			}
+			return aws.Endpoint{}, &aws.EndpointNotFoundError{}
+		})
+		cfgOptions = append(cfgOptions, config.WithEndpointResolverWithOptions(resolver))
+	}
+
 	cfg, err := config.LoadDefaultConfig(context.TODO(), cfgOptions...)
 	if err != nil {
 		return nil, err
 	}
 
-	return &CloudWatchLogClient{
-		client: cloudwatchlogs.NewFromConfig(cfg),
-	}, nil
+	return &CloudWatchLogClient{client: cloudwatchlogs.NewFromConfig(cfg)}, nil
 }

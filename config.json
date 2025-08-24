@@ -37,6 +37,13 @@
       "options": {
         "KubeConfig": "integration/k8s/k3s.yaml"
       }
+    },
+    "local-cloudwatch": {
+      "type": "cloudwatch",
+      "options": {
+        "region": "us-east-1",
+        "endpoint": "http://localhost:4566"
+      }
     }
   },
   "contexts": {
@@ -95,6 +102,17 @@
           "namespace": "kube-system",
           "pod": "${COREDNS_POD}",
           "timestamp": true
+        }
+      }
+    },
+    "cloudwatch-app-logs": {
+      "client": "local-cloudwatch",
+      "searchInherit": [],
+      "search": {
+        "fields": {},
+        "options": {
+          "logGroupName": "my-app-logs",
+          "useInsights": "false"
         }
       }
     }

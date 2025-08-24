@@ -19,23 +19,62 @@ aws --endpoint-url=${AWS_ENDPOINT_URL} logs create-log-stream --log-group-name $
 
 echo "Sending logs to CloudWatch..."
 
-LOG_EVENTS=""
+if ! command -v jq >/dev/null 2>&1; then
+  echo "Error: jq is required for JSON encoding log events." >&2
+  exit 1
+fi
+
+events_file=$(mktemp)
+trap 'rm -f "$events_file"' EXIT
+
+echo '[' > "$events_file"
+first=1
 while IFS= read -r line; do
-  if [[ -z "$line" ]]; then
-    continue
+  [[ -z "$line" ]] && continue
+  ts=$(date +%s000)
+  # Use jq for safe JSON encoding of the message
+  evt=$(jq -cn --arg ts "$ts" --arg msg "$line" '{timestamp: ($ts|tonumber), message: $msg}')
+  if [[ $first -eq 1 ]]; then
+    printf '%s' "$evt" >> "$events_file"
+    first=0
+  else
+    printf ',%s' "$evt" >> "$events_file"
   fi
-  TIMESTAMP=$(date +%s000)
-  # Escape quotes for JSON
-  ESCAPED_LINE=$(echo "$line" | sed 's/"/\\"/g')
-  LOG_EVENTS+=$(printf '{"timestamp": %s, "message": "%s"},' "$TIMESTAMP" "$ESCAPED_LINE")
 done < "${LOG_FILE}"
+echo ']' >> "$events_file"
 
-# Remove trailing comma
-LOG_EVENTS="[${LOG_EVENTS%,}]"
+LOG_EVENTS=$(cat "$events_file")
 
-aws --endpoint-url=${AWS_ENDPOINT_URL} logs put-log-events \
-  --log-group-name ${LOG_GROUP_NAME} \
-  --log-stream-name ${LOG_STREAM_NAME} \
-  --log-events "${LOG_EVENTS}"
+put_logs() {
+  if [[ -n "$1" ]]; then
+    aws --endpoint-url=${AWS_ENDPOINT_URL} logs put-log-events \
+      --log-group-name ${LOG_GROUP_NAME} \
+      --log-stream-name ${LOG_STREAM_NAME} \
+      --sequence-token "$1" \
+      --log-events "$LOG_EVENTS"
+  else
+    aws --endpoint-url=${AWS_ENDPOINT_URL} logs put-log-events \
+      --log-group-name ${LOG_GROUP_NAME} \
+      --log-stream-name ${LOG_STREAM_NAME} \
+      --log-events "$LOG_EVENTS"
+  fi
+}
+
+if ! out=$(put_logs "" 2>&1); then
+  # Handle invalid sequence token (if stream already had events)
+  if echo "$out" | grep -q 'The next expected sequenceToken is'; then
+    token=$(echo "$out" | sed -n 's/.*The next expected sequenceToken is: \([A-Za-z0-9]\+\).*/\1/p')
+    if [[ -n "$token" ]]; then
+      echo "Retrying with sequence token $token" >&2
+      put_logs "$token" || { echo "$out" >&2; exit 1; }
+    else
+      echo "$out" >&2
+      exit 1
+    fi
+  else
+    echo "$out" >&2
+    exit 1
+  fi
+fi
 
 echo "Log sending complete."

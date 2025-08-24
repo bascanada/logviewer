@@ -108,7 +108,7 @@ integration/stop/cloudwatch:
 	@cd integration && docker-compose stop localstack && docker-compose rm -f localstack
 
 # Log Generation and Uploading
-integration/logs: integration/logs/splunk integration/logs/opensearch integration/logs/ssh
+integration/logs: integration/logs/splunk integration/logs/opensearch integration/logs/ssh integration/logs/cloudwatch
 
 integration/logs/cloudwatch:
 	@echo "Sending logs to CloudWatch..."
@@ -140,3 +140,5 @@ integration/tests: build
 	@echo "Querying logs for k3s coredns"
 	@COREDNS_POD=$$(KUBECONFIG=$(K3S_KUBECONFIG) kubectl get pods -n kube-system -l k8s-app=kube-dns -o jsonpath='{.items[0].metadata.name}') \
 		build/logviewer query log -c ./config.json -i k3s-coredns --size 200
+	@echo "Querying logs from localstack"
+	@build/logviewer query log -c ./config.json -i cloudwatch-app-logs --last 24h --size 3	
