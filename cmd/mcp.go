@@ -100,25 +100,46 @@ var mcpCmd = &cobra.Command{
 			log.Fatalf("failed to load context config: %v", err)
 		}
 
-		// Build shared factories once so every tool handler can reuse them.
-		clientFactory, err := factory.GetLogClientFactory(cfg.Clients)
+		bundle, err := BuildMCPServer(cfg)
 		if err != nil {
-			log.Fatalf("failed to create client factory: %v", err)
+			log.Fatalf("failed to build MCP server: %v", err)
 		}
 
-		searchFactory, err := factory.GetLogSearchFactory(clientFactory, *cfg)
-		if err != nil {
-			log.Fatalf("failed to create search factory: %v", err)
+		if err := server.ServeStdio(bundle.Server); err != nil {
+			log.Fatalf("failed to start server: %v", err)
 		}
+	},
+}
 
-		s := server.NewMCPServer(
-			"logviewer",
-			"1.0.0",
-			server.WithToolCapabilities(true),
-			server.WithRecovery(),
-		)
+// BuildMCPServer creates an MCP server instance with all tools/resources/prompts registered.
+// Exposed for testing so we can spin up the server without invoking cobra.Run path.
+type MCPServerBundle struct {
+	Server *server.MCPServer
+	ToolHandlers map[string]func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error)
+}
 
-		listContextsTool := mcp.NewTool("list_contexts",
+func BuildMCPServer(cfg *config.ContextConfig) (*MCPServerBundle, error) {
+	// Build shared factories once so every tool handler can reuse them.
+	clientFactory, err := factory.GetLogClientFactory(cfg.Clients)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create client factory: %w", err)
+	}
+
+	searchFactory, err := factory.GetLogSearchFactory(clientFactory, *cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create search factory: %w", err)
+	}
+
+	s := server.NewMCPServer(
+		"logviewer",
+		"1.0.0",
+		server.WithToolCapabilities(true),
+		server.WithRecovery(),
+	)
+
+	handlers := map[string]func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error){}
+
+	listContextsTool := mcp.NewTool("list_contexts",
 			mcp.WithDescription(`List all configured log contexts.
 
 Usage: list_contexts
@@ -128,7 +149,7 @@ Returns: JSON array of context identifiers (strings) that can be used in other t
 Note: You don't have to call this before every query. You can attempt query_logs directly; if the contextId is invalid the server will now return suggestions including available contexts.
 `),
 		)
-		s.AddTool(listContextsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	listHandler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			contextIDs := make([]string, 0, len(cfg.Contexts))
 			for id := range cfg.Contexts {
 				contextIDs = append(contextIDs, id)
@@ -138,9 +159,11 @@ Note: You don't have to call this before every query. You can attempt query_logs
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 			return mcp.NewToolResultText(string(jsonBytes)), nil
-		})
+		}
+	s.AddTool(listContextsTool, listHandler)
+	handlers["list_contexts"] = listHandler
 
-		getFieldsTool := mcp.NewTool("get_fields",
+	getFieldsTool := mcp.NewTool("get_fields",
 			mcp.WithDescription(`Discover available structured log fields for a given context.
 
 Usage: get_fields contextId=<context>
@@ -155,7 +178,7 @@ You may skip this and directly call query_logs. If a query returns no results, c
 			mcp.WithString("contextId", mcp.Required(), mcp.Description("Context identifier to inspect.")),
 			mcp.WithString("last", mcp.Description("Optional relative time window for field discovery (e.g. 30m, 2h). Defaults to 15m.")),
 		)
-		s.AddTool(getFieldsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	getFieldsHandler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 
 			// Extract required parameter contextId
 			contextId, err := request.RequireString("contextId")
@@ -185,9 +208,11 @@ You may skip this and directly call query_logs. If a query returns no results, c
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 			return mcp.NewToolResultText(string(jsonBytes)), nil
-		})
+		}
+	s.AddTool(getFieldsTool, getFieldsHandler)
+	handlers["get_fields"] = getFieldsHandler
 
-		queryLogsTool := mcp.NewTool("query_logs",
+	queryLogsTool := mcp.NewTool("query_logs",
 			mcp.WithDescription(`Query log entries for a context with optional filters and time window.
 
 Usage: query_logs contextId=<context> [last=15m] [size=100] [fields={"level":"ERROR"}]
@@ -209,7 +234,7 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 			mcp.WithObject("fields", mcp.Description("Exact match key/value filters (JSON object).")),
 			mcp.WithNumber("size", mcp.Description("Maximum number of log entries to return.")),
 		)
-		s.AddTool(queryLogsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	queryLogsHandler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			start := time.Now()
 			contextId, err := request.RequireString("contextId")
 			if err != nil || contextId == "" {
@@ -287,30 +312,32 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 			return mcp.NewToolResultText(string(jsonBytes)), nil
-		})
+		}
+	s.AddTool(queryLogsTool, queryLogsHandler)
+	handlers["query_logs"] = queryLogsHandler
 
-		// Resource providing context list (alternative to tool usage)
-		contextsResource := mcp.NewResource(
+	// Resource providing context list (alternative to tool usage)
+	contextsResource := mcp.NewResource(
 			"logviewer://contexts",
 			"LogViewer Context Index",
 			mcp.WithResourceDescription("JSON array of available context IDs; server also suggests them on invalid context query."),
 			mcp.WithMIMEType("application/json"),
 		)
-		s.AddResource(contextsResource, func(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	s.AddResource(contextsResource, func(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 			ids := make([]string, 0, len(cfg.Contexts))
 			for id := range cfg.Contexts { ids = append(ids, id) }
 			b, _ := json.Marshal(ids)
 			return []mcp.ResourceContents{mcp.TextResourceContents{URI: "logviewer://contexts", MIMEType: "application/json", Text: string(b)}}, nil
 		})
 
-		// Prompt guiding efficient investigation workflow
-		investigationPrompt := mcp.NewPrompt(
+	// Prompt guiding efficient investigation workflow
+	investigationPrompt := mcp.NewPrompt(
 			"log_investigation",
 			mcp.WithPromptDescription("Guide for investigating logs: query first, broaden or discover fields only if needed."),
 			mcp.WithArgument("objective", mcp.ArgumentDescription("High-level goal (e.g. detect payment errors).")),
 			mcp.WithArgument("contextId", mcp.ArgumentDescription("Optional starting context.")),
 		)
-		s.AddPrompt(investigationPrompt, func(ctx context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+	s.AddPrompt(investigationPrompt, func(ctx context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 			obj := request.Params.Arguments["objective"]
 			ctxId := request.Params.Arguments["contextId"]
 			if ctxId == "" { for id := range cfg.Contexts { ctxId = id; break } }
@@ -325,11 +352,7 @@ Return a short plan then perform tool calls.
 `, obj, ctxId)
 			return mcp.NewGetPromptResult("Log Investigation", []mcp.PromptMessage{mcp.NewPromptMessage(mcp.RoleAssistant, mcp.NewTextContent(text))}), nil
 		})
-
-		if err := server.ServeStdio(s); err != nil {
-			log.Fatalf("failed to start server: %v", err)
-		}
-	},
+	return &MCPServerBundle{Server: s, ToolHandlers: handlers}, nil
 }
 
 func init() {
