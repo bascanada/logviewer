@@ -8,7 +8,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var ()
+var (
+)
 
 var rootCmd = &cobra.Command{
 	Use:    "logviewer",

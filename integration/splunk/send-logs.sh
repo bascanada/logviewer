@@ -52,7 +52,7 @@ find "${LOG_DIR}" -type f -name "*.log" -print0 | while IFS= read -r -d $'\0' lo
         # Send the data to Splunk HEC
         curl -s -k "https://${SPLUNK_HOST}:${SPLUNK_PORT}/services/collector" \
              -H "Authorization: Splunk ${HEC_TOKEN}" \
-             -d "${json_payload}" > /dev/null
+             -d "${json_payload}"
     done < "${logfile}"
 done
 

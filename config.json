@@ -1,6 +1,6 @@
 {
   "clients": {
-    "local-splunk": {
+    "splunk": {
       "type": "splunk",
       "options": {
         "Url": "https://localhost:8089/services",
@@ -39,20 +39,12 @@
       }
     }
   },
-  "searches": {
-    "recent-main": {
-      "printerOptions": {
-        "template": "{{.Message}}"
-      }
-    }
-  },
   "contexts": {
     "splunk-app-logs": {
       "client": "local-splunk",
       "searchInherit": [],
       "search": {
         "fields": {
-          "_": "hello",
           "sourcetype": "httpevent"
         },
         "options": {
