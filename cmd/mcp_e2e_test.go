@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/berlingoqc/logviewer/pkg/log/client"
@@ -23,9 +22,19 @@ func TestMCP_ListContexts(t *testing.T) {
 	res, err := handler(context.Background(), mcp.CallToolRequest{})
 	if err != nil { t.Fatalf("tool error: %v", err) }
 	if len(res.Content) == 0 { t.Fatalf("no content") }
-	raw := res.Content[0]
-	b, _ := json.Marshal(raw)
-	if !strings.Contains(string(b), "alpha") {
-		t.Fatalf("expected alpha in payload: %s", string(b))
+	textPayload := ""
+	if tc, ok := res.Content[0].(mcp.TextContent); ok {
+		textPayload = tc.Text
+	} else {
+		b, err := json.Marshal(res.Content[0])
+		if err != nil { t.Fatalf("failed to marshal tool content: %v", err) }
+		textPayload = string(b)
 	}
+	var list []string
+	if err := json.Unmarshal([]byte(textPayload), &list); err != nil {
+		t.Fatalf("failed to unmarshal context list: %v raw=%s", err, textPayload)
+	}
+	found := false
+	for _, v := range list { if v == "alpha" { found = true; break } }
+	if !found { t.Fatalf("expected 'alpha' in context list: %v", list) }
 }

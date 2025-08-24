@@ -346,7 +346,7 @@ LogViewer can also be run as an MCP server, exposing its core functionalities as
 To start the MCP server, use the `mcp` command and provide a path to your configuration file:
 
 ```bash
-logviewer mcp --context-path /path/to/your/config.json
+logviewer mcp --config /path/to/your/config.json
 ```
 
 By default, the server will listen on port `8081`. You can change this with the `--port` flag.
@@ -359,13 +359,7 @@ Once the server is running, you can interact with it using an MCP client or any 
 
 ```bash
 # In one terminal, start the server
-logviewer mcp --context-path ./config.json
-
-# In another terminal, use a client to interact with the server
-# (This is a hypothetical example of how a client might work)
-mcp-cli --port 8081 "list all available log contexts"
-mcp-cli --port 8081 "get all fields for the 'growbe-odoo' context"
-mcp-cli --port 8081 "query logs for the 'growbe-odoo' context for the last 15 minutes with a size of 10"
+logviewer mcp --config ./config.json
 ```
 
 ## Server Mode

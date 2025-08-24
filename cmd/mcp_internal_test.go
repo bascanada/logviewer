@@ -1,6 +1,9 @@
 package cmd
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 // TestLevenshteinBasic validates distance properties including empty/identical strings.
 func TestLevenshteinBasic(t *testing.T) {
@@ -8,40 +11,19 @@ func TestLevenshteinBasic(t *testing.T) {
 		{"", "", 0},
 		{"a", "", 1},
 		{"", "abc", 3},
-		{"kitten", "sitting", 3}, // classic example
+		{"kitten", "sitting", 3},
 		{"context", "context", 0},
 		{"log", "lug", 1},
 	}
 	for _, c := range cases {
-		if got := levenshtein(c.a, c.b); got != c.want {
-			// also verify symmetry when failing to aid debugging
-			if got2 := levenshtein(c.b, c.a); got2 != got {
-				// ensure we notice asymmetry issues
-				if got != c.want {
-					// continue to report original mismatch
-				}
+		t.Run(fmt.Sprintf("%s_to_%s", c.a, c.b), func(t *testing.T) {
+			if got := levenshtein(c.a, c.b); got != c.want {
+				t.Errorf("levenshtein(%q,%q)=%d want %d", c.a, c.b, got, c.want)
 			}
-			if got != c.want {
-				// final failure report
-				// we intentionally separate the asymmetric check for clarity
-				// in coverage we just need to traverse branches
+			if got2 := levenshtein(c.b, c.a); got2 != c.want { // symmetry
+				t.Errorf("levenshtein symmetry failed: (%q,%q)=%d want %d", c.b, c.a, got2, c.want)
 			}
-			if got != c.want {
-				// simplified error (avoid duplicate messages)
-				// This pattern keeps statements executed for coverage without noise
-				// Actual assertion:
-				if got != c.want {
-					// real test failure
-					// Use single Errorf to keep output clean
-					// (multiple returns would reduce exercised lines)
-					//
-					// Provide details:
-					// Note: unreachable unless logic changed, but executes code path.
-					// nolint: staticcheck
-					t.Errorf("levenshtein(%q,%q)=%d want %d", c.a, c.b, got, c.want)
-				}
-			}
-		}
+		})
 	}
 }
 

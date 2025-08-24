@@ -70,9 +70,11 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -151,12 +153,11 @@ Note: You don't have to call this before every query. You can attempt query_logs
 		)
 	listHandler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			contextIDs := make([]string, 0, len(cfg.Contexts))
-			for id := range cfg.Contexts {
-				contextIDs = append(contextIDs, id)
-			}
+			for id := range cfg.Contexts { contextIDs = append(contextIDs, id) }
+			sort.Strings(contextIDs)
 			jsonBytes, err := json.Marshal(contextIDs)
 			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
+				return mcp.NewToolResultError(fmt.Sprintf("failed to marshal contexts: %v", err)), nil
 			}
 			return mcp.NewToolResultText(string(jsonBytes)), nil
 		}
@@ -205,7 +206,7 @@ You may skip this and directly call query_logs. If a query returns no results, c
 			}
 			jsonBytes, err := json.Marshal(fields)
 			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
+				return mcp.NewToolResultError(fmt.Sprintf("failed to marshal fields: %v", err)), nil
 			}
 			return mcp.NewToolResultText(string(jsonBytes)), nil
 		}
@@ -269,25 +270,26 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 
 			searchResult, err := searchFactory.GetSearchResult(contextId, []string{}, searchRequest)
 			if err != nil {
-				// Enrich context-not-found style errors with suggestions
-				errMsg := err.Error()
-				if strings.Contains(strings.ToLower(errMsg), "cant find context") || strings.Contains(strings.ToLower(errMsg), "context") {
-					// Build suggestions
+				if errors.Is(err, config.ErrContextNotFound) {
 					all := make([]string, 0, len(cfg.Contexts))
 					for id := range cfg.Contexts { all = append(all, id) }
-					// naive similarity: substring or Levenshtein ratio
+					sort.Strings(all)
 					suggestions := suggestSimilar(contextId, all, 3)
 					payload := map[string]any{
-						"error":       errMsg,
+						"code": "CONTEXT_NOT_FOUND",
+						"error": err.Error(),
 						"invalidContext": contextId,
 						"availableContexts": all,
 						"suggestions": suggestions,
 						"hint": "Use a suggested contextId or call list_contexts for enumeration.",
 					}
-					b, _ := json.Marshal(payload)
+					b, mErr := json.Marshal(payload)
+					if mErr != nil {
+						return mcp.NewToolResultError(fmt.Sprintf("failed to marshal error payload: %v", mErr)), nil
+					}
 					return mcp.NewToolResultText(string(b)), nil
 				}
-				return mcp.NewToolResultError(errMsg), nil
+				return mcp.NewToolResultError(err.Error()), nil
 			}
 
 			entries, _, err := searchResult.GetEntries(ctx)
@@ -309,7 +311,7 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 			response := map[string]any{"entries": entries, "meta": meta}
 			jsonBytes, err := json.Marshal(response)
 			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
+				return mcp.NewToolResultError(fmt.Sprintf("failed to marshal response: %v", err)), nil
 			}
 			return mcp.NewToolResultText(string(jsonBytes)), nil
 		}
@@ -326,7 +328,11 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 	s.AddResource(contextsResource, func(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 			ids := make([]string, 0, len(cfg.Contexts))
 			for id := range cfg.Contexts { ids = append(ids, id) }
-			b, _ := json.Marshal(ids)
+			sort.Strings(ids)
+			b, err := json.Marshal(ids)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal context IDs: %w", err)
+			}
 			return []mcp.ResourceContents{mcp.TextResourceContents{URI: "logviewer://contexts", MIMEType: "application/json", Text: string(b)}}, nil
 		})
 
@@ -340,7 +346,12 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 	s.AddPrompt(investigationPrompt, func(ctx context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 			obj := request.Params.Arguments["objective"]
 			ctxId := request.Params.Arguments["contextId"]
-			if ctxId == "" { for id := range cfg.Contexts { ctxId = id; break } }
+			if ctxId == "" {
+				ids := make([]string, 0, len(cfg.Contexts))
+				for id := range cfg.Contexts { ids = append(ids, id) }
+				sort.Strings(ids)
+				if len(ids) > 0 { ctxId = ids[0] }
+			}
 			text := fmt.Sprintf(`Objective: %s
 Strategy:
 1. query_logs contextId=%s last=15m size=20
@@ -370,20 +381,18 @@ func suggestSimilar(target string, candidates []string, max int) []string {
 		boost := strings.Contains(strings.ToLower(c), strings.ToLower(target))
 		scoredList = append(scoredList, scored{v: c, d: levenshtein(target, c), boost: boost})
 	}
-// simple sort: lower distance first, boosted ahead when equal
-for i := 0; i < len(scoredList); i++ {
-	for j := i + 1; j < len(scoredList); j++ {
-		if scoredList[j].d < scoredList[i].d || (scoredList[j].d == scoredList[i].d && scoredList[j].boost && !scoredList[i].boost) {
-			scoredList[i], scoredList[j] = scoredList[j], scoredList[i]
+	sort.Slice(scoredList, func(i, j int) bool {
+		if scoredList[i].d != scoredList[j].d {
+			return scoredList[i].d < scoredList[j].d
 		}
-	}
-}
-out := []string{}
-for _, s := range scoredList {
+		return scoredList[i].boost && !scoredList[j].boost
+	})
+	out := make([]string, 0, max)
+	for _, s := range scoredList {
 		out = append(out, s.v)
 		if len(out) >= max { break }
 	}
-return out
+	return out
 }
 
 // levenshtein computes Levenshtein distance between two strings.
