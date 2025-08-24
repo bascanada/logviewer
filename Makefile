@@ -10,15 +10,34 @@ K3S_KUBECONFIG=integration/k8s/k3s.yaml
 # Build targets
 
 build:
-	@echo "building version $(VERSION) for current platform"
+	@echo "building (debug-friendly) version $(VERSION) for current platform"
 	@go build -ldflags "-X github.com/berlingoqc/logviewer/cmd.sha1ver=$(VERSION)" -o build/logviewer
 
+# Optimized / stripped release build (smaller binary, no DWARF/debug, trimmed paths)
+# Usage: make release [VERSION=...] [CGO_ENABLED=0]
+release:
+	@echo "building optimized release version $(VERSION)"
+	@mkdir -p build
+	@CGO_ENABLED=${CGO_ENABLED-0} go build -trimpath -buildvcs=false \
+		-ldflags "-s -w -X github.com/berlingoqc/logviewer/cmd.sha1ver=$(VERSION)" \
+		-o build/logviewer
+	@echo "binary size: $$(wc -c < build/logviewer) bytes"
+	@echo "(add optional compression: upx --best build/logviewer)"
+
 build/all:
-	@echo "building version $(VERSION) for all platforms"
+	@echo "building (debug-friendly) version $(VERSION) for all platforms"
 	@GOOS=linux GOARCH=arm64 go build -ldflags "-X github.com/berlingoqc/logviewer/cmd.sha1ver=$(VERSION)" -o build/logviewer-linux-arm64
 	@GOOS=linux GOARCH=amd64 go build -ldflags "-X github.com/berlingoqc/logviewer/cmd.sha1ver=$(VERSION)" -o build/logviewer-linux-amd64
 	@GOOS=darwin GOARCH=arm64 go build -ldflags "-X github.com/berlingoqc/logviewer/cmd.sha1ver=$(VERSION)" -o build/logviewer-darwin-arm64
 	@GOOS=darwin GOARCH=amd64 go build -ldflags "-X github.com/berlingoqc/logviewer/cmd.sha1ver=$(VERSION)" -o build/logviewer-darwin-amd64
+
+# Optimized multi-platform build (stripped)
+release/all:
+	@echo "building optimized release version $(VERSION) for all platforms"
+	@GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "-s -w -X github.com/berlingoqc/logviewer/cmd.sha1ver=$(VERSION)" -o build/logviewer-linux-arm64
+	@GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "-s -w -X github.com/berlingoqc/logviewer/cmd.sha1ver=$(VERSION)" -o build/logviewer-linux-amd64
+	@GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "-s -w -X github.com/berlingoqc/logviewer/cmd.sha1ver=$(VERSION)" -o build/logviewer-darwin-arm64
+	@GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "-s -w -X github.com/berlingoqc/logviewer/cmd.sha1ver=$(VERSION)" -o build/logviewer-darwin-amd64
 
 
 # Unit tests
@@ -27,7 +46,9 @@ test:
 	@go test ./...
 
 test/coverage:
-	@go test -coverprofile=coverage.txt -covermode count ./... && cat coverage.txt | /home/jules/go/bin/gocover-cobertura > coverage.xml
+	@command -v gocover-cobertura >/dev/null 2>&1 || { echo "Installing gocover-cobertura"; go install github.com/boumenot/gocover-cobertura@latest; }
+	@go test -coverprofile=coverage.txt -covermode count ./...
+	@cat coverage.txt | gocover-cobertura > coverage.xml
 
 
 # Integration Environment Management

@@ -1,12 +1,13 @@
 package factory
 
 import (
+	"context"
 	"github.com/berlingoqc/logviewer/pkg/log/client"
 	"github.com/berlingoqc/logviewer/pkg/log/client/config"
 )
 
 type SearchFactory interface {
-	GetSearchResult(contextId string, inherits []string, logSearch client.LogSearch) (client.LogSearchResult, error)
+	GetSearchResult(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch) (client.LogSearchResult, error)
 }
 
 type logSearchFactory struct {
@@ -16,7 +17,7 @@ type logSearchFactory struct {
 	config config.ContextConfig
 }
 
-func (sf *logSearchFactory) GetSearchResult(contextId string, inherits []string, logSearch client.LogSearch) (client.LogSearchResult, error) {
+func (sf *logSearchFactory) GetSearchResult(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch) (client.LogSearchResult, error) {
 
 	searchContext, err := sf.config.GetSearchContext(contextId, inherits, logSearch)
 	if err != nil {
@@ -28,7 +29,7 @@ func (sf *logSearchFactory) GetSearchResult(contextId string, inherits []string,
 		return nil, err
 	}
 
-	sr, err := (*logClient).Get(&searchContext.Search)
+	sr, err := (*logClient).Get(ctx, &searchContext.Search)
 
 	return sr, err
 }

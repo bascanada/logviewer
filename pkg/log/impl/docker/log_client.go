@@ -18,14 +18,12 @@ type DockerLogClient struct {
 	host      string
 }
 
-func (lc DockerLogClient) Get(search *logclient.LogSearch) (logclient.LogSearchResult, error) {
+func (lc DockerLogClient) Get(ctx context.Context, search *logclient.LogSearch) (logclient.LogSearchResult, error) {
 
 	if search.FieldExtraction.TimestampRegex.Set == false {
 		search.FieldExtraction.TimestampRegex.S(regexDockerTimestamp)
 	}
 
-	// Define the context
-	ctx := context.Background()
 
 	// Specify the container ID or name
 	containerID := search.Options.GetString("Container")

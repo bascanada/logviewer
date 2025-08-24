@@ -21,7 +21,7 @@ import (
 // mockSearchFactory is a mock implementation of factory.SearchFactory
 type mockSearchFactory struct{}
 
-func (m *mockSearchFactory) GetSearchResult(contextId string, inherits []string, logSearch client.LogSearch) (client.LogSearchResult, error) {
+func (m *mockSearchFactory) GetSearchResult(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch) (client.LogSearchResult, error) {
 	if contextId == "error" {
 		return nil, errors.New("backend error")
 	}

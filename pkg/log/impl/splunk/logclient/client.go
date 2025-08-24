@@ -1,6 +1,7 @@
 package logclient
 
 import (
+	"context"
 	"errors"
 	"log"
 	"time"
@@ -31,7 +32,7 @@ type SplunkLogSearchClient struct {
 	options SplunkLogSearchClientOptions
 }
 
-func (s SplunkLogSearchClient) Get(search *client.LogSearch) (client.LogSearchResult, error) {
+func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
 
 	// initiate the things and wait for query to be done
 
@@ -72,7 +73,11 @@ func (s SplunkLogSearchClient) Get(search *client.LogSearch) (client.LogSearchRe
 			return nil, errors.New("number of retry for splunk job failed")
 		}
 
-		time.Sleep(pollInterval)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(pollInterval):
+		}
 		log.Printf("waiting for splunk job %s to complete (try %d/%d)", searchJobResponse.Sid, tryCount+1, maxRetries)
 
 		status, err := s.client.GetSearchStatus(searchJobResponse.Sid)

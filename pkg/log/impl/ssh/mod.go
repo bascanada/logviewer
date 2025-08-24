@@ -2,6 +2,7 @@ package ssh
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -17,7 +18,6 @@ import (
 const (
 	OptionsCmd = "Cmd"
 )
-
 type SSHLogClientOptions struct {
 	User string `json:"user"`
 	Addr string `json:"addr"`
@@ -29,8 +29,7 @@ type sshLogClient struct {
 	conn *sshc.Client
 }
 
-func (lc sshLogClient) Get(search *client.LogSearch) (client.LogSearchResult, error) {
-
+func (lc sshLogClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
 	cmd := search.Options.GetString(OptionsCmd)
 
 	if cmd == "" {

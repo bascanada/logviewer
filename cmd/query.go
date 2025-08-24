@@ -148,7 +148,7 @@ func resolveSearch() (client.LogSearchResult, error) {
 			return nil, err
 		}
 
-		sr, err := searchFactory.GetSearchResult(contextIds[0], inherits, searchRequest)
+		sr, err := searchFactory.GetSearchResult(context.Background(), contextIds[0], inherits, searchRequest)
 
 		return sr, err
 	} else {
@@ -245,7 +245,7 @@ func resolveSearch() (client.LogSearchResult, error) {
 		return nil, err
 	}
 
-	searchResult, err2 := logClient.Get(&searchRequest)
+		searchResult, err2 := logClient.Get(context.Background(), &searchRequest)
 	if err2 != nil {
 		return nil, err2
 	}

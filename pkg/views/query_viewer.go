@@ -138,7 +138,7 @@ func RunQueryViewApp(config config.ContextConfig, searchIds []string) error {
 	//defer cancel()
 
 	for k, v := range wrappers {
-		result, err := searchFactory.GetSearchResult(k, []string{}, client.LogSearch{})
+		result, err := searchFactory.GetSearchResult(ctx, k, []string{}, client.LogSearch{})
 		v.result = result
 		if err != nil {
 			return err
