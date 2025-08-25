@@ -21,10 +21,20 @@ import (
 // mockSearchFactory is a mock implementation of factory.SearchFactory
 type mockSearchFactory struct{}
 
-func (m *mockSearchFactory) GetSearchResult(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch) (client.LogSearchResult, error) {
+func (m *mockSearchFactory) GetSearchResult(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (client.LogSearchResult, error) {
 	if contextId == "error" {
 		return nil, errors.New("backend error")
 	}
+	return &mockLogSearchResult{}, nil
+}
+
+// mockSearchFactoryWithVars captures the runtime variables for inspection.
+type mockSearchFactoryWithVars struct {
+	capturedVars map[string]string
+}
+
+func (m *mockSearchFactoryWithVars) GetSearchResult(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (client.LogSearchResult, error) {
+	m.capturedVars = runtimeVars
 	return &mockLogSearchResult{}, nil
 }
 
@@ -256,4 +266,47 @@ func TestQueryFieldsGETHandler(t *testing.T) {
 	err = json.Unmarshal(rr.Body.Bytes(), &resp)
 	assert.NoError(t, err)
 	assert.Len(t, resp.Fields, 1)
+}
+
+func TestQueryLogsHandler_WithVariables_POST(t *testing.T) {
+	cfg := &config.ContextConfig{
+		Contexts: map[string]config.SearchContext{"ctx1": {Client: "c1"}},
+		Clients:  map[string]config.Client{"c1": {Type: "mock"}},
+	}
+	// Use the mock factory that captures variables
+	mockFactory := &mockSearchFactoryWithVars{}
+	s := newTestServer(t, cfg, mockFactory)
+
+	body := `{"contextId": "ctx1", "variables": {"sessionId": "12345", "user": "test"}}`
+	req, err := http.NewRequest("POST", "/query/logs", strings.NewReader(body))
+	assert.NoError(t, err)
+
+	rr := httptest.NewRecorder()
+	s.router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	// Assert that the variables were captured by the mock factory
+	assert.NotNil(t, mockFactory.capturedVars)
+	assert.Equal(t, "12345", mockFactory.capturedVars["sessionId"])
+	assert.Equal(t, "test", mockFactory.capturedVars["user"])
+}
+
+func TestQueryLogsHandler_WithVariables_GET(t *testing.T) {
+	cfg := &config.ContextConfig{
+		Contexts: map[string]config.SearchContext{"ctx1": {Client: "c1"}},
+		Clients:  map[string]config.Client{"c1": {Type: "mock"}},
+	}
+	mockFactory := &mockSearchFactoryWithVars{}
+	s := newTestServer(t, cfg, mockFactory)
+
+	req, err := http.NewRequest("GET", "/query/logs?contextId=ctx1&vars=sessionId=abc,traceId=xyz-123", nil)
+	assert.NoError(t, err)
+
+	rr := httptest.NewRecorder()
+	s.router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.NotNil(t, mockFactory.capturedVars)
+	assert.Equal(t, "abc", mockFactory.capturedVars["sessionId"])
+	assert.Equal(t, "xyz-123", mockFactory.capturedVars["traceId"])
 }

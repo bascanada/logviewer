@@ -7,7 +7,7 @@ import (
 )
 
 type SearchFactory interface {
-	GetSearchResult(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch) (client.LogSearchResult, error)
+	GetSearchResult(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (client.LogSearchResult, error)
 }
 
 type logSearchFactory struct {
@@ -17,9 +17,9 @@ type logSearchFactory struct {
 	config config.ContextConfig
 }
 
-func (sf *logSearchFactory) GetSearchResult(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch) (client.LogSearchResult, error) {
+func (sf *logSearchFactory) GetSearchResult(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (client.LogSearchResult, error) {
 
-	searchContext, err := sf.config.GetSearchContext(contextId, inherits, logSearch)
+	searchContext, err := sf.config.GetSearchContext(contextId, inherits, logSearch, runtimeVars)
 	if err != nil {
 		return nil, err
 	}
