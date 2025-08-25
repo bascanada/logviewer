@@ -3,7 +3,9 @@ package logclient
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
+	"strconv"
 	"time"
 
 	httpPkg "github.com/bascanada/logviewer/pkg/http"
@@ -100,7 +102,16 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 		tryCount += 1
 	}
 
-	firstResult, err := s.client.GetSearchResult(searchJobResponse.Sid, 0, search.Size.Value)
+	offset := 0
+	if search.PageToken.Value != "" {
+		var err error
+		offset, err = strconv.Atoi(search.PageToken.Value)
+		if err != nil {
+			return nil, fmt.Errorf("invalid page token: %w", err)
+		}
+	}
+
+	firstResult, err := s.client.GetSearchResult(searchJobResponse.Sid, offset, search.Size.Value)
 
 	if err != nil {
 		return nil, err

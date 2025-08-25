@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 	"time"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
@@ -111,6 +112,32 @@ func (sr ElkSearchResult) parseResults() []client.LogEntry {
 	}
 
 	return entries
+}
+
+func (sr ElkSearchResult) GetPaginationInfo() *client.PaginationInfo {
+	if !sr.search.Size.Set {
+		return nil
+	}
+
+	currentOffset := 0
+	if sr.search.PageToken.Set {
+		// Tolerate errors, default to 0
+		if parsedOffset, err := strconv.Atoi(sr.search.PageToken.Value); err == nil {
+			currentOffset = parsedOffset
+		}
+	}
+
+	numResults := len(sr.result.Hits)
+
+	// If we got fewer results than requested, this is the last page
+	if numResults < sr.search.Size.Value {
+		return nil
+	}
+
+	return &client.PaginationInfo{
+		HasMore:       true,
+		NextPageToken: strconv.Itoa(currentOffset + numResults),
+	}
 }
 
 func (sr ElkSearchResult) onChange(ctx context.Context) (chan []client.LogEntry, error) {

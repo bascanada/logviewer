@@ -3,6 +3,7 @@ package logclient
 import (
 	"context"
 	"log"
+	"strconv"
 	"time"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
@@ -44,6 +45,32 @@ func (s SplunkLogSearchResult) GetFields(ctx context.Context) (ty.UniSet[string]
 	}
 
 	return fields, nil, nil
+}
+
+func (s SplunkLogSearchResult) GetPaginationInfo() *client.PaginationInfo {
+	if !s.search.Size.Set {
+		return nil
+	}
+
+	currentOffset := 0
+	if s.search.PageToken.Set {
+		// Tolerate errors, default to 0
+		if parsedOffset, err := strconv.Atoi(s.search.PageToken.Value); err == nil {
+			currentOffset = parsedOffset
+		}
+	}
+
+	numResults := len(s.results[0].Results)
+
+	// If we got fewer results than requested, this is the last page
+	if numResults < s.search.Size.Value {
+		return nil
+	}
+
+	return &client.PaginationInfo{
+		HasMore:       true,
+		NextPageToken: strconv.Itoa(currentOffset + numResults),
+	}
 }
 
 func (s SplunkLogSearchResult) parseResults(searchResponse *restapi.SearchResultsResponse) []client.LogEntry {

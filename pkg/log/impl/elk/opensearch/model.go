@@ -1,6 +1,8 @@
 package opensearch
 
 import (
+	"strconv"
+
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/impl/elk"
 )
@@ -18,6 +20,7 @@ type Map map[string]interface{}
 type SearchRequest struct {
 	Query Map        `json:"query"`
 	Size  int        `json:"size"`
+	From  int        `json:"from,omitempty"`
 	Sort  []SortItem `json:"sort"`
 }
 
@@ -71,9 +74,18 @@ func GetSearchRequest(logSearch *client.LogSearch) (SearchRequest, error) {
 		},
 	}
 
+	from := 0
+	if logSearch.PageToken.Value != "" {
+		// Tolerate errors, default to 0
+		if parsedOffset, err := strconv.Atoi(logSearch.PageToken.Value); err == nil {
+			from = parsedOffset
+		}
+	}
+
 	return SearchRequest{
 		Query: query,
 		Sort:  []SortItem{sortItem},
 		Size:  logSearch.Size.Value,
+		From:  from,
 	}, nil
 }

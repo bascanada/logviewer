@@ -153,3 +153,28 @@ func parseCloudWatchTimestamp(v string) (time.Time, bool) {
 	}
 	return time.Time{}, false
 }
+
+func (r *CloudWatchLogSearchResult) GetPaginationInfo() *client.PaginationInfo {
+	if !r.search.Size.Set {
+		return nil
+	}
+
+	// This method is called after GetEntries, which calls fetchEntries.
+	// So r.entries should be populated.
+	numResults := len(r.entries)
+	if numResults < r.search.Size.Value {
+		return nil // Last page
+	}
+
+	// The last entry's timestamp is the token for the next page.
+	// Results are sorted desc, so the last entry is the oldest.
+	lastEntry := r.entries[numResults-1]
+
+	// Use RFC3339Nano for precision to avoid issues with duplicate timestamps as much as possible.
+	nextPageToken := lastEntry.Timestamp.Format(time.RFC3339Nano)
+
+	return &client.PaginationInfo{
+		HasMore:       true,
+		NextPageToken: nextPageToken,
+	}
+}
