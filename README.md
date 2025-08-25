@@ -319,6 +319,58 @@ You can then use this configuration file to do some of the query.
 ...
 ```
 
+#### Dynamic Context Variables
+
+You can define dynamic variables within your search contexts to make them more reusable and powerful. Variables can be substituted into the `fields` and `options` of a search.
+
+Variables are defined in the `variables` section of a search in your `config.json`.
+
+**Example `config.json` with variables:**
+```json
+{
+  "contexts": {
+    "session-logs": {
+      "client": "my-elk-client",
+      "search": {
+        "fields": {
+          "sessionId": "${sessionId}"
+        },
+        "options": {
+          "Index": "logs-for-user-${userId}"
+        },
+        "variables": {
+          "sessionId": {
+            "description": "The session ID to search for.",
+            "required": true
+          },
+          "userId": {
+            "description": "The user ID to scope the index to.",
+            "default": "guest"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+You can provide values for these variables at runtime using the `--var` flag. If a required variable is not provided, the query will fail. If a non-required variable with a default is not provided, the default value will be used.
+
+**Example CLI usage:**
+
+```bash
+# Provide a required variable
+-> % logviewer -c ./config.json -i session-logs --var "sessionId=abc-123" query log
+
+# Provide multiple variables, including one to override a default
+-> % logviewer -c ./config.json -i session-logs --var "sessionId=abc-123" --var "userId=prod-user-456" query log
+```
+
+Variables are resolved in the following order of precedence:
+1. Runtime variables (`--var` flag, HTTP request body).
+2. Environment variables (e.g., `$HOME`, `${API_KEY}`).
+3. Default values from `config.json`.
+
 ### Using the TUI
 
 The TUI work only with configuration and it's really early development.
@@ -353,14 +405,20 @@ By default, the server will listen on port `8081`. You can change this with the 
 
 ### Interacting with the MCP Server
 
-Once the server is running, you can interact with it using an MCP client or any tool that can communicate with an MCP server.
+Once the server is running, you can interact with it using an MCP client. The server exposes tools for discovering and querying logs. With the introduction of dynamic variables, the recommended workflow for an LLM is:
 
-**Example:**
+1.  **`list_contexts`**: Discover available contexts.
+2.  **`get_context_details`**: Inspect a specific context to see its schema, including any required or optional variables.
+3.  **`query_logs`**: Execute a query, providing values for any required variables.
 
-```bash
-# In one terminal, start the server
-logviewer mcp --config ./config.json
-```
+**Example Workflow:**
+
+1.  An LLM calls `get_context_details` for a context named `user-activity`.
+2.  The tool returns a JSON object showing that `user-activity` has a required variable `userId`.
+3.  The LLM asks the end-user for the `userId`.
+4.  The LLM calls `query_logs` with `contextId: "user-activity"` and `variables: {"userId": "12345"}`.
+
+This structured approach allows for more robust and interactive diagnostics.
 
 ## Server Mode
 

@@ -56,7 +56,7 @@ type ContextConfig struct {
 	Contexts
 }
 
-func (cc ContextConfig) GetSearchContext(contextId string, inherits []string, logSearch client.LogSearch) (SearchContext, error) {
+func (cc ContextConfig) GetSearchContext(contextId string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (SearchContext, error) {
 	if contextId == "" {
 		return SearchContext{}, errors.New("contextId is empty , required when using config")
 	}
@@ -74,8 +74,22 @@ func (cc ContextConfig) GetSearchContext(contextId string, inherits []string, lo
 
 		searchContext.Search.MergeInto(&logSearch)
 
-		// Resolve env vars inside search options (MI)
-		searchContext.Search.Options = searchContext.Search.Options.ResolveVariables()
+		// Apply default values for any variables that were not provided at runtime.
+		// Create a mutable copy of runtimeVars to avoid modifying the original map.
+		finalVars := make(map[string]string)
+		for k, v := range runtimeVars {
+			finalVars[k] = v
+		}
+
+		for varName, varDef := range searchContext.Search.Variables {
+			if _, exists := finalVars[varName]; !exists && varDef.Default != nil {
+				finalVars[varName] = fmt.Sprintf("%v", varDef.Default)
+			}
+		}
+
+		// Resolve variables in fields and options using the final variable set.
+		searchContext.Search.Options = searchContext.Search.Options.ResolveVariablesWith(finalVars)
+		searchContext.Search.Fields = searchContext.Search.Fields.ResolveVariablesWith(finalVars)
 
 		return searchContext, nil
 	} else {

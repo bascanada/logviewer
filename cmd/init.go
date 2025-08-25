@@ -44,6 +44,7 @@ var (
 	fields    []string
 	fieldsOps []string
 	inherits  []string
+	vars      []string
 	regex     string
 
 	size int
@@ -119,6 +120,7 @@ func init() {
 
 	// FIELD validation
 	queryCommand.PersistentFlags().StringArrayVarP(&fields, "fields", "f", []string{}, "Field for selection field=value")
+	queryCommand.PersistentFlags().StringArrayVar(&vars, "var", []string{}, "Set a variable for the search context (e.g., 'key=value')")
 	queryCommand.PersistentFlags().StringArrayVar(
 		&fieldsOps, "fields-condition", []string{}, "Field Ops for selection field=value (match, exists, wildcard, regex)",
 	)

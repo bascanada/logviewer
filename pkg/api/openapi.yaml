@@ -114,6 +114,12 @@ paths:
           schema:
             type: string
           example: "base-search,error-filter"
+        - name: vars
+          in: query
+          description: "Dynamic variables for the context, format: key1=val1,key2=val2"
+          schema:
+            type: string
+          example: "sessionId=abc-123,region=us-east-1"
       responses:
         '200':
           description: Query results
@@ -206,6 +212,12 @@ paths:
           description: "Comma-separated inherits list"
           schema:
             type: string
+        - name: vars
+          in: query
+          description: "Dynamic variables for the context, format: key1=val1,key2=val2"
+          schema:
+            type: string
+          example: "sessionId=abc-123"
     post:
       summary: Query Available Fields (POST)
       description: Query available fields and their values for a specified context using a JSON payload.
@@ -263,6 +275,14 @@ components:
           example: ["base-search", "error-filter"]
         search:
           $ref: '#/components/schemas/LogSearch'
+        variables:
+          type: object
+          additionalProperties:
+            type: string
+          description: Key-value pairs for dynamic variable substitution in the context.
+          example:
+            sessionId: "abc-123"
+            region: "us-east-1"
 
     LogSearch:
       type: object

@@ -2,6 +2,15 @@ package client
 
 import "github.com/bascanada/logviewer/pkg/ty"
 
+// VariableDefinition describes a dynamic parameter for a search context.
+// This provides metadata to UIs and LLMs about what inputs are expected.
+type VariableDefinition struct {
+	Description string      `json:"description,omitempty"`
+	Type        string      `json:"type,omitempty"`
+	Default     interface{} `json:"default,omitempty"`
+	Required    bool        `json:"required,omitempty"`
+}
+
 type SearchRange struct {
 	Lte  ty.Opt[string] `json:"lte"`
 	Gte  ty.Opt[string] `json:"gte"`
@@ -44,13 +53,13 @@ type LogSearch struct {
 	FieldExtraction FieldExtraction `json:"fieldExtraction,omitempty"`
 
 	PrinterOptions PrinterOptions `json:"printerOptions,omitempty"`
+
+	// Variables defines the dynamic inputs for this search context.
+	// The map key is the variable name (e.g., "sessionId").
+	Variables map[string]VariableDefinition `json:"variables,omitempty"`
 }
 
 func (lr *LogSearch) MergeInto(logSeach *LogSearch) error {
-
-	if lr.Fields == nil {
-		lr.Fields = ty.MS{}
-	}
 	if lr.Fields == nil {
 		lr.Fields = ty.MS{}
 	}
@@ -58,7 +67,6 @@ func (lr *LogSearch) MergeInto(logSeach *LogSearch) error {
 		lr.Options = ty.MI{}
 	}
 
-	lr.Fields = ty.MergeM(lr.Fields, logSeach.Fields)
 	lr.Fields = ty.MergeM(lr.Fields, logSeach.Fields)
 	lr.Options = ty.MergeM(lr.Options, logSeach.Options)
 
@@ -69,6 +77,14 @@ func (lr *LogSearch) MergeInto(logSeach *LogSearch) error {
 	lr.Range.Gte.Merge(&logSeach.Range.Gte)
 	lr.Range.Lte.Merge(&logSeach.Range.Lte)
 	lr.Range.Last.Merge(&logSeach.Range.Last)
+
+	if lr.Variables == nil {
+		lr.Variables = make(map[string]VariableDefinition)
+	}
+
+	for k, v := range logSeach.Variables {
+		lr.Variables[k] = v
+	}
 
 	return nil
 }

@@ -25,6 +25,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func stringArrayToMap(vars []string) (map[string]string, error) {
+	result := make(map[string]string)
+	for _, v := range vars {
+		parts := strings.SplitN(v, "=", 2)
+		if len(parts) != 2 || parts[0] == "" {
+			return nil, fmt.Errorf("invalid variable format: %q, expected key=value", v)
+		}
+		result[parts[0]] = parts[1]
+	}
+	return result, nil
+}
+
 func stringArrayEnvVariable(strs []string, maps *ty.MS) error {
 	for _, f := range strs {
 		if strings.Contains(f, "=") {
@@ -148,7 +160,12 @@ func resolveSearch() (client.LogSearchResult, error) {
 			return nil, err
 		}
 
-		sr, err := searchFactory.GetSearchResult(context.Background(), contextIds[0], inherits, searchRequest)
+		runtimeVars, err := stringArrayToMap(vars)
+		if err != nil {
+			return nil, err
+		}
+
+		sr, err := searchFactory.GetSearchResult(context.Background(), contextIds[0], inherits, searchRequest, runtimeVars)
 
 		return sr, err
 	} else {
