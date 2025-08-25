@@ -11,13 +11,8 @@ Log source at the moment are:
 * Kubectl logs
 * Opensearch/Kibana logs
 * Splunk logs
-
-Possible future source:
-
 * AWS CloudWatch
 * Docker
-* Command builder ( for local and ssh logs based on what you want to look at)
-
 
 ## How to install
 
@@ -39,115 +34,33 @@ logviewer_update() {
 
 There is main way to access the log
 
-* Via the stdout , outputting directly in the terminal
-* With the TUI , creating tmux like views for multiple log query
+* Via the stdout , outputting directly in the terminal like curl
+* With the TUI , creating tmux like views for multiple log query like k9s
+* Http server , query remotely for the log configure in your context
+* MCP integrate , allow llm to query and analyze your log
 
 
-### Basic log query
+## Implementations
 
-```bash
--> % logviewer query --help
-Query a login system for logs and available fields
 
-Usage:
-  logviewer query [flags]
-  logviewer query [command]
-
-Available Commands:
-  field       Dispaly available field for filtering of logs
-  log         Display logs for system
-			  Without subcommand open the query TUI
-
-Flags:
-      --client-body string             File containing base body to be used by the underlying client
-      --client-headers string          File containings list of headers to be used by the underlying client
-      --cmd string                     If using ssh or local , manual command to run
-  -c, --config string                  Config for preconfigure context for search
-      --docker-container string        Docker container
-      --docker-host string             Docker context
-      --elk-index string               Elk index to search
-  -f, --fields stringArray             Field for selection field=value
-      --fields-condition stringArray   Field Ops for selection field=value (match, exists, wildcard, regex)
-      --fields-regex string            Regex to extract field from log text, using named group ".*(?P<Level>INFO|WARN|ERROR).*"
-      --from string                    Get entry gte datetime date >= from
-  -h, --help                           help for query
-  -i, --id stringArray                 Context id to execute
-      --inherits stringArray           When using config , list of inherits to execute on top of the one configure for the search
-      --k8s-container string           K8s container
-      --k8s-namespace string           K8s namespace
-      --k8s-pod string                 K8s pod
-      --k8s-previous                   K8s log of previous container
-      --k8s-timestamp                  K8s include RFC3339 timestamp
-      --kibana-endpoint string         Kibana endpoint
-      --last string                    Get entry in the last duration
-      --mylog                          read from logviewer logs file
-      --opensearch-endpoint string     Opensearch endpoint
-      --size int                       Get entry max size
-      --splunk-endpoint string         Splunk endpoint
-      --ssh-addr string                SSH address and port localhost:22
-      --ssh-identifiy string           SSH private key , by default $HOME/.ssh/id_rsa
-      --ssh-user string                SSH user
-      --to string                      Get entry lte datetime date <= to
-
-Global Flags:
-      --logging-level string   logging level to output INFO WARN ERROR DEBUG TRACE
-      --logging-path string    file to output logs of the application
-      --logging-stdout         output appplication log in the stdout
-
-Use "logviewer query [command] --help" for more information about a command.
-```
-
-#### Query from opensearch
+### Opensearch
 
 ```bash
 # Query max of 10 logs entry in the last 10 minute for an index in an instance
 -> % logviewer --opensearch-endpoint "..." --elk-index "...*" --last 10m --size 10 query log
-[19:51:34][INFO] name='/health/healthcheck' total=1 
-[19:51:34][INFO] Getting pending jobs to schedule...
-[19:51:34][INFO] Job(0) scheduled in 0(ms)
-[19:51:34][WARN] Select expired jobs, expiration max delay 1, returned 0 jobs
-[19:51:35][INFO] name='/health/healthcheck' total=1 
-[19:51:35][INFO] name='/health/healthcheck' total=1 
-[19:51:35][INFO] name='/health/healthcheck' total=1 
-[19:51:35][INFO] name='/health/healthcheck' total=1 
-[19:51:36][INFO] name='/health/healthcheck' total=1 
-[19:51:36][INFO] name='/health/healthcheck' total=1 
 
 # Query for the field with the same restrictions
 -> % logviewer --opensearch-endpoint "..." --elk-index "...*" --last 10m --size 10 query field
-thread 
-    http-nio-8080-exec-5
-    http-nio-8080-exec-9
-    health.check-thread-5
-    health.check-thread-2
-    health.check-thread-4
-    http-nio-8080-exec-7
-    http-nio-8080-exec-10
-environment 
-    dev
-    intqa
-level 
-    INFO
 
 # Query with a filter on a field
 -> % logviewer --opensearch-endpoint "..." --elk-index "...*" --last 10m --size 10 -f level=INFO query log
-[19:51:34][WARN] Select expired jobs, expiration max delay 1, returned 0 jobs
 
 # Query with a custom format , all fields can be used and more , it's go template
 -> % logviewer --opensearch-endpoint "https://logs-dev.elk.eu-west-1.nonprod.aws.eu" --elk-index "gfx*" --last 10m --size 10 --format "{{.Fields.level}} - {{.Message}}" query log
-INFO - Message sent to SQS with SQS-assigned messageId: a64e36bf-9418-4c06-93d7-311424dee65c
-INFO - Message sent to SQS with SQS-assigned messageId: 6da1de09-aa1e-4295-abe4-c8eb457775ad
-INFO - Shutting down SessionCallBackScheduler executor
-INFO - Shutting down SessionCallBackScheduler executor
-INFO - Shutting down SessionCallBackScheduler executor
-INFO - Message sent to SQS with SQS-assigned messageId: 9d741e5d-1abf-4ae0-3554-798a0cc7f1b9
-INFO - name='/health/healthcheck' total=0 
-INFO - name='/health/healthcheck' total=1 
-INFO - name='/health/healthcheck' total=0 
-INFO - name='/health/healthcheck' total=1 
 ```
 
-#### Query from kubernetes
+
+### Kubernetes
 
 ***still in early development and usure if it will stay on the long term***
 ***may be replace by using the kubectl command instead***
@@ -156,7 +69,7 @@ INFO - name='/health/healthcheck' total=1
 -> % logviewer --k8s-container frontend-dev-75fb7b89bb-9msbl --k8s-namespace growbe-prod  query log
 ```
 
-#### Query from docker
+### Docker
 
 Will used your `$DOCKER_HOST` if `--docker-host` is not provided , only required arguments is the name
 of the container to query log for.
@@ -195,9 +108,7 @@ logviewer query log --docker-host "unix:///Users/William.Quintal/.colima/lol/doc
   }
 ```
 
-
-
-#### Query from command local or ssh
+### Local/SSH
 
 Query from local and ssh don't use mutch of the search field like for opensearch
 in the future with the command builder depending on the context it may be used but for
@@ -232,92 +143,36 @@ httpmethod
 ```
 
 
-### Creating configuration file to save client and log search
+#### AWS CloudWatch
 
-For more conveniance you can create configuration for the client and search you want to do.
+You can query CloudWatch Logs either by providing flags on the CLI or by creating a client in `config.json`.
 
-Create a configuration json file with the following format.
+Example: query the last 30 minutes from a specific log group using Insights
+
+```bash
+-> % logviewer --cloudwatch-log-group "/aws/lambda/my-func" --cloudwatch-region "us-east-1" --last 30m --size 50 query log
+[12:01:34][INFO] ...log message...
+```
+
+If you need to target a LocalStack or custom endpoint set `--cloudwatch-endpoint` and to force the use of FilterLogEvents (instead of Insights) use `--cloudwatch-use-insights=false`.
+
+Example `config.json` client entry for CloudWatch:
 
 ```json
-{
-  // Map of all client configuration
-  "clients": {
-    "local": {
-      "type": "local",
-      "options": {}
-    },
-    "growbe": {
-      "type": "kibana",
-      "options": {
-        "Endpoint": "http://myinstance"
-      }
-    },
-	"growbe-os": {
-      "type": "opensearch",
-      "options": {
-        "Endpoint": "http://myinstance"
-      }
-    }
-  },
-  // You can define search object that will be used to create a query
-  "searches": {
-    "growbe": {
-      "range": {
-        "last": "15m"
-      },
-      "refresh": {
-        "duration": "3s"
-      },
-      "size": 100,
-      "options": {
-        "Index": "logstash-*"
-      },
-      "printerOptions": {
-        "template": "{{.Message}}"
-      }
-    }
-  },
-  // Map of all search you can use
-  "contexts": {
-	// Name of the search
-    "growbe-ingress": {
-	  // client to be used
-      "client": "growbe",
-	  // array of search object, will be overwritten from first to last finish with
-	  // this search object
-	  "searchInherit": ["growbe"],
-	  // search object
-      "search": {
-        "fields": {
-          "kubernetes.container_image": "k8s.gcr.io/ingress-nginx/controller:v1.2.0"
-        }
-      }
-    },
-    "growbe-odoo": {
-      "client": "growbe",
-      "search": {
-        "range": {
-          "last": "20m"
-        },
-        "fields": {
-          "kubernetes.container_image": "docker.io/bitnami/odoo:16.0.20221115-debian-11-r13"
-        }
-      }
+"clients": {
+  "local-cloudwatch": {
+    "type": "cloudwatch",
+    "options": {
+      "region": "us-east-1",
+      "profile": "default",
+      "endpoint": "http://localhost:4566"
     }
   }
 }
 ```
 
-You can then use this configuration file to do some of the query.
+You can then reference the client in a context and set `logGroupName` in the `options` of the search if you prefer to keep the group inside the context.
 
-```bash
--> % logviewer -c ./config.json -i growbe-odoo query log
-...
-
-# You can also used the command line options to overwrite some settings
--> % logviewer -c ./config.json -i growbe-odoo query log --size 300
-...
-```
 
 #### Dynamic Context Variables
 
@@ -371,7 +226,7 @@ Variables are resolved in the following order of precedence:
 2. Environment variables (e.g., `$HOME`, `${API_KEY}`).
 3. Default values from `config.json`.
 
-### Using the TUI
+## TUI
 
 The TUI work only with configuration and it's really early development.
 The inspiration was k9s and i want to do something similar in look to be able
@@ -388,6 +243,9 @@ request.
 # will display the field
 -> % logviewer -c ./config.json -i growbe-odoo -i growbe-ingress query
 ```
+
+
+
 
 ## MCP Server
 
@@ -433,6 +291,13 @@ logviewer server --config /path/to/your/config.json
 ```
 
 By default, the server will listen on `0.0.0.0:8080`. You can change this with the `--host` and `--port` flags.
+
+
+
+
+
+
+
 
 ### API Endpoints
 
@@ -514,13 +379,3 @@ GET /query/logs?contextId=my-context&fields=field_name=field_value&last=1h
 # Using curl (what Gemini CLI does internally)
 curl "http://localhost:8080/query/logs?contextId=nonprod-api&fields=level=ERROR&last=30m&size=20"
 ```
-
-## Todo
-
-* Mix multiple datasource in the same flow (maybe be complicated to order them correctly)
-* Expand JSON model if present
-* Create custom function for template to display multiline pretty things.
-* Add color
-* PrinterOptions template dont work in config
-* Automatic refresh if need be
-* Supporter template dans les expression regex ou autre moyens pour simplifier l'exctractions

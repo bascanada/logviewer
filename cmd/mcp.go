@@ -174,7 +174,6 @@ Note: You don't have to call this before every query. You can attempt query_logs
 			return mcp.NewToolResultError(fmt.Sprintf("invalid or missing contextId: %v", err)), nil
 		}
 
-		// Get the fully merged search context, but without any runtime overrides for now.
 		searchContext, err := cfg.GetSearchContext(contextId, []string{}, client.LogSearch{}, nil)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
@@ -182,6 +181,16 @@ Note: You don't have to call this before every query. You can attempt query_logs
 
 		// Return the search part, which contains the variable definitions.
 		jsonBytes, err := json.Marshal(searchContext.Search)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to marshal search context: %v", err)), nil
+		}
+		// unmarshal to a map[string]interface{} to avoid the unmarshal error
+		var searchMap map[string]interface{}
+		if err := json.Unmarshal(jsonBytes, &searchMap); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to unmarshal search context: %v", err)), nil
+		}
+
+		jsonBytes, err = json.Marshal(searchMap)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to marshal search context: %v", err)), nil
 		}

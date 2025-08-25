@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/ty"
@@ -77,6 +78,11 @@ func (cc ContextConfig) GetSearchContext(contextId string, inherits []string, lo
 		// Apply default values for any variables that were not provided at runtime.
 		// Create a mutable copy of runtimeVars to avoid modifying the original map.
 		finalVars := make(map[string]string)
+		for _, e := range os.Environ() {
+			pair := strings.SplitN(e, "=", 2)
+			finalVars[pair[0]] = pair[1]
+		}
+
 		for k, v := range runtimeVars {
 			finalVars[k] = v
 		}

@@ -79,9 +79,11 @@ func TestMCP_GetContextDetails(t *testing.T) {
 
 	handler := bundle.ToolHandlers["get_context_details"]
 	req := mcp.CallToolRequest{
-		Tool: "get_context_details",
-		Arguments: map[string]interface{}{
-			"contextId": "context-with-vars",
+		Params: mcp.CallToolParams{
+			Name: "get_context_details",
+			Arguments: map[string]interface{}{
+				"contextId": "context-with-vars",
+			},
 		},
 	}
 
@@ -123,10 +125,12 @@ func TestMCP_QueryLogs_MissingRequiredVariable(t *testing.T) {
 
 	handler := bundle.ToolHandlers["query_logs"]
 	req := mcp.CallToolRequest{
-		Tool: "query_logs",
-		Arguments: map[string]interface{}{
-			"contextId": "context-with-req-var",
-			// "variables" is intentionally omitted
+		Params: mcp.CallToolParams{
+			Name: "query_logs",
+			Arguments: map[string]interface{}{
+				"contextId": "context-with-req-var",
+				// "variables" is intentionally omitted
+			},
 		},
 	}
 
@@ -141,7 +145,7 @@ func TestMCP_QueryLogs_MissingRequiredVariable(t *testing.T) {
 
 func TestMCP_QueryLogs_WithVariables(t *testing.T) {
 	cfg := &config.ContextConfig{
-		Clients: config.Clients{"dummy": {Type: "local"}},
+		Clients: config.Clients{"dummy": {Type: "local", Options: ty.MI{"cmd": "echo \"hello\""}}},
 		Contexts: config.Contexts{
 			"context-to-query": {
 				Client: "dummy",
@@ -160,11 +164,13 @@ func TestMCP_QueryLogs_WithVariables(t *testing.T) {
 
 	handler := bundle.ToolHandlers["query_logs"]
 	req := mcp.CallToolRequest{
-		Tool: "query_logs",
-		Arguments: map[string]interface{}{
-			"contextId": "context-to-query",
-			"variables": map[string]interface{}{
-				"sessionId": "session-123",
+		Params: mcp.CallToolParams{
+			Name: "query_logs",
+			Arguments: map[string]interface{}{
+				"contextId": "context-to-query",
+				"variables": map[string]interface{}{
+					"sessionId": "session-123",
+				},
 			},
 		},
 	}
