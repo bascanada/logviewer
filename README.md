@@ -1,25 +1,101 @@
-
 # logviewer
 
-Terminal based log viewer for multiple log source with search feature and view configuration.
-
 ***this application is in early development , i'm still testing things out , if you like give me feedback***
+
+Terminal based log client for multiple source with search feature and configuration.
+The goal is to provide a one time cli tool to read the logs from all the places you
+decided to store them.
+
+Providing a unified way to build log queries that will work across all implementations or, when needed,
+pass raw requests to the backend implementation.
 
 Log source at the moment are:
 
 * Command local or by ssh
-* Kubectl logs
-* Opensearch/Kibana logs
-* Splunk logs
+* K8S
+* Opensearch/Kibana
+* Splunk
 * AWS CloudWatch
 * Docker
+
+
+Way to use logviewer
+
+* CLI like Curl
+* TUI like K9S
+* MCP to integrate with your favorite LLM agent like copilot, gemini or claude.
+* HTTP server if you want the app remotely
+
+Example of the core functionality
+
+```
+# Query for log in the last 10 minutes
+-> % logviewer [...] --last 10m --size 10 query log
+
+# Query for the search field
+-> % logviewer [...] --last 10m --size 10 query field
+
+# Query with a filter on a field
+-> % logviewer [...] --last 10m --size 10 -f level=INFO query log
+
+# Query with a custom format , all fields can be used and more , it's go template
+-> % logviewer [...] --last 10m --size 10 --format "{{.Fields.level}} - {{.Message}}" query log
+
+
+# Use a config file and context instead of repeating the same field
+-> % logviewer [...] -i cloudwatch-app-logs  --last 10m --size 10 --format "{{.Fields.level}} - {{.Message}}" query log
+```
+
+To handle a lot of differents log servers and log context , you can use configuration files to store
+all your configurations. See the `config.json` for exemple configuration. The parts are:
+
+1. clients: connection to an endpoint
+2. searches: block of fields and options that can be inherit by a context as base value
+3. contexts: a search context client + a list of searches + override values.
+
+```
+{
+  ...
+  "searches": {
+    "app1": {
+      "fields": {
+        "applicationName": "com.myapp"
+      },
+      "options": {
+        "index": "com.*"
+      }
+    }
+  },
+  "contexts": {
+    "app1-errors": {
+      "client": "local-splunk",
+      "searchInherit": ["app1"],
+      "search": {
+        "fields": {
+          "level": "ERROR"
+        }
+      }
+    }
+  }
+}
+```
+
+
+
 
 ## How to install
 
 You can check [the release folder](https://github.com/bascanada/logviewer/releases) for prebuild binary.
 You can use the development build or the standard release.
 
-Other option is to use docker to run the application
+Build manually
+
+```
+make release
+make install PREFIX=$HOME/.local/bin
+```
+
+Use docker to run the application , for exemple with zsh function
 
 ```bash
 logviewer() {
@@ -48,26 +124,67 @@ There is main way to access the log
 ```bash
 # Query max of 10 logs entry in the last 10 minute for an index in an instance
 -> % logviewer --opensearch-endpoint "..." --elk-index "...*" --last 10m --size 10 query log
+```
 
-# Query for the field with the same restrictions
--> % logviewer --opensearch-endpoint "..." --elk-index "...*" --last 10m --size 10 query field
-
-# Query with a filter on a field
--> % logviewer --opensearch-endpoint "..." --elk-index "...*" --last 10m --size 10 -f level=INFO query log
-
-# Query with a custom format , all fields can be used and more , it's go template
--> % logviewer --opensearch-endpoint "https://logs-dev.elk.eu-west-1.nonprod.aws.eu" --elk-index "gfx*" --last 10m --size 10 --format "{{.Fields.level}} - {{.Message}}" query log
+```
+{
+  "clients": {
+    "local-opensearch": {
+      "type": "opensearch",
+      "options": {
+        "Endpoint": "http://localhost:9200"
+      }
+    }
+  },
+  "contexts": {
+    "opensearch-app-logs": {
+      "client": "local-opensearch",
+      "searchInherit": [],
+      "search": {
+        "fields": {},
+        "options": {
+          "Index": "app-logs"
+        }
+      }
+    }
+  }
+}
 ```
 
 
-### Kubernetes
-
-***still in early development and usure if it will stay on the long term***
-***may be replace by using the kubectl command instead***
+### K8S
 
 ```bash
 -> % logviewer --k8s-container frontend-dev-75fb7b89bb-9msbl --k8s-namespace growbe-prod  query log
 ```
+
+```
+{
+  "clients": {
+    "local-k3s": {
+      "type": "k8s",
+      "options": {
+        "KubeConfig": "integration/k8s/k3s.yaml"
+      }
+    }
+  },
+  "contexts": {
+    "k3s-coredns": {
+      "client": "local-k3s",
+      "searchInherit": [],
+      "search": {
+        "fields": {},
+        "options": {
+          "namespace": "kube-system",
+          "pod": "${COREDNS_POD}",
+          "timestamp": true
+        }
+      }
+    }
+  }
+}
+```
+
 
 ### Docker
 
@@ -78,35 +195,35 @@ of the container to query log for.
 logviewer query log --docker-host "unix:///Users/William.Quintal/.colima/lol/docker.sock" --docker-container "growbe-portal" --refresh --last 42h
 ```
 
-
 ```
 {
-    "clients": {
-      "docker-local": {
-        "type": "docker",
-        "options": {
-          "Host": "unix:///Users/William.Quintal/.colima/lol/docker.sock"
-        }
+  "clients": {
+    "local-docker": {
+      "type": "docker",
+      "options": {
+        "Host": "unix:///var/run/docker.sock"
       }
-    },
-    "contexts": {
-      "growbe-portal": {
-        "client": "docker-local",
-        "search": {
-          "range": {
-            "last": "24h"
-          },
-          "fields": {
-            
-          },
-          "options": {
-            "Container": "growbe-portal"
-          }
+    }
+  },
+  "contexts": {
+    "docker-sample-container": {
+      "client": "local-docker",
+      "searchInherit": [],
+      "search": {
+        "fields": {},
+        "options": {
+          "Container": "${DOCKER_CID}",
+          "ShowStdout": true,
+          "ShowStderr": true,
+          "Timestamps": true,
+          "Details": false
         }
       }
     }
   }
+}
 ```
+
 
 ### Local/SSH
 
@@ -143,6 +260,35 @@ httpmethod
 ```
 
 
+```
+{
+  "clients": {
+    "local-ssh": {
+      "type": "ssh",
+      "options": {
+        "User": "testuser",
+        "Addr": "127.0.0.1:2222",
+        "PrivateKey": "integration/ssh/id_rsa"
+      }
+    }
+  },
+  "contexts": {
+    "ssh-app-log": {
+      "client": "local-ssh",
+      "searchInherit": [],
+      "search": {
+        "fields": {},
+        "options": {
+          "Cmd": "tail -n 200 app.log"
+        }
+      }
+    }
+  }
+}
+```
+
+
+
 #### AWS CloudWatch
 
 You can query CloudWatch Logs either by providing flags on the CLI or by creating a client in `config.json`.
@@ -156,25 +302,32 @@ Example: query the last 30 minutes from a specific log group using Insights
 
 If you need to target a LocalStack or custom endpoint set `--cloudwatch-endpoint` and to force the use of FilterLogEvents (instead of Insights) use `--cloudwatch-use-insights=false`.
 
-Example `config.json` client entry for CloudWatch:
-
-```json
-"clients": {
-  "local-cloudwatch": {
-    "type": "cloudwatch",
-    "options": {
-      "region": "us-east-1",
-      "profile": "default",
-      "endpoint": "http://localhost:4566"
+```
+{
+  "clients": {
+    "local-cloudwatch": {
+      "type": "cloudwatch",
+      "options": {
+        "region": "us-east-1",
+        "endpoint": "http://localhost:4566"
+      }
+    }
+  },
+  "contexts": {
+    "cloudwatch-app-logs": {
+      "client": "local-cloudwatch",
+      "searchInherit": [],
+      "search": {
+        "fields": {},
+        "options": {
+          "logGroupName": "my-app-logs",
+          "useInsights": "false"
+        }
+      }
     }
   }
 }
 ```
-
-You can then reference the client in a context and set `logGroupName` in the `options` of the search if you prefer to keep the group inside the context.
-
-
-
 
 
 ## TUI
@@ -223,6 +376,8 @@ Once the server is running, you can interact with it using an MCP client or any 
 logviewer mcp --config ./config.json
 ```
 
+
+
 ## Server Mode
 
 LogViewer can be run as a server, exposing its log querying capabilities via an HTTP API. This allows for programmatic access to the log aggregation engine.
@@ -236,12 +391,6 @@ logviewer server --config /path/to/your/config.json
 ```
 
 By default, the server will listen on `0.0.0.0:8080`. You can change this with the `--host` and `--port` flags.
-
-
-
-
-
-
 
 
 ### API Endpoints
@@ -301,26 +450,4 @@ curl -X POST http://localhost:8080/query/fields \
   -d '{
     "contextId": "growbe-odoo"
   }'
-```
-
-## LLM Tool Integration
-
-For AI tools that can only make GET requests (like Gemini CLI), use the GET endpoints:
-
-### Discovery Pattern
-```bash
-# 1. Find available contexts
-GET /contexts
-
-# 2. Discover fields for a context
-GET /query/fields?contextId=my-context
-
-# 3. Query logs using discovered field names
-GET /query/logs?contextId=my-context&fields=field_name=field_value&last=1h
-```
-
-### Example: Find Error Logs
-```bash
-# Using curl (what Gemini CLI does internally)
-curl "http://localhost:8080/query/logs?contextId=nonprod-api&fields=level=ERROR&last=30m&size=20"
 ```
