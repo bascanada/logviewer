@@ -52,6 +52,7 @@ test/coverage:
 
 
 # Integration Environment Management
+
 integration/start:
 	@echo "Starting all integration services..."
 	@bash integration/ssh/generate-keys.sh
@@ -63,6 +64,7 @@ integration/start:
 integration/stop:
 	@echo "Stopping all integration services..."
 	@cd integration && docker-compose down -v
+	@rm -rf ./integration/splunk/.hec_token
 
 # Service-specific start/stop
 integration/start/splunk:
@@ -72,6 +74,7 @@ integration/start/splunk:
 integration/stop/splunk:
 	@echo "Stopping Splunk..."
 	@cd integration && docker-compose stop splunk && docker-compose rm -fv splunk
+	@rm -f ./integration/splunk/.hec_token
 
 integration/start/opensearch:
 	@echo "Starting OpenSearch and Dashboards..."

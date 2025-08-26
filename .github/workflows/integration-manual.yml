@@ -1,0 +1,64 @@
+name: Integration (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_full_integration:
+        description: 'Start integration services and run integration tests'
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: integration-manual-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  integration:
+    name: Run integration (manual)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker buildx (ensures Docker available)
+        uses: docker/setup-buildx-action@v2
+
+      - name: Show docker info
+        run: docker info
+
+      - name: Start integration services
+        if: github.event.inputs.run_full_integration == 'true'
+        run: |
+          set -euxo pipefail
+          echo "Starting integration services via docker-compose"
+          cd integration
+          docker-compose up -d
+          cd ..
+          # ensure helper is executable and wait for splunk
+          chmod +x integration/splunk/wait-for-splunk.sh
+          ./integration/splunk/wait-for-splunk.sh
+
+      - name: Build binary
+        if: github.event.inputs.run_full_integration == 'true'
+        run: |
+          set -euxo pipefail
+          make build
+
+      - name: Run integration tests
+        if: github.event.inputs.run_full_integration == 'true'
+        env:
+          KUBECONFIG: ${{ github.workspace }}/integration/k8s/k3s.yaml
+        run: |
+          set -euxo pipefail
+          make integration/logs
+          make integration/tests
+
+      - name: Teardown integration services (cleanup)
+        if: always()
+        run: |
+          set -euxo pipefail
+          cd integration && docker-compose down -v || true
