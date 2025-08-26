@@ -46,11 +46,21 @@ rm -f "$TMP_RESP"
 echo "Splunk is ready."
 
 
-sleep 15
-
-# Enable HEC
+# Enable HEC with retry
 echo "Enabling HEC..."
-curl -s -k -u "${SPLUNK_USER}:${SPLUNK_PASSWORD}" "https://${SPLUNK_HOST}:${SPLUNK_API_PORT}/services/data/inputs/http?output_mode=json" -d "disabled=0" > /dev/null
+for i in $(seq 1 10); do
+  status_code=$(curl -s -k -u "${SPLUNK_USER}:${SPLUNK_PASSWORD}" "https://${SPLUNK_HOST}:${SPLUNK_API_PORT}/services/data/inputs/http?output_mode=json" -d "disabled=0" -o /dev/null -w "%{http_code}")
+  if [ "$status_code" = "200" ]; then
+    echo "HEC enabled."
+    break
+  fi
+  if [ $i -eq 10 ]; then
+    echo "Error: Failed to enable HEC after 10 attempts. Last status: $status_code" >&2
+    exit 1
+  fi
+  echo "Attempt $i/10 to enable HEC failed (status: $status_code), retrying in 5s..."
+  sleep 5
+done
 
 # Create HEC token if it doesn't exist
 if [ ! -f "$HEC_TOKEN_FILE" ]; then
