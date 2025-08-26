@@ -50,7 +50,19 @@ sleep 15
 
 # Enable HEC
 echo "Enabling HEC..."
-curl -s -k -u "${SPLUNK_USER}:${SPLUNK_PASSWORD}" "https://${SPLUNK_HOST}:${SPLUNK_API_PORT}/services/data/inputs/http?output_mode=json" -d "disabled=0" > /dev/null
+for i in $(seq 1 10); do
+  status_code=$(curl -s -k -u "${SPLUNK_USER}:${SPLUNK_PASSWORD}" "https://${SPLUNK_HOST}:${SPLUNK_API_PORT}/services/data/inputs/http?output_mode=json" -d "disabled=0" -o /dev/null -w "%{http_code}")
+  if [ "$status_code" = "200" ]; then
+    echo "HEC enabled."
+    break
+  fi
+  if [ $i -eq 10 ]; then
+    echo "Error: Failed to enable HEC after 10 attempts. Last status: $status_code" >&2
+    exit 1
+  fi
+  echo "Attempt $i/10 to enable HEC failed (status: $status_code), retrying in 5s..."
+  sleep 5
+done
 
 # Create HEC token if it doesn't exist
 if [ ! -f "$HEC_TOKEN_FILE" ]; then
@@ -109,7 +121,11 @@ PY
     HEC_TOKEN=$(printf '%s' "$HEC_JSON" | grep -o '"token"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n1 | sed -E 's/.*"token"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
   fi
 
+<<<<<<< HEAD
   # If still empty but creation response hinted the input exists, query listing endpoints to find it
+=======
+  # If token still not found, attempt to find it by listing all HEC inputs by name.
+>>>>>>> 7da8819cab179367c0f46036fada80402e2666a8
   if [ -z "$HEC_TOKEN" ]; then
     # Try listing endpoints to find an existing token by name
     LIST_JSON=$(curl -s -k -u "${SPLUNK_USER}:${SPLUNK_PASSWORD}" "https://${SPLUNK_HOST}:${SPLUNK_API_PORT}/services/data/inputs/http/http?output_mode=json" || true)
