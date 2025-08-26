@@ -6,8 +6,8 @@ Terminal based log client for multiple source with search feature and configurat
 The goal is to provide a one time cli tool to read the logs from all the places you
 decided to store them.
 
-Providing an unifed way to build log query to will work accross all implementation or in the need
-pass raw requets to the backend implementation.
+Providing a unified way to build log queries that will work across all implementations or, when needed,
+pass raw requests to the backend implementation.
 
 Log source at the moment are:
 
