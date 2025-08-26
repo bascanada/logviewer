@@ -1,6 +1,6 @@
 {
   "clients": {
-    "splunk": {
+    "local-splunk": {
       "type": "splunk",
       "options": {
         "Url": "https://localhost:8089/services",

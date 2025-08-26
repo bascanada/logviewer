@@ -8,7 +8,8 @@ SPLUNK_API_PORT="8089"
 SPLUNK_HEC_PORT="8088"
 SPLUNK_USER="admin"
 SPLUNK_PASSWORD="password"
-HEC_TOKEN_FILE=".hec_token"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HEC_TOKEN_FILE="${HEC_TOKEN_FILE:-${SCRIPT_DIR}/.hec_token}"
 
 # --- Main Script ---
 
@@ -42,6 +43,8 @@ if [ $READY -ne 1 ]; then
 fi
 rm -f "$TMP_RESP"
 echo "Splunk is ready."
+
+sleep 15
 
 # Enable HEC
 echo "Enabling HEC..."

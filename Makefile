@@ -1,11 +1,17 @@
-.PHONY: build build/all splunk/test test test/coverage
+.PHONY: build build/all release release/all test test/coverage integration/start integration/stop integration/tests integration/logs install uninstall
 
 SHA=$(shell git rev-parse --short HEAD)
-VERSION?=$(SHA)
+# Determine latest tag (fallback to '0.0.0' when repository has no tags or git fails)
+LATEST_TAG:=$(shell git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)
+
+# Default VERSION is <LATEST_TAG>-<SHA> unless overridden on the make command line
+VERSION?=$(LATEST_TAG)-$(SHA)
+
+# Installation defaults (can be overridden on the `make` command line)
+PREFIX ?= /usr/local
 
 # Path to the generated k3s kubeconfig (created by integration/k8s/configure-kubeconfig.sh)
 K3S_KUBECONFIG=integration/k8s/k3s.yaml
-
 
 # Build targets
 
@@ -40,6 +46,34 @@ release/all:
 	@GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "-s -w -X github.com/bascanada/logviewer/cmd.sha1ver=$(VERSION)" -o build/logviewer-darwin-amd64
 
 
+
+
+
+
+# Install the built binary to a system location.
+# Usage: make install [PREFIX=/usr/local] [DESTDIR=]
+# Example: make install PREFIX=/usr/local
+install:
+	@echo "Installing logviewer with: PREFIX='$(PREFIX)'"
+	@mkdir -p "$$PREFIX"
+	@cp -f build/logviewer "$$PREFIX"
+	@chmod 0755 "$$PREFIX/logviewer"
+	@echo "Installed to $$PREFIX/logviewer"
+
+# Remove installed binary
+uninstall:
+	@echo "Uninstalling logviewer from: PREFIX='$(PREFIX)'"
+	@rm -f "$$PREFIX/logviewer"
+	@echo "Removed $$PREFIX/logviewer"
+
+
+
+
+
+
+
+
+
 # Unit tests
 
 test:
@@ -51,7 +85,13 @@ test/coverage:
 	@cat coverage.txt | gocover-cobertura > coverage.xml
 
 
+
+
+
+
+
 # Integration Environment Management
+
 integration/start:
 	@echo "Starting all integration services..."
 	@bash integration/ssh/generate-keys.sh
@@ -63,6 +103,7 @@ integration/start:
 integration/stop:
 	@echo "Stopping all integration services..."
 	@cd integration && docker-compose down -v
+	@rm -rf ./integration/splunk/.hec_token
 
 # Service-specific start/stop
 integration/start/splunk:
@@ -72,6 +113,7 @@ integration/start/splunk:
 integration/stop/splunk:
 	@echo "Stopping Splunk..."
 	@cd integration && docker-compose stop splunk && docker-compose rm -fv splunk
+	@rm -f ./integration/splunk/.hec_token
 
 integration/start/opensearch:
 	@echo "Starting OpenSearch and Dashboards..."
@@ -142,3 +184,4 @@ integration/tests: build
 		build/logviewer query log -c ./config.json -i k3s-coredns --size 200
 	@echo "Querying logs from localstack"
 	@build/logviewer query log -c ./config.json -i cloudwatch-app-logs --last 24h --size 3	
+

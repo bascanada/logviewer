@@ -31,6 +31,16 @@ var (
 	sshOptions ssh.SSHLogClientOptions
 	cmd        string
 
+	// cloudwatch
+	cloudwatchLogGroup      string
+	cloudwatchRegion        string
+	cloudwatchProfile       string
+	cloudwatchEndpoint      string
+	cloudwatchUseInsights   bool
+	cloudwatchPollInterval  string
+	cloudwatchMaxPollInterval string
+	cloudwatchPollBackoff   string
+
 	// extra client fields
 	headerField string
 	bodyField   string
@@ -103,6 +113,18 @@ func init() {
 	queryCommand.PersistentFlags().StringVar(&sshOptions.Addr, "ssh-addr", "", "SSH address and port localhost:22")
 	queryCommand.PersistentFlags().StringVar(&sshOptions.User, "ssh-user", "", "SSH user")
 	queryCommand.PersistentFlags().StringVar(&sshOptions.PrivateKey, "ssh-identifiy", "", "SSH private key , by default $HOME/.ssh/id_rsa")
+
+	// CLOUDWATCH
+	queryCommand.PersistentFlags().StringVar(&cloudwatchLogGroup, "cloudwatch-log-group", "", "CloudWatch Logs log group name")
+	queryCommand.PersistentFlags().StringVar(&cloudwatchRegion, "cloudwatch-region", "", "AWS region for CloudWatch Logs (overrides SDK default)")
+	queryCommand.PersistentFlags().StringVar(&cloudwatchProfile, "cloudwatch-profile", "", "AWS shared config profile to use for CloudWatch Logs")
+	queryCommand.PersistentFlags().StringVar(&cloudwatchEndpoint, "cloudwatch-endpoint", "", "Custom endpoint for CloudWatch Logs (useful for LocalStack)")
+	queryCommand.PersistentFlags().BoolVar(&cloudwatchUseInsights, "cloudwatch-use-insights", true, "Use CloudWatch Logs Insights (set to false to fallback to FilterLogEvents)")
+
+	// CloudWatch polling tuning (affects Insights async polling)
+	queryCommand.PersistentFlags().StringVar(&cloudwatchPollInterval, "cloudwatch-poll-interval", "", "Base poll interval (e.g. 1s) for CloudWatch Insights polling")
+	queryCommand.PersistentFlags().StringVar(&cloudwatchMaxPollInterval, "cloudwatch-max-poll-interval", "", "Max poll interval (e.g. 30s) for CloudWatch Insights polling")
+	queryCommand.PersistentFlags().StringVar(&cloudwatchPollBackoff, "cloudwatch-poll-backoff", "", "Backoff factor (e.g. 2s) for CloudWatch Insights polling")
 
 	// ADDITIONAL CLIENT INFO
 	queryCommand.PersistentFlags().StringVar(&headerField, "client-headers", "", "File containings list of headers to be used by the underlying client")

@@ -18,6 +18,7 @@ import (
 	"github.com/bascanada/logviewer/pkg/log/impl/local"
 	splunk "github.com/bascanada/logviewer/pkg/log/impl/splunk/logclient"
 	"github.com/bascanada/logviewer/pkg/log/impl/ssh"
+	"github.com/bascanada/logviewer/pkg/log/impl/cloudwatch"
 	"github.com/bascanada/logviewer/pkg/log/printer"
 	"github.com/bascanada/logviewer/pkg/ty"
 	"github.com/bascanada/logviewer/pkg/views"
@@ -181,6 +182,8 @@ func resolveSearch() (client.LogSearchResult, error) {
 		system = "opensearch"
 	} else if endpointKibana != "" {
 		system = "kibana"
+	} else if cloudwatchLogGroup != "" {
+		system = "cloudwatch"
 	} else if k8sNamespace != "" {
 		system = "k8s"
 	} else if cmd != "" {
@@ -212,6 +215,34 @@ func resolveSearch() (client.LogSearchResult, error) {
 		logClient, err = opensearch.GetClient(opensearch.OpenSearchTarget{Endpoint: endpointOpensearch})
 	} else if system == "kibana" {
 		logClient, err = kibana.GetClient(kibana.KibanaTarget{Endpoint: endpointKibana})
+	} else if system == "cloudwatch" {
+		// Build options map expected by cloudwatch.GetLogClient
+		opts := ty.MI{}
+		if cloudwatchRegion != "" {
+			opts["region"] = cloudwatchRegion
+		}
+		if cloudwatchProfile != "" {
+			opts["profile"] = cloudwatchProfile
+		}
+		if cloudwatchEndpoint != "" {
+			opts["endpoint"] = cloudwatchEndpoint
+		}
+		// These options are per-search rather than client creation, push into search.Options
+		if cloudwatchLogGroup != "" {
+			searchRequest.Options["logGroupName"] = cloudwatchLogGroup
+		}
+		searchRequest.Options["useInsights"] = fmt.Sprintf("%v", cloudwatchUseInsights)
+		if cloudwatchPollInterval != "" {
+			searchRequest.Options["cloudwatchPollInterval"] = cloudwatchPollInterval
+		}
+		if cloudwatchMaxPollInterval != "" {
+			searchRequest.Options["cloudwatchMaxPollInterval"] = cloudwatchMaxPollInterval
+		}
+		if cloudwatchPollBackoff != "" {
+			searchRequest.Options["cloudwatchPollBackoff"] = cloudwatchPollBackoff
+		}
+
+		logClient, err = cloudwatch.GetLogClient(opts)
 	} else if system == "k8s" {
 		logClient, err = k8s.GetLogClient(k8s.K8sLogClientOptions{})
 	} else if system == "ssh" {
