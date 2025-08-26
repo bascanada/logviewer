@@ -121,11 +121,6 @@ PY
     HEC_TOKEN=$(printf '%s' "$HEC_JSON" | grep -o '"token"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n1 | sed -E 's/.*"token"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
   fi
 
-<<<<<<< HEAD
-  # If still empty but creation response hinted the input exists, query listing endpoints to find it
-=======
-  # If token still not found, attempt to find it by listing all HEC inputs by name.
->>>>>>> 7da8819cab179367c0f46036fada80402e2666a8
   if [ -z "$HEC_TOKEN" ]; then
     # Try listing endpoints to find an existing token by name
     LIST_JSON=$(curl -s -k -u "${SPLUNK_USER}:${SPLUNK_PASSWORD}" "https://${SPLUNK_HOST}:${SPLUNK_API_PORT}/services/data/inputs/http/http?output_mode=json" || true)
