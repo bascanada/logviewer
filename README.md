@@ -26,7 +26,7 @@ Way to use logviewer
 * MCP to integrate with your favorite LLM agent like copilot, gemini or claude.
 * HTTP server if you want the app remotely
 
-Exemple of the core functionnality
+Example of the core functionality
 
 ```
 # Query for log in the last 10 minutes
