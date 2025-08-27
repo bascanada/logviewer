@@ -17,7 +17,7 @@ var format string
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Create a default config file",
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		defaultConfig := config.ContextConfig{
 			Clients: config.Clients{
 				"local-splunk": {
@@ -25,7 +25,7 @@ var initCmd = &cobra.Command{
 					Options: ty.MI{
 						"Url": "https://localhost:8089/services",
 						"Headers": ty.MS{
-							"Authorization": "Basic YWRtaW46cGFzc3dvcmQ=",
+							"Authorization": "Basic <base64-encoded-username:password>",
 						},
 						"SearchBody": ty.MS{
 							"output_mode": "json",
@@ -61,21 +61,19 @@ var initCmd = &cobra.Command{
 		case "yaml":
 			data, err = yaml.Marshal(defaultConfig)
 		default:
-			fmt.Printf("unsupported format: %s\n", format)
-			os.Exit(1)
+			return fmt.Errorf("unsupported format: %s", format)
 		}
 
 		if err != nil {
-			fmt.Printf("failed to marshal config: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("failed to marshal config: %w", err)
 		}
 
 		if err := os.WriteFile(fileName, data, 0644); err != nil {
-			fmt.Printf("failed to write config file: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("failed to write config file: %w", err)
 		}
 
 		fmt.Printf("created config file: %s\n", fileName)
+		return nil
 	},
 }
 

@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
-	
 	"github.com/bascanada/logviewer/pkg/log/factory"
+	"github.com/bascanada/logviewer/pkg/log/impl/cloudwatch"
 	"github.com/bascanada/logviewer/pkg/log/impl/docker"
 	"github.com/bascanada/logviewer/pkg/log/impl/elk/kibana"
 	"github.com/bascanada/logviewer/pkg/log/impl/elk/opensearch"
@@ -18,7 +18,6 @@ import (
 	"github.com/bascanada/logviewer/pkg/log/impl/local"
 	splunk "github.com/bascanada/logviewer/pkg/log/impl/splunk/logclient"
 	"github.com/bascanada/logviewer/pkg/log/impl/ssh"
-	"github.com/bascanada/logviewer/pkg/log/impl/cloudwatch"
 	"github.com/bascanada/logviewer/pkg/log/printer"
 	"github.com/bascanada/logviewer/pkg/ty"
 	"github.com/bascanada/logviewer/pkg/views"
@@ -35,10 +34,10 @@ func stringArrayEnvVariable(strs []string, maps *ty.MS) error {
 
 			// empty key (e.g. "=error") is treated as a free-text token
 			if key == "" {
-				if prev, ok := (*maps)[""]; ok && prev != "" {
-					(*maps)[""] = prev + " " + val
+				if prev, ok := (*maps)(""); ok && prev != "" {
+					(*maps)("") = prev + " " + val
 				} else {
-					(*maps)[""] = val
+					(*maps)("") = val
 				}
 			} else {
 				(*maps)[key] = val
@@ -48,18 +47,17 @@ func stringArrayEnvVariable(strs []string, maps *ty.MS) error {
 
 		// No '=' present: treat the whole string as a free-text token and
 		// append it to any existing free-text tokens.
-		if prev, ok := (*maps)[""]; ok && prev != "" {
-			(*maps)[""] = prev + " " + f
+		if prev, ok := (*maps)(""); ok && prev != "" {
+			(*maps)("") = prev + " " + f
 		} else {
-			(*maps)[""] = f
+			(*maps)("") = f
 		}
 	}
 	return nil
 }
 
-func resolveSearch() (client.LogSearchResult, error) {
+func resolveSearch(cmd *cobra.Command) (client.LogSearchResult, error) {
 	var err error
-	
 
 	// resolve this from args
 	searchRequest := client.LogSearch{
@@ -122,8 +120,8 @@ func resolveSearch() (client.LogSearchResult, error) {
 		searchRequest.Options[k8s.OptionsTimestamp] = k8sTimestamp
 	}
 
-	if cmd != "" {
-		searchRequest.Options[local.OptionsCmd] = cmd
+	if cmd.Use != "local" {
+		searchRequest.Options[local.OptionsCmd] = cmd.Use
 	}
 
 	if template != "" {
@@ -136,7 +134,7 @@ func resolveSearch() (client.LogSearchResult, error) {
 		if len(contextIds) != 1 {
 			return nil, errors.New("-i required only exactly one element when doing a query log or query tag")
 		}
-		config, err := loadConfig(nil)
+		config, _, err := loadConfig(cmd)
 		if err != nil {
 			return nil, err
 		}
@@ -154,7 +152,6 @@ func resolveSearch() (client.LogSearchResult, error) {
 		return searchFactory.GetSearchResult(context.Background(), contextIds[0], inherits, searchRequest)
 	}
 
-	
 	var system string
 
 	if endpointOpensearch != "" {
@@ -165,7 +162,7 @@ func resolveSearch() (client.LogSearchResult, error) {
 		system = "cloudwatch"
 	} else if k8sNamespace != "" {
 		system = "k8s"
-	} else if cmd != "" {
+	} else if cmd.Use != "" {
 		if sshOptions.Addr != "" {
 			system = "ssh"
 		} else {
@@ -227,6 +224,7 @@ func resolveSearch() (client.LogSearchResult, error) {
 	} else if system == "ssh" {
 		logClient, err = ssh.GetLogClient(sshOptions)
 	} else if system == "docker" {
+		searchRequest.Options["Container"] = dockerContainer
 		logClient, err = docker.GetLogClient(dockerHost)
 	} else if system == "splunk" {
 		headers := ty.MS{}
@@ -258,24 +256,22 @@ func resolveSearch() (client.LogSearchResult, error) {
 		return nil, err
 	}
 
-		searchResult, err := logClient.Get(context.Background(), &searchRequest)
+	searchResult, err := logClient.Get(context.Background(), &searchRequest)
 	if err != nil {
 		return nil, err
 	}
 
 	return searchResult, nil
-
 }
 
 var queryFieldCommand = &cobra.Command{
 	Use:    "field",
 	Short:  "Dispaly available field for filtering of logs",
 	PreRun: onCommandStart,
-	Run: func(cmd *cobra.Command, args []string) {
-		searchResult, err1 := resolveSearch()
-
-		if err1 != nil {
-			panic(err1)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		searchResult, err := resolveSearch(cmd)
+		if err != nil {
+			return err
 		}
 		searchResult.GetEntries(context.Background())
 		fields, _, _ := searchResult.GetFields(context.Background())
@@ -286,7 +282,7 @@ var queryFieldCommand = &cobra.Command{
 				fmt.Println("    " + r)
 			}
 		}
-
+		return nil
 	},
 }
 
@@ -294,22 +290,22 @@ var queryLogCommand = &cobra.Command{
 	Use:    "log",
 	Short:  "Display logs for system",
 	PreRun: onCommandStart,
-	Run: func(cmd *cobra.Command, args []string) {
-		searchResult, err1 := resolveSearch()
-
-		if err1 != nil {
-			panic(err1)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		searchResult, err := resolveSearch(cmd)
+		if err != nil {
+			return err
 		}
 		outputter := printer.PrintPrinter{}
 		continous, err := outputter.Display(context.Background(), searchResult)
 		if err != nil {
-			panic(err)
+			return err
 		}
 		if continous {
 			c := make(chan os.Signal, 1)
 			signal.Notify(c, os.Interrupt)
 			<-c
 		}
+		return nil
 	},
 }
 
@@ -317,14 +313,171 @@ var queryCommand = &cobra.Command{
 	Use:    "query",
 	Short:  "Query a login system for logs and available fields",
 	PreRun: onCommandStart,
-	Run: func(cmd *cobra.Command, args []string) {
-		config, err := loadConfig(cmd)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		config, path, err := loadConfig(cmd)
 		if err != nil {
-			panic(err)
+			return err
 		}
 
+		fmt.Fprintf(os.Stderr, "Using config file: %s\n", path)
+
 		if err := views.RunQueryViewApp(*config, contextIds); err != nil {
-			panic(err)
+			return err
 		}
+		return nil
 	},
+}
+
+var (
+	contextIds []string
+	inherits   bool
+)
+
+var (
+	fields     []string
+	fieldsOps  []string
+	size       int
+	refresh    bool
+	duration   string
+	regex      string
+	from       string
+	to         string
+	last       string
+	template   string
+	index      string
+	headerField string
+	bodyField   string
+
+	// docker
+	dockerHost      string
+	dockerContainer string
+
+	// splunk
+	endpointSplunk string
+
+	// kibana
+	endpointKibana string
+
+	// opensearch
+	endpointOpensearch string
+
+	// cloudwatch
+	cloudwatchLogGroup        string
+	cloudwatchRegion          string
+	cloudwatchProfile         string
+	cloudwatchEndpoint        string
+	cloudwatchUseInsights     bool
+	cloudwatchPollInterval    string
+	cloudwatchMaxPollInterval string
+	cloudwatchPollBackoff     string
+
+	// k8s
+	k8sContainer string
+	k8sNamespace string
+	k8sPod       string
+	k8sPrevious  bool
+	k8sTimestamp bool
+
+	// local
+	cmd string
+
+	// ssh
+	sshOptions ssh.SshLogClientOptions
+)
+
+func onCommandStart(cmd *cobra.Command, args []string) {
+	if len(args) > 0 {
+		contextIds = args
+	}
+}
+
+func init() {
+	queryLogCommand.Flags().StringArrayVarP(&fields, "field", "f", []string{}, "field to display")
+	queryLogCommand.Flags().StringArrayVarP(&fieldsOps, "field-op", "p", []string{}, "field operation for filtering")
+	queryLogCommand.Flags().IntVarP(&size, "size", "s", 200, "size of the log to received")
+	queryLogCommand.Flags().BoolVarP(&refresh, "refresh", "r", false, "continuously refresh the query")
+	queryLogCommand.Flags().StringVar(&duration, "duration", "", "duration of the refresh")
+	queryLogCommand.Flags().StringVar(&regex, "regex", "", "regex to extract field from the message")
+	queryLogCommand.Flags().StringVar(&from, "from", "", "from date for the query")
+	queryLogCommand.Flags().StringVar(&to, "to", "", "to date for the query")
+	queryLogCommand.Flags().StringVar(&last, "last", "15m", "last duration for the query")
+	queryLogCommand.Flags().StringVarP(&template, "template", "t", "", "template to use for the output")
+	query_add_docker_flags(queryLogCommand)
+	query_add_splunk_flags(queryLogCommand)
+	query_add_kibana_flags(queryLogCommand)
+	query_add_opensearch_flags(queryLogCommand)
+	query_add_cloudwatch_flags(queryLogCommand)
+	query_add_k8s_flags(queryLogCommand)
+	query_add_local_flags(queryLogCommand)
+	query_add_ssh_flags(queryLogCommand)
+
+	queryFieldCommand.Flags().StringArrayVarP(&contextIds, "id", "i", []string{}, "id of the context to use")
+	queryFieldCommand.Flags().BoolVar(&inherits, "inherits", false, "inherits the context")
+	query_add_docker_flags(queryFieldCommand)
+	query_add_splunk_flags(queryFieldCommand)
+	query_add_kibana_flags(queryFieldCommand)
+	query_add_opensearch_flags(queryFieldCommand)
+	query_add_cloudwatch_flags(queryFieldCommand)
+	query_add_k8s_flags(queryFieldCommand)
+	query_add_local_flags(queryFieldCommand)
+	query_add_ssh_flags(queryFieldCommand)
+
+	queryLogCommand.Flags().StringArrayVarP(&contextIds, "id", "i", []string{}, "id of the context to use")
+	queryLogCommand.Flags().BoolVar(&inherits, "inherits", false, "inherits the context")
+
+	queryCommand.Flags().StringArrayVarP(&contextIds, "id", "i", []string{}, "id of the context to use")
+
+	rootCmd.AddCommand(queryCommand)
+	queryCommand.AddCommand(queryLogCommand)
+	queryCommand.AddCommand(queryFieldCommand)
+}
+
+func query_add_docker_flags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&dockerHost, "docker-host", "", "docker host")
+	cmd.Flags().StringVar(&dockerContainer, "docker-container", "", "docker container")
+}
+
+func query_add_splunk_flags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&endpointSplunk, "splunk-endpoint", "", "splunk endpoint")
+	cmd.Flags().StringVar(&headerField, "header", "", "header to add to the request")
+	cmd.Flags().StringVar(&bodyField, "body", "", "body to add to the request")
+}
+
+func query_add_kibana_flags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&endpointKibana, "kibana-endpoint", "", "kibana endpoint")
+	cmd.Flags().StringVar(&index, "index", "", "index to use for the query")
+}
+
+func query_add_opensearch_flags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&endpointOpensearch, "opensearch-endpoint", "", "opensearch endpoint")
+}
+
+func query_add_cloudwatch_flags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&cloudwatchLogGroup, "cloudwatch-log-group", "", "cloudwatch log group")
+	cmd.Flags().StringVar(&cloudwatchRegion, "cloudwatch-region", "", "cloudwatch region")
+	cmd.Flags().StringVar(&cloudwatchProfile, "cloudwatch-profile", "", "cloudwatch profile")
+	cmd.Flags().StringVar(&cloudwatchEndpoint, "cloudwatch-endpoint", "", "cloudwatch endpoint")
+	cmd.Flags().BoolVar(&cloudwatchUseInsights, "cloudwatch-use-insights", true, "cloudwatch use insights")
+	cmd.Flags().StringVar(&cloudwatchPollInterval, "cloudwatch-poll-interval", "", "cloudwatch poll interval")
+	cmd.Flags().StringVar(&cloudwatchMaxPollInterval, "cloudwatch-max-poll-interval", "", "cloudwatch max poll interval")
+	cmd.Flags().StringVar(&cloudwatchPollBackoff, "cloudwatch-poll-backoff", "", "cloudwatch poll backoff")
+}
+
+func query_add_k8s_flags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&k8sContainer, "k8s-container", "", "k8s container")
+	cmd.Flags().StringVar(&k8sNamespace, "k8s-namespace", "", "k8s namespace")
+	cmd.Flags().StringVar(&k8sPod, "k8s-pod", "", "k8s pod")
+	cmd.Flags().BoolVar(&k8sPrevious, "k8s-previous", false, "k8s previous")
+	cmd.Flags().BoolVar(&k8sTimestamp, "k8s-timestamp", false, "k8s timestamp")
+}
+
+func query_add_local_flags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&cmd, "cmd", "", "command to execute")
+}
+
+func query_add_ssh_flags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&sshOptions.Addr, "ssh-addr", "", "ssh address")
+	cmd.Flags().StringVar(&sshOptions.User, "ssh-user", "", "ssh user")
+	cmd.Flags().StringVar(&sshOptions.Password, "ssh-password", "", "ssh password")
+	cmd.Flags().StringVar(&sshOptions.Key, "ssh-key", "", "ssh key")
 }

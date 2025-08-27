@@ -42,9 +42,7 @@ contexts:
 
 func TestLoadConfig_ExplicitPath(t *testing.T) {
 	dir := t.TempDir()
-	tmpfile, err := os.Create(filepath.Join(dir, "test-config.json"))
-	assert.NoError(t, err)
-	defer os.Remove(tmpfile.Name())
+	tmpfile := filepath.Join(dir, "test-config.json")
 
 	configContent := `{
     "clients": {
@@ -62,15 +60,14 @@ func TestLoadConfig_ExplicitPath(t *testing.T) {
     }
   }`
 
-	_, err = tmpfile.WriteString(configContent)
+	err := os.WriteFile(tmpfile, []byte(configContent), 0644)
 	assert.NoError(t, err)
-	assert.NoError(t, tmpfile.Close())
 
 	cmd := &cobra.Command{}
 	addConfigFlag(cmd)
-	cmd.Flags().Set("config", tmpfile.Name())
+	cmd.Flags().Set("config", tmpfile)
 
-	cfg, err := loadConfig(cmd)
+	cfg, _, err := loadConfig(cmd)
 	assert.NoError(t, err)
 	assert.NotNil(t, cfg)
 	assert.Contains(t, cfg.Clients, "my-client")
@@ -78,9 +75,7 @@ func TestLoadConfig_ExplicitPath(t *testing.T) {
 
 func TestLoadConfig_YamlSupport(t *testing.T) {
 	dir := t.TempDir()
-	tmpfile, err := os.Create(filepath.Join(dir, "test-config.yaml"))
-	assert.NoError(t, err)
-	defer os.Remove(tmpfile.Name())
+	tmpfile := filepath.Join(dir, "test-config.yaml")
 
 	configContent := `
 clients:
@@ -92,15 +87,14 @@ contexts:
   my-context:
     client: my-client
 `
-	_, err = tmpfile.WriteString(configContent)
+	err := os.WriteFile(tmpfile, []byte(configContent), 0644)
 	assert.NoError(t, err)
-	assert.NoError(t, tmpfile.Close())
 
 	cmd := &cobra.Command{}
 	addConfigFlag(cmd)
-	cmd.Flags().Set("config", tmpfile.Name())
+	cmd.Flags().Set("config", tmpfile)
 
-	cfg, err := loadConfig(cmd)
+	cfg, _, err := loadConfig(cmd)
 	assert.NoError(t, err)
 	assert.NotNil(t, cfg)
 	assert.Contains(t, cfg.Clients, "my-client")
@@ -108,9 +102,7 @@ contexts:
 
 func TestLoadConfig_JsonSupport(t *testing.T) {
 	dir := t.TempDir()
-	tmpfile, err := os.Create(filepath.Join(dir, "test-config.json"))
-	assert.NoError(t, err)
-	defer os.Remove(tmpfile.Name())
+	tmpfile := filepath.Join(dir, "test-config.json")
 
 	configContent := `{
     "clients": {
@@ -128,15 +120,14 @@ func TestLoadConfig_JsonSupport(t *testing.T) {
     }
   }`
 
-	_, err = tmpfile.WriteString(configContent)
+	err := os.WriteFile(tmpfile, []byte(configContent), 0644)
 	assert.NoError(t, err)
-	assert.NoError(t, tmpfile.Close())
 
 	cmd := &cobra.Command{}
 	addConfigFlag(cmd)
-	cmd.Flags().Set("config", tmpfile.Name())
+	cmd.Flags().Set("config", tmpfile)
 
-	cfg, err := loadConfig(cmd)
+	cfg, _, err := loadConfig(cmd)
 	assert.NoError(t, err)
 	assert.NotNil(t, cfg)
 	assert.Contains(t, cfg.Clients, "my-client")
@@ -152,7 +143,7 @@ func TestLoadConfig_UnsupportedFormat(t *testing.T) {
 	addConfigFlag(cmd)
 	cmd.Flags().Set("config", tmpfile.Name())
 
-	_, err = loadConfig(cmd)
+	_, _, err = loadConfig(cmd)
 	assert.Error(t, err)
 }
 
@@ -161,42 +152,6 @@ func TestLoadConfig_NoFileFound(t *testing.T) {
 	addConfigFlag(cmd)
 	cmd.Flags().Set("config", "non-existent-file.json")
 
-	_, err := loadConfig(cmd)
+	_, _, err := loadConfig(cmd)
 	assert.Error(t, err)
-}
-
-func TestConfig_LowercaseKeys(t *testing.T) {
-	dir := t.TempDir()
-	tmpfile, err := os.Create(filepath.Join(dir, "test-config.json"))
-	assert.NoError(t, err)
-	defer os.Remove(tmpfile.Name())
-
-	configContent := `{
-    "clients": {
-      "my-client": {
-        "type": "ssh",
-        "options": {
-          "addr": "127.0.0.1:2222"
-        }
-      }
-    },
-    "contexts": {
-      "my-context": {
-        "client": "my-client"
-      }
-    }
-  }`
-
-	_, err = tmpfile.WriteString(configContent)
-	assert.NoError(t, err)
-	assert.NoError(t, tmpfile.Close())
-
-	cmd := &cobra.Command{}
-	addConfigFlag(cmd)
-	cmd.Flags().Set("config", tmpfile.Name())
-
-	cfg, err := loadConfig(cmd)
-	assert.NoError(t, err)
-	assert.NotNil(t, cfg)
-	assert.Contains(t, cfg.Clients, "my-client")
 }
