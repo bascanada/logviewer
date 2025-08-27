@@ -56,7 +56,7 @@ func stringArrayEnvVariable(strs []string, maps *ty.MS) error {
 	return nil
 }
 
-func resolveSearch(cmd *cobra.Command) (client.LogSearchResult, error) {
+func resolveSearch(cobraCmd *cobra.Command) (client.LogSearchResult, error) {
 	var err error
 
 	// resolve this from args
@@ -120,8 +120,8 @@ func resolveSearch(cmd *cobra.Command) (client.LogSearchResult, error) {
 		searchRequest.Options[k8s.OptionsTimestamp] = k8sTimestamp
 	}
 
-	if cmd.Use != "local" {
-		searchRequest.Options[local.OptionsCmd] = cmd.Use
+	if cmd != "" {
+		searchRequest.Options[local.OptionsCmd] = cmd
 	}
 
 	if template != "" {
@@ -134,7 +134,7 @@ func resolveSearch(cmd *cobra.Command) (client.LogSearchResult, error) {
 		if len(contextIds) != 1 {
 			return nil, errors.New("-i required only exactly one element when doing a query log or query tag")
 		}
-		config, _, err := loadConfig(cmd)
+		config, _, err := loadConfig(cobraCmd)
 		if err != nil {
 			return nil, err
 		}
@@ -162,7 +162,7 @@ func resolveSearch(cmd *cobra.Command) (client.LogSearchResult, error) {
 		system = "cloudwatch"
 	} else if k8sNamespace != "" {
 		system = "k8s"
-	} else if cmd.Use != "" {
+	} else if cmd != "" {
 		if sshOptions.Addr != "" {
 			system = "ssh"
 		} else {

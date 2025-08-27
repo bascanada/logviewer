@@ -28,11 +28,11 @@ var serverCmd = &cobra.Command{
 		// A basic logger is created here as an example. You should integrate this with your application's logging strategy.
 		logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
-		logger.Info("loading configuration", "path", configPath)
-		cfg, _, err := loadConfig(cmd)
+		cfg, path, err := loadConfig(cmd)
 		if err != nil {
 			return fmt.Errorf("failed to load configuration: %w", err)
 		}
+		logger.Info("loading configuration", "path", path)
 
 		s, err := server.NewServer(host, strconv.Itoa(port), cfg, logger, api.OpenAPISpec)
 		if err != nil {
