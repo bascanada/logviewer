@@ -20,6 +20,12 @@ type LogSearchResult interface {
 	GetSearch() *LogSearch
 	GetEntries(context context.Context) ([]LogEntry, chan []LogEntry, error)
 	GetFields(context context.Context) (ty.UniSet[string], chan ty.UniSet[string], error)
+	GetPaginationInfo() *PaginationInfo
+}
+
+type PaginationInfo struct {
+	HasMore       bool
+	NextPageToken string
 }
 
 // Client to start a log search

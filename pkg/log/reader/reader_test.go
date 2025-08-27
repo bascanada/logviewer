@@ -31,3 +31,8 @@ func TestTimestampExtraction(t *testing.T) {
 	assert.Equal(t, expectedTime, entry.Timestamp)
 
 }
+
+func TestReaderLogResult_GetPaginationInfo(t *testing.T) {
+	result := ReaderLogResult{}
+	assert.Nil(t, result.GetPaginationInfo())
+}

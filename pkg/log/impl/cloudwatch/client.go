@@ -85,6 +85,18 @@ func (c *CloudWatchLogClient) Get(ctx context.Context, search *client.LogSearch)
 
 	// Add sorting and limits
 	queryParts = append(queryParts, " | sort @timestamp desc")
+
+	if search.PageToken.Set && search.PageToken.Value != "" {
+		// The page token is the timestamp of the last event from the previous page.
+		// We need to fetch events *before* this timestamp.
+		// We also need to validate the token is a valid timestamp.
+		if _, err := time.Parse(time.RFC3339Nano, search.PageToken.Value); err != nil {
+			return nil, fmt.Errorf("invalid page token: expected a timestamp in RFC3339Nano format, got %s", search.PageToken.Value)
+		}
+		sanitizedToken := sanitizeQueryValue(search.PageToken.Value)
+		queryParts = append(queryParts, fmt.Sprintf(" | filter @timestamp < timestamp('%s')", sanitizedToken))
+	}
+
 	if search.Size.Set {
 		queryParts = append(queryParts, " | limit "+fmt.Sprintf("%d", search.Size.Value))
 	}
@@ -204,6 +216,7 @@ type staticCloudWatchResult struct { entries []client.LogEntry; search *client.L
 func (r *staticCloudWatchResult) GetSearch() *client.LogSearch { return r.search }
 func (r *staticCloudWatchResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) { return r.entries, nil, nil }
 func (r *staticCloudWatchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) { return ty.UniSet[string]{}, nil, nil }
+func (r *staticCloudWatchResult) GetPaginationInfo() *client.PaginationInfo { return nil }
 
 // GetLogClient creates a new CloudWatch Logs client.
 // It uses the 'region' and 'profile' from the options if provided.

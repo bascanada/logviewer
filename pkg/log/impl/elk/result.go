@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 	"time"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
@@ -33,6 +34,8 @@ type ElkSearchResult struct {
 	// store loaded entries
 
 	// store extracted fields
+	// parsed offset from the incoming page token (set by client.Get)
+	CurrentOffset int
 }
 
 func GetSearchResult(client client.LogClient, search *client.LogSearch, hits Hits) ElkSearchResult {
@@ -111,6 +114,28 @@ func (sr ElkSearchResult) parseResults() []client.LogEntry {
 	}
 
 	return entries
+}
+
+func (sr ElkSearchResult) GetPaginationInfo() *client.PaginationInfo {
+	if !sr.search.Size.Set {
+		return nil
+	}
+
+	// Use the offset parsed and stored by the client.Get implementation. If
+	// the result was constructed manually (e.g. in tests) the default is 0.
+	currentOffset := sr.CurrentOffset
+
+	numResults := len(sr.result.Hits)
+
+	// If we got fewer results than requested, this is the last page
+	if numResults < sr.search.Size.Value {
+		return nil
+	}
+
+	return &client.PaginationInfo{
+		HasMore:       true,
+		NextPageToken: strconv.Itoa(currentOffset + numResults),
+	}
 }
 
 func (sr ElkSearchResult) onChange(ctx context.Context) (chan []client.LogEntry, error) {
