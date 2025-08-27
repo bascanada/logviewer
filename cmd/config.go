@@ -35,8 +35,7 @@ func loadConfig(cmd *cobra.Command) (*config.ContextConfig, string, error) {
 	}
 
 	if loadedPath != "" {
-		fmt.Fprintf(os.Stderr, "using default config file: %s
-", loadedPath)
+		fmt.Fprintf(os.Stderr, "using default config file: %s\n", loadedPath)
 		configPath = loadedPath
 	}
 

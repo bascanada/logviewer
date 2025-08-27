@@ -94,7 +94,7 @@ var mcpCmd = &cobra.Command{
 	Short: "Starts a MCP server",
 	Long:  `Starts a MCP server, exposing the logviewer's core functionalities as a tool.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		cfg, err := loadConfig(cmd)
+		cfg, _, err := loadConfig(cmd)
 		if err != nil {
 			log.Fatalf("failed to load context config: %v", err)
 		}

@@ -34,10 +34,10 @@ func stringArrayEnvVariable(strs []string, maps *ty.MS) error {
 
 			// empty key (e.g. "=error") is treated as a free-text token
 			if key == "" {
-				if prev, ok := (*maps)(""); ok && prev != "" {
-					(*maps)("") = prev + " " + val
+				if prev, ok := (*maps)[""]; ok && prev != "" {
+					(*maps)[""] = prev + " " + val
 				} else {
-					(*maps)("") = val
+					(*maps)[""] = val
 				}
 			} else {
 				(*maps)[key] = val
@@ -47,10 +47,10 @@ func stringArrayEnvVariable(strs []string, maps *ty.MS) error {
 
 		// No '=' present: treat the whole string as a free-text token and
 		// append it to any existing free-text tokens.
-		if prev, ok := (*maps)(""); ok && prev != "" {
-			(*maps)("") = prev + " " + f
+		if prev, ok := (*maps)[""]; ok && prev != "" {
+			(*maps)[""] = prev + " " + f
 		} else {
-			(*maps)("") = f
+			(*maps)[""] = f
 		}
 	}
 	return nil
@@ -328,68 +328,9 @@ var queryCommand = &cobra.Command{
 	},
 }
 
-var (
-	contextIds []string
-	inherits   bool
-)
 
-var (
-	fields     []string
-	fieldsOps  []string
-	size       int
-	refresh    bool
-	duration   string
-	regex      string
-	from       string
-	to         string
-	last       string
-	template   string
-	index      string
-	headerField string
-	bodyField   string
 
-	// docker
-	dockerHost      string
-	dockerContainer string
 
-	// splunk
-	endpointSplunk string
-
-	// kibana
-	endpointKibana string
-
-	// opensearch
-	endpointOpensearch string
-
-	// cloudwatch
-	cloudwatchLogGroup        string
-	cloudwatchRegion          string
-	cloudwatchProfile         string
-	cloudwatchEndpoint        string
-	cloudwatchUseInsights     bool
-	cloudwatchPollInterval    string
-	cloudwatchMaxPollInterval string
-	cloudwatchPollBackoff     string
-
-	// k8s
-	k8sContainer string
-	k8sNamespace string
-	k8sPod       string
-	k8sPrevious  bool
-	k8sTimestamp bool
-
-	// local
-	cmd string
-
-	// ssh
-	sshOptions ssh.SshLogClientOptions
-)
-
-func onCommandStart(cmd *cobra.Command, args []string) {
-	if len(args) > 0 {
-		contextIds = args
-	}
-}
 
 func init() {
 	queryLogCommand.Flags().StringArrayVarP(&fields, "field", "f", []string{}, "field to display")
@@ -412,7 +353,7 @@ func init() {
 	query_add_ssh_flags(queryLogCommand)
 
 	queryFieldCommand.Flags().StringArrayVarP(&contextIds, "id", "i", []string{}, "id of the context to use")
-	queryFieldCommand.Flags().BoolVar(&inherits, "inherits", false, "inherits the context")
+	queryFieldCommand.Flags().StringArrayVar(&inherits, "inherits", []string{}, "inherits the context")
 	query_add_docker_flags(queryFieldCommand)
 	query_add_splunk_flags(queryFieldCommand)
 	query_add_kibana_flags(queryFieldCommand)
@@ -423,7 +364,7 @@ func init() {
 	query_add_ssh_flags(queryFieldCommand)
 
 	queryLogCommand.Flags().StringArrayVarP(&contextIds, "id", "i", []string{}, "id of the context to use")
-	queryLogCommand.Flags().BoolVar(&inherits, "inherits", false, "inherits the context")
+	queryLogCommand.Flags().StringArrayVar(&inherits, "inherits", []string{}, "inherits the context")
 
 	queryCommand.Flags().StringArrayVarP(&contextIds, "id", "i", []string{}, "id of the context to use")
 
@@ -471,13 +412,12 @@ func query_add_k8s_flags(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&k8sTimestamp, "k8s-timestamp", false, "k8s timestamp")
 }
 
-func query_add_local_flags(cmd *cobra.Command) {
-	cmd.Flags().StringVar(&cmd, "cmd", "", "command to execute")
+func query_add_local_flags(c *cobra.Command) {
+	c.Flags().StringVar(&cmd, "cmd", "", "command to execute")
 }
 
 func query_add_ssh_flags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&sshOptions.Addr, "ssh-addr", "", "ssh address")
 	cmd.Flags().StringVar(&sshOptions.User, "ssh-user", "", "ssh user")
-	cmd.Flags().StringVar(&sshOptions.Password, "ssh-password", "", "ssh password")
-	cmd.Flags().StringVar(&sshOptions.Key, "ssh-key", "", "ssh key")
+	cmd.Flags().StringVar(&sshOptions.PrivateKey, "ssh-key", "", "ssh key")
 }

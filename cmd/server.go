@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"strconv"
@@ -22,28 +23,26 @@ var serverCmd = &cobra.Command{
 	Short: "Start the logviewer server",
 	Long:  `Starts an HTTP server to query logs, providing a programmatic API.`,
 	PreRun: onCommandStart,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		// NOTE: This implementation assumes a logger is configured and available via `onCommandStart`.
 		// A basic logger is created here as an example. You should integrate this with your application's logging strategy.
 		logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 		logger.Info("loading configuration", "path", configPath)
-		cfg, err := loadConfig(cmd)
+		cfg, _, err := loadConfig(cmd)
 		if err != nil {
-			logger.Error("failed to load configuration", "err", err)
-			os.Exit(1)
+			return fmt.Errorf("failed to load configuration: %w", err)
 		}
 
 		s, err := server.NewServer(host, strconv.Itoa(port), cfg, logger, api.OpenAPISpec)
 		if err != nil {
-			logger.Error("failed to create server", "err", err)
-			os.Exit(1)
+			return fmt.Errorf("failed to create server: %w", err)
 		}
 
 		if err := s.Start(); err != nil {
-			logger.Error("server failed to start", "err", err)
-			os.Exit(1)
+			return fmt.Errorf("server failed to start: %w", err)
 		}
+		return nil
 	},
 }
 

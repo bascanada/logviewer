@@ -34,7 +34,7 @@ contexts:
 	cmd := &cobra.Command{}
 	addConfigFlag(cmd)
 
-	cfg, err := loadConfig(cmd)
+	cfg, _, err := loadConfig(cmd)
 	assert.NoError(t, err)
 	assert.NotNil(t, cfg)
 	assert.Contains(t, cfg.Clients, "my-client")
