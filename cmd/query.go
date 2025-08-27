@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
-	"github.com/bascanada/logviewer/pkg/log/client/config"
+	
 	"github.com/bascanada/logviewer/pkg/log/factory"
 	"github.com/bascanada/logviewer/pkg/log/impl/docker"
 	"github.com/bascanada/logviewer/pkg/log/impl/elk/kibana"
@@ -58,6 +58,8 @@ func stringArrayEnvVariable(strs []string, maps *ty.MS) error {
 }
 
 func resolveSearch() (client.LogSearchResult, error) {
+	var err error
+	
 
 	// resolve this from args
 	searchRequest := client.LogSearch{
@@ -130,11 +132,11 @@ func resolveSearch() (client.LogSearchResult, error) {
 
 	searchRequest.Refresh.Follow.S(refresh)
 
-	if contextPath != "" {
+	if len(contextIds) > 0 {
 		if len(contextIds) != 1 {
 			return nil, errors.New("-i required only exactly one element when doing a query log or query tag")
 		}
-		config, err := config.LoadContextConfig(contextPath)
+		config, err := loadConfig(nil)
 		if err != nil {
 			return nil, err
 		}
@@ -149,30 +151,10 @@ func resolveSearch() (client.LogSearchResult, error) {
 			return nil, err
 		}
 
-		sr, err := searchFactory.GetSearchResult(context.Background(), contextIds[0], inherits, searchRequest)
-
-		return sr, err
-	} else {
-		if len(inherits) > 0 {
-			return nil, errors.New("--inherits is only when using --config")
-		}
+		return searchFactory.GetSearchResult(context.Background(), contextIds[0], inherits, searchRequest)
 	}
 
-	if headerField != "" {
-		headerMap := ty.MS{}
-
-		if err := headerMap.LoadMS(headerField); err != nil {
-			return nil, err
-		}
-
-	}
-
-	if dockerContainer != "" {
-
-		searchRequest.Options["Container"] = dockerContainer
-	}
-
-	var err error
+	
 	var system string
 
 	if endpointOpensearch != "" {
@@ -276,9 +258,9 @@ func resolveSearch() (client.LogSearchResult, error) {
 		return nil, err
 	}
 
-		searchResult, err2 := logClient.Get(context.Background(), &searchRequest)
-	if err2 != nil {
-		return nil, err2
+		searchResult, err := logClient.Get(context.Background(), &searchRequest)
+	if err != nil {
+		return nil, err
 	}
 
 	return searchResult, nil
@@ -336,7 +318,7 @@ var queryCommand = &cobra.Command{
 	Short:  "Query a login system for logs and available fields",
 	PreRun: onCommandStart,
 	Run: func(cmd *cobra.Command, args []string) {
-		config, err := config.LoadContextConfig(contextPath)
+		config, err := loadConfig(cmd)
 		if err != nil {
 			panic(err)
 		}

@@ -73,7 +73,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os"
+	
 	"sort"
 	"strings"
 	"time"
@@ -94,10 +94,7 @@ var mcpCmd = &cobra.Command{
 	Short: "Starts a MCP server",
 	Long:  `Starts a MCP server, exposing the logviewer's core functionalities as a tool.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if contextPath == "" {
-			log.Fatal("config file is required")
-		}
-		cfg, err := config.LoadContextConfig(contextPath)
+		cfg, err := loadConfig(cmd)
 		if err != nil {
 			log.Fatalf("failed to load context config: %v", err)
 		}
@@ -368,7 +365,7 @@ Return a short plan then perform tool calls.
 
 func init() {
 	mcpCmd.Flags().IntVar(&mcpPort, "port", 8081, "Port for the MCP server")
-	mcpCmd.PersistentFlags().StringVarP(&contextPath, "config", "c", os.Getenv("CONTEXT_PATH"), "Path to the context file")
+	addConfigFlag(mcpCmd)
 	rootCmd.AddCommand(mcpCmd)
 }
 

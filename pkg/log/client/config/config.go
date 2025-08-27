@@ -1,25 +1,42 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/ty"
+	"gopkg.in/yaml.v3"
 )
 
 // ErrContextNotFound is a sentinel error allowing callers to detect missing contexts via errors.Is.
 var ErrContextNotFound = errors.New("context not found")
 
-func LoadContextConfig(configPath string) (*ContextConfig, error) {
+func New(configPath string) (*ContextConfig, error) {
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("config file not found at path: %s", configPath)
 	}
 
-	var config ContextConfig
-	if err := ty.ReadJsonFile(configPath, &config); err != nil {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
 		return nil, fmt.Errorf("error reading config file: %w", err)
+	}
+
+	var config ContextConfig
+	switch filepath.Ext(configPath) {
+	case ".json":
+		if err := json.Unmarshal(data, &config); err != nil {
+			return nil, fmt.Errorf("error unmarshalling json: %w", err)
+		}
+	case ".yaml", ".yml":
+		if err := yaml.Unmarshal(data, &config); err != nil {
+			return nil, fmt.Errorf("error unmarshalling yaml: %w", err)
+		}
+	default:
+		return nil, fmt.Errorf("unsupported config file format: %s", configPath)
 	}
 
 	if len(config.Contexts) == 0 {
@@ -34,14 +51,14 @@ func LoadContextConfig(configPath string) (*ContextConfig, error) {
 }
 
 type Client struct {
-	Type    string `json:"type"`
-	Options ty.MI  `json:"options"`
+	Type    string `json:"type" yaml:"type"`
+	Options ty.MI  `json:"options" yaml:"options"`
 }
 
 type SearchContext struct {
-	Client        string           `json:"client"`
-	SearchInherit []string         `json:"searchInherit"`
-	Search        client.LogSearch `json:"search"`
+	Client        string           `json:"client" yaml:"client"`
+	SearchInherit []string         `json:"searchInherit" yaml:"searchInherit"`
+	Search        client.LogSearch `json:"search" yaml:"search"`
 }
 
 type Clients map[string]Client

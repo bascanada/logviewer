@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"github.com/bascanada/logviewer/pkg/api"
-	"github.com/bascanada/logviewer/pkg/log/client/config"
+	
 	"github.com/bascanada/logviewer/pkg/server"
 	"github.com/spf13/cobra"
 )
@@ -14,7 +14,7 @@ import (
 var (
 	port       int
 	host       string
-	configPath string
+	
 )
 
 var serverCmd = &cobra.Command{
@@ -28,7 +28,7 @@ var serverCmd = &cobra.Command{
 		logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 		logger.Info("loading configuration", "path", configPath)
-		cfg, err := config.LoadContextConfig(configPath)
+		cfg, err := loadConfig(cmd)
 		if err != nil {
 			logger.Error("failed to load configuration", "err", err)
 			os.Exit(1)
@@ -50,6 +50,6 @@ var serverCmd = &cobra.Command{
 func init() {
 	serverCmd.Flags().IntVarP(&port, "port", "p", 8080, "Port to listen on")
 	serverCmd.Flags().StringVarP(&host, "host", "H", "0.0.0.0", "Host to bind to")
-	serverCmd.Flags().StringVarP(&configPath, "config", "c", "", "Path to the config.json file (required)")
+	addConfigFlag(serverCmd)
 	serverCmd.MarkFlagRequired("config")
 }
