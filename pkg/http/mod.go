@@ -64,9 +64,9 @@ func DebugEnabled() bool {
 func (c HttpClient) post(path string, headers ty.MS, buf *bytes.Buffer, responseData interface{}, auth Auth) error {
 	path = c.url + path
 
-	if Debug {
-		log.Printf("[POST]%s %s"+ty.LB, path, buf.String())
-	}
+	//if Debug {
+	log.Printf("[POST]%s %s"+ty.LB, path, buf.String())
+	//}
 
 	req, err := http.NewRequest("POST", path, buf)
 	if err != nil {
@@ -217,6 +217,18 @@ func (c HttpClient) Get(path string, queryParams ty.MS, body interface{}, respon
 }
 
 func GetClient(url string) HttpClient {
+	// Normalize URL: if scheme is missing, default to https. Also remove
+	// any trailing slash to avoid double slashes when appending paths.
+	if url != "" {
+		if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+			url = "https://" + url
+		}
+		// remove trailing slash for consistent concatenation
+		for strings.HasSuffix(url, "/") {
+			url = strings.TrimSuffix(url, "/")
+		}
+	}
+
 	spaceClient := getSpaceClient()
 
 	return HttpClient{

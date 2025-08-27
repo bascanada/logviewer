@@ -140,6 +140,10 @@ func (src SplunkRestClient) GetSearchResult(
 func GetSplunkRestClient(
 	target SplunkTarget,
 ) (SplunkRestClient, error) {
+	if target.Endpoint == "" {
+		return SplunkRestClient{}, fmt.Errorf("splunk endpoint is empty; provide a valid URL in the client configuration or via --splunk-endpoint")
+	}
+
 	return SplunkRestClient{
 		target: target,
 		client: http.GetClient(target.Endpoint),

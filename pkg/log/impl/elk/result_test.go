@@ -42,8 +42,9 @@ func TestElkSearchResult_GetPaginationInfo(t *testing.T) {
 			PageToken: ty.Opt[string]{Value: "10", Set: true},
 		}
 		result := ElkSearchResult{
-			search: search,
-			result: Hits{Hits: make([]Hit, 10)},
+			search:        search,
+			result:        Hits{Hits: make([]Hit, 10)},
+			CurrentOffset: 10,
 		}
 		paginationInfo := result.GetPaginationInfo()
 		assert.NotNil(t, paginationInfo)

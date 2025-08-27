@@ -141,6 +141,7 @@ func TestSplunkLogSearchResult_GetPaginationInfo(t *testing.T) {
 			results: []restapi.SearchResultsResponse{
 				{Results: make([]ty.MI, 10)},
 			},
+			CurrentOffset: 10,
 		}
 		paginationInfo := result.GetPaginationInfo()
 		assert.NotNil(t, paginationInfo)

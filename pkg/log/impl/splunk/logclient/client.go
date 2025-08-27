@@ -118,13 +118,18 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 	}
 
 	return SplunkLogSearchResult{
-		logClient: &s,
-		search:    search,
-		results:   []restapi.SearchResultsResponse{firstResult},
+		logClient:     &s,
+		search:        search,
+		results:       []restapi.SearchResultsResponse{firstResult},
+		CurrentOffset: offset,
 	}, nil
 }
 
 func GetClient(options SplunkLogSearchClientOptions) (client.LogClient, error) {
+
+	if options.Url == "" {
+		return nil, fmt.Errorf("splunk client Url is empty; set the Url option in config or pass --splunk-endpoint")
+	}
 
 	target := restapi.SplunkTarget{
 		Endpoint: options.Url,

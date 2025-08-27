@@ -34,6 +34,8 @@ type ElkSearchResult struct {
 	// store loaded entries
 
 	// store extracted fields
+	// parsed offset from the incoming page token (set by client.Get)
+	CurrentOffset int
 }
 
 func GetSearchResult(client client.LogClient, search *client.LogSearch, hits Hits) ElkSearchResult {
@@ -119,13 +121,9 @@ func (sr ElkSearchResult) GetPaginationInfo() *client.PaginationInfo {
 		return nil
 	}
 
-	currentOffset := 0
-	if sr.search.PageToken.Set {
-		// Tolerate errors, default to 0
-		if parsedOffset, err := strconv.Atoi(sr.search.PageToken.Value); err == nil {
-			currentOffset = parsedOffset
-		}
-	}
+	// Use the offset parsed and stored by the client.Get implementation. If
+	// the result was constructed manually (e.g. in tests) the default is 0.
+	currentOffset := sr.CurrentOffset
 
 	numResults := len(sr.result.Hits)
 

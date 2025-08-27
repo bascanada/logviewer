@@ -19,6 +19,8 @@ type SplunkLogSearchResult struct {
 	results []restapi.SearchResultsResponse
 
 	entriesChan chan ty.UniSet[string]
+	// parsed offset from the incoming page token (set by client.Get)
+	CurrentOffset int
 }
 
 func (s SplunkLogSearchResult) GetSearch() *client.LogSearch {
@@ -52,13 +54,10 @@ func (s SplunkLogSearchResult) GetPaginationInfo() *client.PaginationInfo {
 		return nil
 	}
 
-	currentOffset := 0
-	if s.search.PageToken.Set {
-		// Tolerate errors, default to 0
-		if parsedOffset, err := strconv.Atoi(s.search.PageToken.Value); err == nil {
-			currentOffset = parsedOffset
-		}
-	}
+	// Use the offset parsed and stored by the client.Get implementation. If the
+	// result was constructed manually (e.g. in tests) the default is 0 which
+	// preserves previous behavior.
+	currentOffset := s.CurrentOffset
 
 	numResults := len(s.results[0].Results)
 

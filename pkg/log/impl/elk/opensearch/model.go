@@ -1,6 +1,7 @@
 package opensearch
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
@@ -75,11 +76,12 @@ func GetSearchRequest(logSearch *client.LogSearch) (SearchRequest, error) {
 	}
 
 	from := 0
-	if logSearch.PageToken.Value != "" {
-		// Tolerate errors, default to 0
-		if parsedOffset, err := strconv.Atoi(logSearch.PageToken.Value); err == nil {
-			from = parsedOffset
+	if logSearch.PageToken.Set && logSearch.PageToken.Value != "" {
+		parsedOffset, err := strconv.Atoi(logSearch.PageToken.Value)
+		if err != nil {
+			return SearchRequest{}, fmt.Errorf("invalid page token: %w", err)
 		}
+		from = parsedOffset
 	}
 
 	return SearchRequest{
