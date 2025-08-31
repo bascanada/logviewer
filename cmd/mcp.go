@@ -73,7 +73,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -384,7 +383,6 @@ Return a short plan then perform tool calls.
 
 func init() {
 	mcpCmd.Flags().IntVar(&mcpPort, "port", 8081, "Port for the MCP server")
-	mcpCmd.PersistentFlags().StringVarP(&configPath, "config", "c", os.Getenv("CONTEXT_PATH"), "Path to the context file")
 	rootCmd.AddCommand(mcpCmd)
 }
 

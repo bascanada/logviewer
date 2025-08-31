@@ -324,7 +324,8 @@ var queryFieldCommand = &cobra.Command{
 		searchResult, err1 := resolveSearch()
 
 		if err1 != nil {
-			panic(err1)
+			fmt.Fprintln(os.Stderr, "error:", err1)
+			os.Exit(1)
 		}
 		searchResult.GetEntries(context.Background())
 		fields, _, _ := searchResult.GetFields(context.Background())
@@ -347,7 +348,8 @@ var queryLogCommand = &cobra.Command{
 		searchResult, err1 := resolveSearch()
 
 		if err1 != nil {
-			panic(err1)
+			fmt.Fprintln(os.Stderr, "error:", err1)
+			os.Exit(1)
 		}
 		outputter := printer.PrintPrinter{}
 		continous, err := outputter.Display(context.Background(), searchResult)
@@ -367,13 +369,15 @@ var queryCommand = &cobra.Command{
 	Short:  "Query a login system for logs and available fields",
 	PreRun: onCommandStart,
 	Run: func(cmd *cobra.Command, args []string) {
-		config, err := config.LoadContextConfig(configPath)
+		cfg, err := config.LoadContextConfig(configPath)
 		if err != nil {
-			panic(err)
+			fmt.Fprintln(os.Stderr, "failed to load config:", err)
+			os.Exit(1)
 		}
 
-		if err := views.RunQueryViewApp(*config, contextIds); err != nil {
-			panic(err)
+		if err := views.RunQueryViewApp(*cfg, contextIds); err != nil {
+			fmt.Fprintln(os.Stderr, "view error:", err)
+			os.Exit(1)
 		}
 	},
 }

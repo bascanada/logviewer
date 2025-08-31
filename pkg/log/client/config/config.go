@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,7 +59,7 @@ func LoadContextConfig(configPath string) (*ContextConfig, error) {
 	}
 
 	// Read file contents and support JSON or YAML formats
-	data, err := ioutil.ReadFile(configPath)
+	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("error reading config file: %w", err)
 	}
