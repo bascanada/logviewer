@@ -130,32 +130,63 @@ func resolveSearch() (client.LogSearchResult, error) {
 
 	searchRequest.Refresh.Follow.S(refresh)
 
-	if configPath != "" {
+	// Centralized config handling:
+	// - If an explicit configPath is given, use it (and require exactly one -i).
+	// - If no configPath but a context id (-i) was provided, attempt to load the default config
+	//   (e.g. $HOME/.logviewer/config.yaml) and require exactly one -i.
+	// - If no configPath and no -i, do not load any config and continue with non-config flow.
+	if configPath != "" || len(contextIds) > 0 {
+		// When using a config (explicit or default), -i must be exactly one element.
 		if len(contextIds) != 1 {
 			return nil, errors.New("-i required only exactly one element when doing a query log or query tag")
 		}
-		config, err := config.LoadContextConfig(configPath)
+
+		var cfg *config.ContextConfig
+		var err error
+		if configPath != "" {
+			cfg, err = config.LoadContextConfig(configPath)
+			if err != nil {
+				switch {
+				case errors.Is(err, config.ErrConfigParse):
+					return nil, fmt.Errorf("invalid configuration file format %s: %w", configPath, err)
+				case errors.Is(err, config.ErrNoClients):
+					return nil, fmt.Errorf("configuration missing 'clients' section %s: %w", configPath, err)
+				case errors.Is(err, config.ErrNoContexts):
+					return nil, fmt.Errorf("configuration missing 'contexts' section %s: %w", configPath, err)
+				default:
+					return nil, err
+				}
+			}
+		} else {
+			// Try default config location. If not found, surface a clear error because
+			// the user provided -i but no config was available.
+			cfg, err = config.LoadContextConfig("")
+			if err != nil {
+				switch {
+				case errors.Is(err, config.ErrConfigParse):
+					return nil, fmt.Errorf("invalid default configuration file format: %w", err)
+				case errors.Is(err, config.ErrNoClients):
+					return nil, fmt.Errorf("default configuration missing 'clients' section: %w", err)
+				case errors.Is(err, config.ErrNoContexts):
+					return nil, fmt.Errorf("default configuration missing 'contexts' section: %w", err)
+				default:
+					return nil, fmt.Errorf("failed to load context config: %w", err)
+				}
+			}
+		}
+
+		clientFactory, err := factory.GetLogClientFactory(cfg.Clients)
 		if err != nil {
 			return nil, err
 		}
 
-		clientFactory, err := factory.GetLogClientFactory(config.Clients)
-		if err != nil {
-			return nil, err
-		}
-
-		searchFactory, err := factory.GetLogSearchFactory(clientFactory, *config)
+		searchFactory, err := factory.GetLogSearchFactory(clientFactory, *cfg)
 		if err != nil {
 			return nil, err
 		}
 
 		sr, err := searchFactory.GetSearchResult(context.Background(), contextIds[0], inherits, searchRequest)
-
 		return sr, err
-	} else {
-		if len(inherits) > 0 {
-			return nil, errors.New("--inherits is only when using --config")
-		}
 	}
 
 	if headerField != "" {

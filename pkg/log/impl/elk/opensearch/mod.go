@@ -23,7 +23,7 @@ type openSearchClient struct {
 func (kc openSearchClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
 	var searchResult SearchResult
 
-	index := search.Options.GetString("Index")
+	index := search.Options.GetString("index")
 
 	if index == "" {
 		return nil, errors.New("index is not provided for opensearch log client")

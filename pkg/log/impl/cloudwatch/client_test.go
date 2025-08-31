@@ -28,7 +28,9 @@ func (m *mockCWClient) GetQueryResults(ctx context.Context, params *cloudwatchlo
 	return m.GetQueryResultsFunc(ctx, params, optFns...)
 }
 func (m *mockCWClient) FilterLogEvents(ctx context.Context, params *cloudwatchlogs.FilterLogEventsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.FilterLogEventsOutput, error) {
-	if m.FilterLogEventsFunc != nil { return m.FilterLogEventsFunc(ctx, params, optFns...) }
+	if m.FilterLogEventsFunc != nil {
+		return m.FilterLogEventsFunc(ctx, params, optFns...)
+	}
 	return &cloudwatchlogs.FilterLogEventsOutput{}, nil
 }
 

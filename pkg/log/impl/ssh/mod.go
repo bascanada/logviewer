@@ -16,8 +16,9 @@ import (
 )
 
 const (
-	OptionsCmd = "Cmd"
+	OptionsCmd = "cmd"
 )
+
 type SSHLogClientOptions struct {
 	User string `json:"user"`
 	Addr string `json:"addr"`
@@ -86,10 +87,10 @@ func (lc sshLogClient) Get(ctx context.Context, search *client.LogSearch) (clien
 func GetLogClient(options SSHLogClientOptions) (client.LogClient, error) {
 
 	if options.Addr == "" {
-		return nil, errors.New("ssh address (Addr) is empty")
+		return nil, errors.New("ssh address (addr) is empty")
 	}
 	if options.User == "" {
-		return nil, errors.New("ssh user (User) is empty")
+		return nil, errors.New("ssh user (user) is empty")
 	}
 
 	var privateKeyFile string

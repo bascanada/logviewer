@@ -24,9 +24,8 @@ func (lc DockerLogClient) Get(ctx context.Context, search *logclient.LogSearch) 
 		search.FieldExtraction.TimestampRegex.S(regexDockerTimestamp)
 	}
 
-
 	// Specify the container ID or name
-	containerID := search.Options.GetString("Container")
+	containerID := search.Options.GetString("container")
 
 	var since, until string
 
@@ -51,10 +50,10 @@ func (lc DockerLogClient) Get(ctx context.Context, search *logclient.LogSearch) 
 	follow := search.Refresh.Follow.Value
 
 	options := container.LogsOptions{
-		ShowStdout: search.Options.GetOr("ShowStdout", true).(bool),
-		ShowStderr: search.Options.GetOr("ShowStderr", true).(bool),
-		Timestamps: search.Options.GetOr("Timestamps", true).(bool),
-		Details:    search.Options.GetOr("Details", false).(bool),
+		ShowStdout: search.Options.GetOr("showStdout", true).(bool),
+		ShowStderr: search.Options.GetOr("showStderr", true).(bool),
+		Timestamps: search.Options.GetOr("timestamps", true).(bool),
+		Details:    search.Options.GetOr("details", false).(bool),
 		Since:      since,
 		Until:      until,
 		Follow:     follow,

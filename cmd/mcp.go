@@ -94,12 +94,18 @@ var mcpCmd = &cobra.Command{
 	Short: "Starts a MCP server",
 	Long:  `Starts a MCP server, exposing the logviewer's core functionalities as a tool.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if configPath == "" {
-			log.Fatal("config file is required")
-		}
 		cfg, err := config.LoadContextConfig(configPath)
 		if err != nil {
-			log.Fatalf("failed to load context config: %v", err)
+			switch {
+			case errors.Is(err, config.ErrConfigParse):
+				log.Fatalf("invalid configuration format: %v", err)
+			case errors.Is(err, config.ErrNoClients):
+				log.Fatalf("configuration missing 'clients' section: %v", err)
+			case errors.Is(err, config.ErrNoContexts):
+				log.Fatalf("configuration missing 'contexts' section: %v", err)
+			default:
+				log.Fatalf("failed to load context config: %v", err)
+			}
 		}
 
 		bundle, err := BuildMCPServer(cfg)
