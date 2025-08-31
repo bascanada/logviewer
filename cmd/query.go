@@ -11,6 +11,7 @@ import (
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/client/config"
 	"github.com/bascanada/logviewer/pkg/log/factory"
+	"github.com/bascanada/logviewer/pkg/log/impl/cloudwatch"
 	"github.com/bascanada/logviewer/pkg/log/impl/docker"
 	"github.com/bascanada/logviewer/pkg/log/impl/elk/kibana"
 	"github.com/bascanada/logviewer/pkg/log/impl/elk/opensearch"
@@ -18,7 +19,6 @@ import (
 	"github.com/bascanada/logviewer/pkg/log/impl/local"
 	splunk "github.com/bascanada/logviewer/pkg/log/impl/splunk/logclient"
 	"github.com/bascanada/logviewer/pkg/log/impl/ssh"
-	"github.com/bascanada/logviewer/pkg/log/impl/cloudwatch"
 	"github.com/bascanada/logviewer/pkg/log/printer"
 	"github.com/bascanada/logviewer/pkg/ty"
 	"github.com/bascanada/logviewer/pkg/views"
@@ -130,11 +130,11 @@ func resolveSearch() (client.LogSearchResult, error) {
 
 	searchRequest.Refresh.Follow.S(refresh)
 
-	if contextPath != "" {
+	if configPath != "" {
 		if len(contextIds) != 1 {
 			return nil, errors.New("-i required only exactly one element when doing a query log or query tag")
 		}
-		config, err := config.LoadContextConfig(contextPath)
+		config, err := config.LoadContextConfig(configPath)
 		if err != nil {
 			return nil, err
 		}
@@ -276,7 +276,7 @@ func resolveSearch() (client.LogSearchResult, error) {
 		return nil, err
 	}
 
-		searchResult, err2 := logClient.Get(context.Background(), &searchRequest)
+	searchResult, err2 := logClient.Get(context.Background(), &searchRequest)
 	if err2 != nil {
 		return nil, err2
 	}
@@ -336,7 +336,7 @@ var queryCommand = &cobra.Command{
 	Short:  "Query a login system for logs and available fields",
 	PreRun: onCommandStart,
 	Run: func(cmd *cobra.Command, args []string) {
-		config, err := config.LoadContextConfig(contextPath)
+		config, err := config.LoadContextConfig(configPath)
 		if err != nil {
 			panic(err)
 		}

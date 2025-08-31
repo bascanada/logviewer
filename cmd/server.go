@@ -12,15 +12,14 @@ import (
 )
 
 var (
-	port       int
-	host       string
-	configPath string
+	port int
+	host string
 )
 
 var serverCmd = &cobra.Command{
-	Use:   "server",
-	Short: "Start the logviewer server",
-	Long:  `Starts an HTTP server to query logs, providing a programmatic API.`,
+	Use:    "server",
+	Short:  "Start the logviewer server",
+	Long:   `Starts an HTTP server to query logs, providing a programmatic API.`,
 	PreRun: onCommandStart,
 	Run: func(cmd *cobra.Command, args []string) {
 		// NOTE: This implementation assumes a logger is configured and available via `onCommandStart`.
@@ -50,6 +49,5 @@ var serverCmd = &cobra.Command{
 func init() {
 	serverCmd.Flags().IntVarP(&port, "port", "p", 8080, "Port to listen on")
 	serverCmd.Flags().StringVarP(&host, "host", "H", "0.0.0.0", "Host to bind to")
-	serverCmd.Flags().StringVarP(&configPath, "config", "c", "", "Path to the config.json file (required)")
 	serverCmd.MarkFlagRequired("config")
 }

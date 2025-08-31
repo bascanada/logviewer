@@ -9,6 +9,7 @@ import (
 )
 
 var (
+	configPath string
 )
 
 var rootCmd = &cobra.Command{
@@ -34,6 +35,7 @@ func Execute() {
 
 func init() {
 
+	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "Config for preconfigure context for search")
 	rootCmd.PersistentFlags().StringVar(&logger.Path, "logging-path", "", "file to output logs of the application")
 	rootCmd.PersistentFlags().StringVar(&logger.Level, "logging-level", "", "logging level to output INFO WARN ERROR DEBUG TRACE")
 	rootCmd.PersistentFlags().BoolVar(&logger.Stdout, "logging-stdout", false, "output appplication log in the stdout")
