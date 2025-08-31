@@ -40,7 +40,6 @@ func TestSearchRequest(t *testing.T) {
 		assert.Equal(t, `index=nonprod "error occurred"`, requestBodyFields["search"])
 	})
 
-
 	t.Run("search with multiple equals conditions", func(t *testing.T) {
 		logSearch := &client.LogSearch{
 			Fields:          ty.MS{"application_name": "wq.services.pet", "trace_id": "1234"},

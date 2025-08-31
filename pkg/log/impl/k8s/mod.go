@@ -21,7 +21,6 @@ import (
 	// Import all auth plugins (incl. exec, OIDC, GCP, Azure, etc.) so kubeconfigs
 	// referencing them (e.g. auth-provider: oidc) are supported without extra code.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-
 )
 
 const (

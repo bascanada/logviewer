@@ -80,6 +80,33 @@ all your configurations. See the `config.json` for exemple configuration. The pa
 }
 ```
 
+## Config file discovery & formats
+
+logviewer supports JSON and YAML config files and looks for the configuration in the following order:
+
+1. Explicit path provided with the CLI flag `-c, --config /path/to/config` (highest precedence).
+2. The environment variable `LOGVIEWER_CONFIG` if set (e.g. `export LOGVIEWER_CONFIG=/path/to/config.yaml`).
+3. The default file at `$HOME/.logviewer/config.yaml` (only used when no `-c` and no env var are provided).
+
+Notes:
+- Supported formats: JSON (`.json`) and YAML (`.yaml`, `.yml`). The loader will detect by extension, and as a fallback try JSON then YAML when the extension is missing or unknown.
+- Command-specific behavior: the `query` command will only auto-load the default/env config when you also provide a context id with `-i/--id` (since the config is only meaningful when using contexts). The `server` and `mcp` commands attempt to load a configuration at startup (they will print actionable error messages if the config is invalid or missing required sections).
+- Error messages: when a config file is invalid or missing required sections the CLI/server/mcp will return clear, actionable errors (invalid format, missing `clients`, missing `contexts`, etc.).
+
+Examples:
+
+```bash
+# explicit path
+logviewer --config /etc/logviewer/config.yaml query -i my-context --last 10m
+
+# use env var
+export LOGVIEWER_CONFIG=$HOME/.logviewer/config.yaml
+logviewer query -i my-context --last 1h
+
+# default location (if present) is $HOME/.logviewer/config.yaml
+logviewer server
+```
+
 
 
 
@@ -132,7 +159,7 @@ There is main way to access the log
     "local-opensearch": {
       "type": "opensearch",
       "options": {
-        "Endpoint": "http://localhost:9200"
+        "endpoint": "http://localhost:9200"
       }
     }
   },
@@ -143,7 +170,7 @@ There is main way to access the log
       "search": {
         "fields": {},
         "options": {
-          "Index": "app-logs"
+          "index": "app-logs"
         }
       }
     }
@@ -164,7 +191,7 @@ There is main way to access the log
     "local-k3s": {
       "type": "k8s",
       "options": {
-        "KubeConfig": "integration/k8s/k3s.yaml"
+        "kubeConfig": "integration/k8s/k3s.yaml"
       }
     }
   },
@@ -201,7 +228,7 @@ logviewer query log --docker-host "unix:///Users/William.Quintal/.colima/lol/doc
     "local-docker": {
       "type": "docker",
       "options": {
-        "Host": "unix:///var/run/docker.sock"
+        "host": "unix:///var/run/docker.sock"
       }
     }
   },
@@ -212,11 +239,11 @@ logviewer query log --docker-host "unix:///Users/William.Quintal/.colima/lol/doc
       "search": {
         "fields": {},
         "options": {
-          "Container": "${DOCKER_CID}",
-          "ShowStdout": true,
-          "ShowStderr": true,
-          "Timestamps": true,
-          "Details": false
+          "container": "${DOCKER_CID}",
+          "showStdout": true,
+          "showStderr": true,
+          "timestamps": true,
+          "details": false
         }
       }
     }
@@ -266,9 +293,9 @@ httpmethod
     "local-ssh": {
       "type": "ssh",
       "options": {
-        "User": "testuser",
-        "Addr": "127.0.0.1:2222",
-        "PrivateKey": "integration/ssh/id_rsa"
+        "user": "testuser",
+        "addr": "127.0.0.1:2222",
+        "privateKey": "integration/ssh/id_rsa"
       }
     }
   },
@@ -279,7 +306,7 @@ httpmethod
       "search": {
         "fields": {},
         "options": {
-          "Cmd": "tail -n 200 app.log"
+          "cmd": "tail -n 200 app.log"
         }
       }
     }

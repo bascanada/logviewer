@@ -32,14 +32,14 @@ var (
 	cmd        string
 
 	// cloudwatch
-	cloudwatchLogGroup      string
-	cloudwatchRegion        string
-	cloudwatchProfile       string
-	cloudwatchEndpoint      string
-	cloudwatchUseInsights   bool
-	cloudwatchPollInterval  string
+	cloudwatchLogGroup        string
+	cloudwatchRegion          string
+	cloudwatchProfile         string
+	cloudwatchEndpoint        string
+	cloudwatchUseInsights     bool
+	cloudwatchPollInterval    string
 	cloudwatchMaxPollInterval string
-	cloudwatchPollBackoff   string
+	cloudwatchPollBackoff     string
 
 	// extra client fields
 	headerField string
@@ -63,12 +63,11 @@ var (
 
 	template string
 
-	contextPath string
-	contextIds  []string
+	contextIds []string
 
 	logger log.MyLoggerOptions
 
-	myLog bool
+	myLog     bool
 	debugHttp bool
 )
 
@@ -81,8 +80,6 @@ func onCommandStart(cmd *cobra.Command, args []string) {
 func init() {
 
 	// CONFIG
-
-	queryCommand.PersistentFlags().StringVarP(&contextPath, "config", "c", "", "Config for preconfigure context for search")
 	queryCommand.PersistentFlags().StringArrayVarP(&contextIds, "id", "i", []string{}, "Context id to execute")
 
 	// IMPL SPECIFIQUE
