@@ -7,7 +7,10 @@ import (
 
 // TestLevenshteinBasic validates distance properties including empty/identical strings.
 func TestLevenshteinBasic(t *testing.T) {
-	cases := []struct{ a, b string; want int }{
+	cases := []struct {
+		a, b string
+		want int
+	}{
 		{"", "", 0},
 		{"a", "", 1},
 		{"", "abc", 3},
@@ -52,6 +55,8 @@ func TestSuggestSimilarSkipsIdentical(t *testing.T) {
 	target := "alpha"
 	out := suggestSimilar(target, []string{"alpha", "alp", "alfa"}, 5)
 	for _, s := range out {
-		if s == target { t.Errorf("identical candidate %q should be skipped", target) }
+		if s == target {
+			t.Errorf("identical candidate %q should be skipped", target)
+		}
 	}
 }

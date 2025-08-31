@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	OptionsCmd = "Cmd"
+	OptionsCmd = "cmd"
 )
 
 type localLogClient struct{}

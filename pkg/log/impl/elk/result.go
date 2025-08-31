@@ -79,7 +79,7 @@ func (sr ElkSearchResult) parseResults() []client.LogEntry {
 
 	entries := make([]client.LogEntry, size)
 
-	log.Printf("receive %d for %s"+ty.LB, len(entries), sr.search.Options.GetString("Index"))
+	log.Printf("receive %d for %s"+ty.LB, len(entries), sr.search.Options.GetString("index"))
 
 	for i, h := range sr.result.Hits {
 		message, b := h.Source["message"].(string)

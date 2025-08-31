@@ -3,11 +3,11 @@
     "local-splunk": {
       "type": "splunk",
       "options": {
-        "Url": "https://localhost:8089/services",
-        "Headers": {
-          "Authorization": "Basic YWRtaW46cGFzc3dvcmQ="
+        "url": "https://localhost:8089/services",
+        "headers": {
+          "authorization": "Basic YWRtaW46cGFzc3dvcmQ="
         },
-        "SearchBody": {
+        "searchBody": {
           "output_mode": "json"
         }
       }
@@ -15,27 +15,27 @@
     "local-ssh": {
       "type": "ssh",
       "options": {
-        "User": "testuser",
-        "Addr": "127.0.0.1:2222",
-        "PrivateKey": "integration/ssh/id_rsa"
+        "user": "testuser",
+        "addr": "127.0.0.1:2222",
+        "privateKey": "integration/ssh/id_rsa"
       }
     },
     "local-opensearch": {
       "type": "opensearch",
       "options": {
-        "Endpoint": "http://localhost:9200"
+        "endpoint": "http://localhost:9200"
       }
     },
     "local-docker": {
       "type": "docker",
       "options": {
-        "Host": "unix:///var/run/docker.sock"
+        "host": "unix:///var/run/docker.sock"
       }
     },
     "local-k3s": {
       "type": "k8s",
       "options": {
-        "KubeConfig": "integration/k8s/k3s.yaml"
+        "kubeConfig": "integration/k8s/k3s.yaml"
       }
     },
     "local-cloudwatch": {
@@ -65,7 +65,7 @@
       "search": {
         "fields": {},
         "options": {
-          "Cmd": "tail -n 200 app.log"
+          "cmd": "tail -n 200 app.log"
         }
       }
     },
@@ -75,7 +75,7 @@
       "search": {
         "fields": {},
         "options": {
-          "Index": "app-logs"
+          "index": "app-logs"
         }
       }
     },
@@ -85,11 +85,11 @@
       "search": {
         "fields": {},
         "options": {
-          "Container": "${DOCKER_CID}",
-          "ShowStdout": true,
-          "ShowStderr": true,
-          "Timestamps": true,
-          "Details": false
+          "container": "${DOCKER_CID}",
+          "showStdout": true,
+          "showStderr": true,
+          "timestamps": true,
+          "details": false
         }
       }
     },

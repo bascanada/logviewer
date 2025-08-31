@@ -5,10 +5,10 @@ import (
 
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/client/config"
+	"github.com/bascanada/logviewer/pkg/log/impl/cloudwatch"
 	"github.com/bascanada/logviewer/pkg/log/impl/docker"
 	"github.com/bascanada/logviewer/pkg/log/impl/elk/kibana"
 	"github.com/bascanada/logviewer/pkg/log/impl/elk/opensearch"
-	"github.com/bascanada/logviewer/pkg/log/impl/cloudwatch"
 	"github.com/bascanada/logviewer/pkg/log/impl/k8s"
 	"github.com/bascanada/logviewer/pkg/log/impl/local"
 	splunk "github.com/bascanada/logviewer/pkg/log/impl/splunk/logclient"
@@ -43,7 +43,7 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 			options := v.Options
 			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
 				vv, err := opensearch.GetClient(opensearch.OpenSearchTarget{
-					Endpoint: options.GetString("Endpoint"),
+					Endpoint: options.GetString("endpoint"),
 				})
 				if err != nil {
 					return nil, err
@@ -54,7 +54,7 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 		case "kibana":
 			options := v.Options
 			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
-				vv, err := kibana.GetClient(kibana.KibanaTarget{Endpoint: options.GetString("Endpoint")})
+				vv, err := kibana.GetClient(kibana.KibanaTarget{Endpoint: options.GetString("endpoint")})
 				if err != nil {
 					return nil, err
 				}
@@ -73,7 +73,7 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 		case "k8s":
 			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
 				vv, err := k8s.GetLogClient(k8s.K8sLogClientOptions{
-					KubeConfig: v.Options.GetString("KubeConfig"),
+					KubeConfig: v.Options.GetString("kubeConfig"),
 				})
 				if err != nil {
 					return nil, err
@@ -83,9 +83,9 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 			})
 		case "ssh":
 			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
-				user := v.Options.GetString("User")
-				addr := v.Options.GetString("Addr")
-				pk := v.Options.GetString("PrivateKey")
+				user := v.Options.GetString("user")
+				addr := v.Options.GetString("addr")
+				pk := v.Options.GetString("privateKey")
 				vv, err := ssh.GetLogClient(ssh.SSHLogClientOptions{
 					User:       user,
 					Addr:       addr,
@@ -100,9 +100,9 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 		case "splunk":
 			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
 				vv, err := splunk.GetClient(splunk.SplunkLogSearchClientOptions{
-					Url:        v.Options.GetString("Url"),
-					Headers:    v.Options.GetMS("Headers").ResolveVariables(),
-					SearchBody: v.Options.GetMS("SearchBody").ResolveVariables(),
+					Url:        v.Options.GetString("url"),
+					Headers:    v.Options.GetMS("headers").ResolveVariables(),
+					SearchBody: v.Options.GetMS("searchBody").ResolveVariables(),
 				})
 				if err != nil {
 					return nil, err
@@ -112,7 +112,7 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 			})
 		case "docker":
 			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
-				host := v.Options.GetString("Host")
+				host := v.Options.GetString("host")
 				if host == "" {
 					// Fallback to default local docker socket
 					host = "unix:///var/run/docker.sock"

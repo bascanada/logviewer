@@ -40,7 +40,7 @@ func (kc kibanaClient) Get(ctx context.Context, search *client.LogSearch) (clien
 func getSearchRequest(search *client.LogSearch) (SearchRequest, error) {
 	request := SearchRequest{}
 
-	index := search.Options.GetString("Index")
+	index := search.Options.GetString("index")
 
 	if index == "" {
 		return request, errors.New("index is not provided for kibana log client")

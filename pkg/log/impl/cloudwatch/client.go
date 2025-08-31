@@ -149,10 +149,10 @@ func (c *CloudWatchLogClient) Get(ctx context.Context, search *client.LogSearch)
 	// 3. Execute either Insights query or FilterLogEvents fallback
 	if useInsights {
 		startQueryOutput, err := c.client.StartQuery(ctx, &cloudwatchlogs.StartQueryInput{
-			LogGroupName:  aws.String(logGroupName),
-			QueryString:   aws.String(queryString),
-			StartTime:     aws.Int64(startTime.UnixMilli()),
-			EndTime:       aws.Int64(endTime.UnixMilli()),
+			LogGroupName: aws.String(logGroupName),
+			QueryString:  aws.String(queryString),
+			StartTime:    aws.Int64(startTime.UnixMilli()),
+			EndTime:      aws.Int64(endTime.UnixMilli()),
 		})
 		if err != nil {
 			return nil, err
@@ -195,27 +195,43 @@ func (c *CloudWatchLogClient) Get(ctx context.Context, search *client.LogSearch)
 		}
 		for _, e := range out.Events {
 			msg := ""
-			if e.Message != nil { msg = *e.Message }
+			if e.Message != nil {
+				msg = *e.Message
+			}
 			ts := time.Unix(0, *e.Timestamp*int64(time.Millisecond))
 			entries = append(entries, client.LogEntry{Timestamp: ts, Message: msg, Fields: ty.MI{}})
-			if search.Size.Set && len(entries) >= search.Size.Value { break }
+			if search.Size.Set && len(entries) >= search.Size.Value {
+				break
+			}
 		}
-		if search.Size.Set && len(entries) >= search.Size.Value { break }
+		if search.Size.Set && len(entries) >= search.Size.Value {
+			break
+		}
 		if out.NextToken == nil || (nextToken != nil && out.NextToken != nil && *out.NextToken == *nextToken) { // no forward progress
 			break
 		}
 		nextToken = out.NextToken
-		if nextToken == nil || *nextToken == "" { break }
+		if nextToken == nil || *nextToken == "" {
+			break
+		}
 	}
 	// wrap entries in a simple LogSearchResult implementation
 	return &staticCloudWatchResult{entries: entries, search: search}, nil
 }
 
 // staticCloudWatchResult is returned when using FilterLogEvents fallback (no async polling)
-type staticCloudWatchResult struct { entries []client.LogEntry; search *client.LogSearch }
+type staticCloudWatchResult struct {
+	entries []client.LogEntry
+	search  *client.LogSearch
+}
+
 func (r *staticCloudWatchResult) GetSearch() *client.LogSearch { return r.search }
-func (r *staticCloudWatchResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) { return r.entries, nil, nil }
-func (r *staticCloudWatchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) { return ty.UniSet[string]{}, nil, nil }
+func (r *staticCloudWatchResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
+	return r.entries, nil, nil
+}
+func (r *staticCloudWatchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
+	return ty.UniSet[string]{}, nil, nil
+}
 func (r *staticCloudWatchResult) GetPaginationInfo() *client.PaginationInfo { return nil }
 
 // GetLogClient creates a new CloudWatch Logs client.

@@ -134,9 +134,9 @@ func (r *CloudWatchLogSearchResult) GetFields(ctx context.Context) (ty.UniSet[st
 
 // parseCloudWatchTimestamp attempts to parse a CloudWatch Logs Insights timestamp.
 // Common formats observed:
-//  * "2006-01-02 15:04:05.000" (default in Insights results)
-//  * time.RFC3339 or RFC3339Nano (defensive)
-//  * Milliseconds since epoch (string of digits)
+//   - "2006-01-02 15:04:05.000" (default in Insights results)
+//   - time.RFC3339 or RFC3339Nano (defensive)
+//   - Milliseconds since epoch (string of digits)
 func parseCloudWatchTimestamp(v string) (time.Time, bool) {
 	// Primary formats used in typical Insights outputs.
 	layouts := []string{"2006-01-02 15:04:05.000", time.RFC3339Nano, time.RFC3339}

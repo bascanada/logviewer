@@ -12,9 +12,9 @@ import (
 
 // Base request structure for query endpoints
 type QueryRequest struct {
-	ContextId string           `json:"contextId"`           // Required
-	Inherits  []string         `json:"inherits,omitempty"`  // Optional search inherits
-	Search    client.LogSearch `json:"search"`              // Search overrides
+	ContextId string           `json:"contextId"`          // Required
+	Inherits  []string         `json:"inherits,omitempty"` // Optional search inherits
+	Search    client.LogSearch `json:"search"`             // Search overrides
 }
 
 // Response for /query/logs endpoint
