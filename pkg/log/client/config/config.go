@@ -10,8 +10,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"strings"
-
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/ty"
 )
