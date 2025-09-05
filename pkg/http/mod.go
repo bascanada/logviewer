@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -97,7 +97,7 @@ func (c HttpClient) post(path string, headers ty.MS, buf *bytes.Buffer, response
 		defer res.Body.Close()
 	}
 
-	resBody, err := ioutil.ReadAll(res.Body)
+	resBody, err := io.ReadAll(res.Body)
 	if err != nil {
 		return err
 	}
@@ -194,7 +194,7 @@ func (c HttpClient) Get(path string, queryParams ty.MS, body interface{}, respon
 		defer res.Body.Close()
 	}
 
-	resBody, readErr := ioutil.ReadAll(res.Body)
+	resBody, readErr := io.ReadAll(res.Body)
 	if readErr != nil {
 		return readErr
 	}
@@ -223,10 +223,8 @@ func GetClient(url string) HttpClient {
 		if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
 			url = "https://" + url
 		}
-		// remove trailing slash for consistent concatenation
-		for strings.HasSuffix(url, "/") {
-			url = strings.TrimSuffix(url, "/")
-		}
+		// remove trailing slashes for consistent concatenation
+		url = strings.TrimRight(url, "/")
 	}
 
 	spaceClient := getSpaceClient()

@@ -1,6 +1,9 @@
 package ty
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type MI map[string]interface{}
 type MS map[string]string
