@@ -64,9 +64,9 @@ func DebugEnabled() bool {
 func (c HttpClient) post(path string, headers ty.MS, buf *bytes.Buffer, responseData interface{}, auth Auth) error {
 	path = c.url + path
 
-	//if Debug {
-	log.Printf("[POST]%s %s"+ty.LB, path, buf.String())
-	//}
+	if Debug {
+		log.Printf("[POST]%s %s"+ty.LB, path, buf.String())
+	}
 
 	req, err := http.NewRequest("POST", path, buf)
 	if err != nil {
