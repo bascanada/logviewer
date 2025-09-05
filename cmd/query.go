@@ -68,6 +68,9 @@ func resolveSearch() (client.LogSearchResult, error) {
 	if size > 0 {
 		searchRequest.Size.S(size)
 	}
+	if pageToken != "" {
+		searchRequest.PageToken.S(pageToken)
+	}
 	if duration != "" {
 		searchRequest.Refresh.Duration.S(duration)
 	}
@@ -351,6 +354,11 @@ var queryLogCommand = &cobra.Command{
 			fmt.Fprintln(os.Stderr, "error:", err1)
 			os.Exit(1)
 		}
+
+		if paginationInfo := searchResult.GetPaginationInfo(); paginationInfo != nil && paginationInfo.HasMore {
+			fmt.Fprintf(os.Stderr, "More results available. To fetch the next page, run the same command with --page-token \"%s\"\n", paginationInfo.NextPageToken)
+		}
+
 		outputter := printer.PrintPrinter{}
 		continous, err := outputter.Display(context.Background(), searchResult)
 		if err != nil {

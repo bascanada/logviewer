@@ -1,6 +1,9 @@
 package ty
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type MI map[string]interface{}
 type MS map[string]string
@@ -65,6 +68,27 @@ func (mi MI) GetBool(key string) bool {
 		return v.(bool)
 	}
 	return false
+}
+
+func (mi MI) GetBoolOk(key string) (bool, bool) {
+	v, ok := mi[key]
+	if !ok {
+		return false, false
+	}
+	switch val := v.(type) {
+	case bool:
+		return val, true
+	case string:
+		s := strings.ToLower(val)
+		if s == "true" || s == "yes" || s == "1" {
+			return true, true
+		}
+		if s == "false" || s == "no" || s == "0" {
+			return false, true
+		}
+	}
+	// Not a recognizable boolean value
+	return false, false
 }
 
 func MergeM[T interface{}](parent map[string]T, child map[string]T) map[string]T {

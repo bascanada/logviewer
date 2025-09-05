@@ -94,7 +94,47 @@ func LoadContextConfig(configPath string) (*ContextConfig, error) {
 		return nil, fmt.Errorf("%w: %s", ErrNoClients, configPath)
 	}
 
+	if err := validateClients(&config); err != nil {
+		return nil, err
+	}
+
 	return &config, nil
+}
+
+// validateClients performs lightweight validation of configured clients and
+// returns a combined error describing any missing required options. This is
+// intended to help users detect common config typos (e.g. using "option"
+// instead of "options") and missing fields such as Url/Endpoint/Addr.
+func validateClients(cc *ContextConfig) error {
+	problems := []string{}
+
+	for name, c := range cc.Clients {
+		switch strings.ToLower(c.Type) {
+		case "splunk":
+			if c.Options.GetString("url") == "" {
+				problems = append(problems, fmt.Sprintf("client '%s' (splunk) missing required option 'url'", name))
+			}
+		case "opensearch", "kibana":
+			if c.Options.GetString("endpoint") == "" {
+				problems = append(problems, fmt.Sprintf("client '%s' (%s) missing required option 'endpoint'", name, c.Type))
+			}
+		case "ssh":
+			if c.Options.GetString("addr") == "" {
+				problems = append(problems, fmt.Sprintf("client '%s' (ssh) missing required option 'addr'", name))
+			}
+		case "docker":
+			// docker Host can be empty (falls back to unix socket), so just warn
+			// but do not fail.
+			// no-op
+		default:
+			// Unknown types are not validated here.
+		}
+	}
+
+	if len(problems) > 0 {
+		return fmt.Errorf("invalid client configuration:\n  %s", strings.Join(problems, "\n  "))
+	}
+	return nil
 }
 
 type Client struct {

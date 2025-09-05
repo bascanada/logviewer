@@ -62,10 +62,8 @@ func (c *CloudWatchLogClient) Get(ctx context.Context, search *client.LogSearch)
 
 	// Optional flag to disable Insights query (e.g., LocalStack) and fall back to FilterLogEvents API
 	useInsights := true
-	if v, ok := search.Options.GetStringOk("useInsights"); ok {
-		if strings.EqualFold(v, "false") || v == "0" || strings.EqualFold(v, "no") {
-			useInsights = false
-		}
+	if v, ok := search.Options.GetBoolOk("useInsights"); ok {
+		useInsights = v
 	}
 
 	// 1. Build the query string
@@ -85,6 +83,18 @@ func (c *CloudWatchLogClient) Get(ctx context.Context, search *client.LogSearch)
 
 	// Add sorting and limits
 	queryParts = append(queryParts, " | sort @timestamp desc")
+
+	if search.PageToken.Set && search.PageToken.Value != "" {
+		// The page token is the timestamp of the last event from the previous page.
+		// We need to fetch events *before* this timestamp.
+		// We also need to validate the token is a valid timestamp.
+		if _, err := time.Parse(time.RFC3339Nano, search.PageToken.Value); err != nil {
+			return nil, fmt.Errorf("invalid page token: expected a timestamp in RFC3339Nano format, got %s", search.PageToken.Value)
+		}
+		sanitizedToken := sanitizeQueryValue(search.PageToken.Value)
+		queryParts = append(queryParts, fmt.Sprintf(" | filter @timestamp < timestamp('%s')", sanitizedToken))
+	}
+
 	if search.Size.Set {
 		queryParts = append(queryParts, " | limit "+fmt.Sprintf("%d", search.Size.Value))
 	}
@@ -220,6 +230,7 @@ func (r *staticCloudWatchResult) GetEntries(ctx context.Context) ([]client.LogEn
 func (r *staticCloudWatchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 	return ty.UniSet[string]{}, nil, nil
 }
+func (r *staticCloudWatchResult) GetPaginationInfo() *client.PaginationInfo { return nil }
 
 // GetLogClient creates a new CloudWatch Logs client.
 // It uses the 'region' and 'profile' from the options if provided.

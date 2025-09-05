@@ -2,6 +2,7 @@ package cloudwatch
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -183,4 +184,72 @@ func TestCloudWatch_GetFields(t *testing.T) {
 	assert.Contains(t, fields["level"], "INFO")
 	assert.Contains(t, fields["level"], "DEBUG")
 	assert.Contains(t, fields["service"], "auth")
+}
+
+func TestCloudWatchLogClient_Get_WithPageToken(t *testing.T) {
+	tokenTimestamp := time.Now().Format(time.RFC3339Nano)
+	mockClient := &mockCWClient{
+		StartQueryFunc: func(ctx context.Context, params *cloudwatchlogs.StartQueryInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.StartQueryOutput, error) {
+			assert.Equal(t, "test-group", *params.LogGroupName)
+			// Check that the query string contains the filter for the page token
+			expectedFilter := fmt.Sprintf(" | filter @timestamp < timestamp('%s')", tokenTimestamp)
+			assert.Contains(t, *params.QueryString, expectedFilter)
+			return &cloudwatchlogs.StartQueryOutput{
+				QueryId: aws.String("test-query-id-with-token"),
+			}, nil
+		},
+	}
+
+	logClient := &CloudWatchLogClient{client: mockClient}
+
+	search := &client.LogSearch{
+		PageToken: ty.Opt[string]{Set: true, Value: tokenTimestamp},
+		Options: ty.MI{
+			"logGroupName": "test-group",
+		},
+	}
+	search.Range.Last.S("1h")
+
+	result, err := logClient.Get(context.Background(), search)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+
+	cwResult, ok := result.(*CloudWatchLogSearchResult)
+	assert.True(t, ok)
+	assert.Equal(t, "test-query-id-with-token", cwResult.queryId)
+}
+
+func TestCloudWatchLogSearchResult_GetPaginationInfo(t *testing.T) {
+	t.Run("no size set", func(t *testing.T) {
+		search := &client.LogSearch{}
+		result := &CloudWatchLogSearchResult{search: search}
+		assert.Nil(t, result.GetPaginationInfo())
+	})
+
+	t.Run("results less than size", func(t *testing.T) {
+		search := &client.LogSearch{Size: ty.Opt[int]{Set: true, Value: 10}}
+		result := &CloudWatchLogSearchResult{
+			search:  search,
+			entries: make([]client.LogEntry, 5),
+		}
+		assert.Nil(t, result.GetPaginationInfo())
+	})
+
+	t.Run("results equal size", func(t *testing.T) {
+		search := &client.LogSearch{Size: ty.Opt[int]{Set: true, Value: 10}}
+		entries := make([]client.LogEntry, 10)
+		// The last entry determines the next token
+		lastTimestamp := time.Now().Add(-1 * time.Minute)
+		entries[9] = client.LogEntry{Timestamp: lastTimestamp}
+
+		result := &CloudWatchLogSearchResult{
+			search:  search,
+			entries: entries,
+		}
+
+		info := result.GetPaginationInfo()
+		assert.NotNil(t, info)
+		assert.True(t, info.HasMore)
+		assert.Equal(t, lastTimestamp.Format(time.RFC3339Nano), info.NextPageToken)
+	})
 }

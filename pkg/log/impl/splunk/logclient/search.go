@@ -3,6 +3,7 @@ package logclient
 import (
 	"context"
 	"log"
+	"strconv"
 	"time"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
@@ -18,6 +19,8 @@ type SplunkLogSearchResult struct {
 	results []restapi.SearchResultsResponse
 
 	entriesChan chan ty.UniSet[string]
+	// parsed offset from the incoming page token (set by client.Get)
+	CurrentOffset int
 }
 
 func (s SplunkLogSearchResult) GetSearch() *client.LogSearch {
@@ -44,6 +47,29 @@ func (s SplunkLogSearchResult) GetFields(ctx context.Context) (ty.UniSet[string]
 	}
 
 	return fields, nil, nil
+}
+
+func (s SplunkLogSearchResult) GetPaginationInfo() *client.PaginationInfo {
+	if !s.search.Size.Set {
+		return nil
+	}
+
+	// Use the offset parsed and stored by the client.Get implementation. If the
+	// result was constructed manually (e.g. in tests) the default is 0 which
+	// preserves previous behavior.
+	currentOffset := s.CurrentOffset
+
+	numResults := len(s.results[0].Results)
+
+	// If we got fewer results than requested, this is the last page
+	if numResults < s.search.Size.Value {
+		return nil
+	}
+
+	return &client.PaginationInfo{
+		HasMore:       true,
+		NextPageToken: strconv.Itoa(currentOffset + numResults),
+	}
 }
 
 func (s SplunkLogSearchResult) parseResults(searchResponse *restapi.SearchResultsResponse) []client.LogEntry {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/bascanada/logviewer/pkg/http"
 	"github.com/bascanada/logviewer/pkg/log/client"
@@ -39,7 +40,21 @@ func (kc openSearchClient) Get(ctx context.Context, search *client.LogSearch) (c
 		return nil, err
 	}
 
-	return elk.GetSearchResult(&kc, search, searchResult.Hits), nil
+	res := elk.GetSearchResult(&kc, search, searchResult.Hits)
+
+	// If a page token was provided we already validated and parsed it in
+	// GetSearchRequest; reuse that value for pagination calculation.
+	if search.PageToken.Set && search.PageToken.Value != "" {
+		if parsedOffset, err := strconv.Atoi(search.PageToken.Value); err == nil {
+			res.CurrentOffset = parsedOffset
+		} else {
+			// Shouldn't happen because GetSearchRequest already validated the token,
+			// but guard defensively.
+			return nil, fmt.Errorf("invalid page token: %w", err)
+		}
+	}
+
+	return res, nil
 }
 
 func GetClient(target OpenSearchTarget) (client.LogClient, error) {

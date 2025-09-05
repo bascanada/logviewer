@@ -40,6 +40,9 @@ type LogSearch struct {
 	// Options to configure the implementation with specific configuration for the search
 	Options ty.MI `json:"options,omitempty"`
 
+	// Token for fetching the next page of results
+	PageToken ty.Opt[string] `json:"pageToken,omitempty"`
+
 	// Extra fields for field extraction for system without fieldging of log entry
 	FieldExtraction FieldExtraction `json:"fieldExtraction,omitempty"`
 
@@ -69,6 +72,7 @@ func (lr *LogSearch) MergeInto(logSeach *LogSearch) error {
 	lr.Range.Gte.Merge(&logSeach.Range.Gte)
 	lr.Range.Lte.Merge(&logSeach.Range.Lte)
 	lr.Range.Last.Merge(&logSeach.Range.Last)
+	lr.PageToken.Merge(&logSeach.PageToken)
 
 	return nil
 }

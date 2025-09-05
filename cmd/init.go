@@ -69,6 +69,8 @@ var (
 
 	myLog     bool
 	debugHttp bool
+
+	pageToken string
 )
 
 func onCommandStart(cmd *cobra.Command, args []string) {
@@ -135,6 +137,7 @@ func init() {
 
 	// SIZE
 	queryCommand.PersistentFlags().IntVar(&size, "size", 0, "Get entry max size")
+	queryCommand.PersistentFlags().StringVar(&pageToken, "page-token", "", "Token for fetching the next page of results")
 
 	// FIELD validation
 	queryCommand.PersistentFlags().StringArrayVarP(&fields, "fields", "f", []string{}, "Field for selection field=value")

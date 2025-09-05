@@ -119,6 +119,10 @@ func (lr ReaderLogResult) GetFields(ctx context.Context) (ty.UniSet[string], cha
 	return lr.fields, nil, nil
 }
 
+func (lr ReaderLogResult) GetPaginationInfo() *client.PaginationInfo {
+	return nil
+}
+
 func GetLogResult(
 	search *client.LogSearch,
 	scanner *bufio.Scanner,
