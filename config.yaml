@@ -1,0 +1,96 @@
+clients:
+
+  local-splunk:
+    type: splunk
+    options:
+      url: https://localhost:8089/services
+      headers:
+        authorization: "Basic YWRtaW46cGFzc3dvcmQ="
+      searchBody:
+        output_mode: json
+
+  local-ssh:
+    type: ssh
+    options:
+      user: testuser
+      addr: 127.0.0.1:2222
+      privateKey: integration/ssh/id_rsa
+
+  local-opensearch:
+    type: opensearch
+    options:
+      endpoint: http://localhost:9200
+
+  local-docker:
+    type: docker
+    options:
+      host: unix:///var/run/docker.sock
+
+  local-k3s:
+    type: k8s
+    options:
+      kubeConfig: integration/k8s/k3s.yaml
+
+  local-cloudwatch:
+    type: cloudwatch
+    options:
+      region: us-east-1
+      endpoint: http://localhost:4566
+
+contexts:
+
+  splunk-app-logs:
+    client: local-splunk
+    searchInherit: []
+    search:
+      fields:
+        sourcetype: httpevent
+      options:
+        index: main
+
+  ssh-app-log:
+    client: local-ssh
+    searchInherit: []
+    search:
+      fields: {}
+      options:
+        cmd: tail -n 200 app.log
+
+  opensearch-app-logs:
+    client: local-opensearch
+    searchInherit: []
+    search:
+      fields: {}
+      options:
+        index: app-logs
+
+  docker-sample-container:
+    client: local-docker
+    searchInherit: []
+    search:
+      fields: {}
+      options:
+        container: ${DOCKER_CID}
+        showStdout: true
+        showStderr: true
+        timestamps: true
+        details: false
+
+  k3s-coredns:
+    client: local-k3s
+    searchInherit: []
+    search:
+      fields: {}
+      options:
+        namespace: kube-system
+        pod: ${COREDNS_POD}
+        timestamp: true
+
+  cloudwatch-app-logs:
+    client: local-cloudwatch
+    searchInherit: []
+    search:
+      fields: {}
+      options:
+        logGroupName: my-app-logs
+        useInsights: false

@@ -67,6 +67,14 @@ func (mi MI) GetBool(key string) bool {
 	return false
 }
 
+func (mi MI) GetBoolOk(key string) (bool, bool) {
+	v, ok := mi[key]
+	if ok {
+		return v.(bool), ok
+	}
+	return false, false
+}
+
 func MergeM[T interface{}](parent map[string]T, child map[string]T) map[string]T {
 	for k, v := range child {
 		parent[k] = v

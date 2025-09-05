@@ -111,16 +111,16 @@ func validateClients(cc *ContextConfig) error {
 	for name, c := range cc.Clients {
 		switch strings.ToLower(c.Type) {
 		case "splunk":
-			if c.Options.GetString("Url") == "" {
-				problems = append(problems, fmt.Sprintf("client '%s' (splunk) missing required option 'Url'", name))
+			if c.Options.GetString("url") == "" {
+				problems = append(problems, fmt.Sprintf("client '%s' (splunk) missing required option 'url'", name))
 			}
 		case "opensearch", "kibana":
-			if c.Options.GetString("Endpoint") == "" {
-				problems = append(problems, fmt.Sprintf("client '%s' (%s) missing required option 'Endpoint'", name, c.Type))
+			if c.Options.GetString("endpoint") == "" {
+				problems = append(problems, fmt.Sprintf("client '%s' (%s) missing required option 'endpoint'", name, c.Type))
 			}
 		case "ssh":
-			if c.Options.GetString("Addr") == "" {
-				problems = append(problems, fmt.Sprintf("client '%s' (ssh) missing required option 'Addr'", name))
+			if c.Options.GetString("addr") == "" {
+				problems = append(problems, fmt.Sprintf("client '%s' (ssh) missing required option 'addr'", name))
 			}
 		case "docker":
 			// docker Host can be empty (falls back to unix socket), so just warn

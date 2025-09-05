@@ -62,10 +62,8 @@ func (c *CloudWatchLogClient) Get(ctx context.Context, search *client.LogSearch)
 
 	// Optional flag to disable Insights query (e.g., LocalStack) and fall back to FilterLogEvents API
 	useInsights := true
-	if v, ok := search.Options.GetStringOk("useInsights"); ok {
-		if strings.EqualFold(v, "false") || v == "0" || strings.EqualFold(v, "no") {
-			useInsights = false
-		}
+	if v, ok := search.Options.GetBoolOk("useInsights"); ok {
+		useInsights = v
 	}
 
 	// 1. Build the query string
