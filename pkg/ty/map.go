@@ -69,9 +69,22 @@ func (mi MI) GetBool(key string) bool {
 
 func (mi MI) GetBoolOk(key string) (bool, bool) {
 	v, ok := mi[key]
-	if ok {
-		return v.(bool), ok
+	if !ok {
+		return false, false
 	}
+	switch val := v.(type) {
+	case bool:
+		return val, true
+	case string:
+		s := strings.ToLower(val)
+		if s == "true" || s == "yes" || s == "1" {
+			return true, true
+		}
+		if s == "false" || s == "no" || s == "0" {
+			return false, true
+		}
+	}
+	// Not a recognizable boolean value
 	return false, false
 }
 
