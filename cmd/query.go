@@ -74,8 +74,11 @@ func resolveSearch() (client.LogSearchResult, error) {
 	if duration != "" {
 		searchRequest.Refresh.Duration.S(duration)
 	}
-	if regex != "" {
-		searchRequest.FieldExtraction.Regex.S(regex)
+	if groupRegex != "" {
+		searchRequest.FieldExtraction.GroupRegex.S(groupRegex)
+	}
+	if kvRegex != "" {
+		searchRequest.FieldExtraction.KvRegex.S(kvRegex)
 	}
 
 	if to != "" {

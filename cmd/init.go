@@ -51,10 +51,11 @@ var (
 	last string
 
 	// fields
-	fields    []string
-	fieldsOps []string
-	inherits  []string
-	regex     string
+	fields     []string
+	fieldsOps  []string
+	inherits   []string
+	groupRegex string
+	kvRegex    string
 
 	size int
 
@@ -145,8 +146,11 @@ func init() {
 		&fieldsOps, "fields-condition", []string{}, "Field Ops for selection field=value (match, exists, wildcard, regex)",
 	)
 	queryCommand.PersistentFlags().StringVar(
-		&regex, "fields-regex", "",
-		"Regex to extract field from log text, using named group \".*(?P<Level>INFO|WARN|ERROR).*\"")
+		&groupRegex, "fields-group-regex", "",
+		"Regex to extract field from log text using named group, e.g. '.*(?P<Level>INFO|WARN|ERROR).*'")
+	queryCommand.PersistentFlags().StringVar(
+		&kvRegex, "fields-kv-regex", "",
+		"Regex to extract key-value fields from log text, e.g. '(\\w+)=([^\\s]+)'")
 
 	// LIVE DATA OPTIONS
 	queryLogCommand.PersistentFlags().StringVar(
@@ -157,7 +161,7 @@ func init() {
 	queryLogCommand.PersistentFlags().StringVar(
 		&template,
 		"format",
-		"[{{.Timestamp.Format \"15:04:05\" }}][{{.Level}}] {{.Message}}", "Format for the log entry")
+		"", "Format for the log entry")
 
 	queryCommand.PersistentFlags().StringArrayVar(&inherits, "inherits", []string{}, "When using config , list of inherits to execute on top of the one configure for the search")
 

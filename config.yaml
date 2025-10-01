@@ -1,4 +1,6 @@
 clients:
+  local:
+    type: local
 
   local-splunk:
     type: splunk
@@ -38,7 +40,21 @@ clients:
       endpoint: http://localhost:4566
 
 contexts:
-
+  local-test:
+    client: local
+    searchInherit: []
+    search:
+      fields: {}
+      options:
+        cmd: cat debug/7eed8264-d3f3-4160-b9fa-2b68620b56df.log
+      fieldExtraction:
+        groupRegex: '.*(?P<Level>INFO|WARN|ERROR|DEBUG).*'
+        kvRegex: '(\w+)=(".*?"|[^\s,{}]+)'
+      printerOptions:
+        messageRegex: '^\s*[^{]*\{[^}]*\}\s*(.*)'
+        template: |
+          [{{.Timestamp.Format "15:04:05" }}] [{{.Level}}]
+          {{.Message}}
   splunk-app-logs:
     client: local-splunk
     searchInherit: []

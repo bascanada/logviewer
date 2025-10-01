@@ -23,8 +23,9 @@ type ReaderLogResult struct {
 	entries []client.LogEntry
 	fields  ty.UniSet[string]
 
-	regexExtraction *regexp.Regexp
-	regexDate       *regexp.Regexp
+	kvRegexExtraction         *regexp.Regexp
+	namedGroupRegexExtraction *regexp.Regexp
+	regexDate                 *regexp.Regexp
 }
 
 func (lr ReaderLogResult) GetSearch() *client.LogSearch {
@@ -45,14 +46,24 @@ func (lr *ReaderLogResult) parseLine(line string) bool {
 		}), " ")
 	}
 
-	if lr.regexExtraction != nil {
-		match := lr.regexExtraction.FindStringSubmatch(line)
+	if lr.namedGroupRegexExtraction != nil {
+		match := lr.namedGroupRegexExtraction.FindStringSubmatch(line)
 		if len(match) > 0 {
-			for i, name := range lr.regexExtraction.SubexpNames() {
+			for i, name := range lr.namedGroupRegexExtraction.SubexpNames() {
 				if i != 0 && name != "" {
 					lr.fields.Add(name, match[i])
 					entry.Fields[name] = match[i]
 				}
+			}
+		}
+	}
+
+	if lr.kvRegexExtraction != nil {
+		matches := lr.kvRegexExtraction.FindAllStringSubmatch(line, -1)
+		for _, match := range matches {
+			if len(match) >= 3 {
+				lr.fields.Add(match[1], match[2])
+				entry.Fields[match[1]] = match[2]
 			}
 		}
 	}
@@ -129,22 +140,29 @@ func GetLogResult(
 	closer io.Closer,
 ) ReaderLogResult {
 
-	var regexExtraction *regexp.Regexp
-	if search.FieldExtraction.Regex.Value != "" {
-		regexExtraction = regexp.MustCompile(search.FieldExtraction.Regex.Value)
+	var namedGroupRegexExtraction *regexp.Regexp
+	if search.FieldExtraction.GroupRegex.Value != "" {
+		namedGroupRegexExtraction = regexp.MustCompile(search.FieldExtraction.GroupRegex.Value)
 	}
+
+	var kvRegexExtraction *regexp.Regexp
+	if search.FieldExtraction.KvRegex.Value != "" {
+		kvRegexExtraction = regexp.MustCompile(search.FieldExtraction.KvRegex.Value)
+	}
+
 	var regexDateExtraction *regexp.Regexp
 	if search.FieldExtraction.TimestampRegex.Value != "" {
 		regexDateExtraction = regexp.MustCompile(search.FieldExtraction.TimestampRegex.Value)
 	}
 
 	result := ReaderLogResult{
-		search:          search,
-		scanner:         scanner,
-		closer:          closer,
-		regexExtraction: regexExtraction,
-		regexDate:       regexDateExtraction,
-		fields:          make(ty.UniSet[string]),
+		search:                    search,
+		scanner:                   scanner,
+		closer:                    closer,
+		namedGroupRegexExtraction: namedGroupRegexExtraction,
+		kvRegexExtraction:         kvRegexExtraction,
+		regexDate:                 regexDateExtraction,
+		fields:                    make(ty.UniSet[string]),
 	}
 
 	return result

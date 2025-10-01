@@ -3,6 +3,7 @@ package printer
 import (
 	"context"
 	"io"
+	"regexp"
 	"text/template"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
@@ -14,15 +15,27 @@ type LogPrinter interface {
 
 func WrapIoWritter(ctx context.Context, result client.LogSearchResult, writer io.Writer, update func()) (bool, error) {
 
-	templateConfig := result.GetSearch().PrinterOptions.Template
+	printerOptions := result.GetSearch().PrinterOptions
+
+	templateConfig := printerOptions.Template
 
 	if templateConfig.Value == "" {
-		templateConfig.S("[{{.Timestamp}}] {{.Message}}")
+		templateConfig.S("[{{.Timestamp.Format \"15:04:05\" }}] {{.Level}} {{.Message}}")
 	}
 
-	template, err3 := template.New("print_printer").Funcs(GetTemplateFunctionsMap()).Parse(templateConfig.Value + "\n")
+	tmpl, err3 := template.New("print_printer").Funcs(GetTemplateFunctionsMap()).Parse(templateConfig.Value + "\n")
 	if err3 != nil {
 		return false, err3
+	}
+
+	// Prepare messageRegex if present
+	var messageRegex *regexp.Regexp
+	if printerOptions.MessageRegex.Set && printerOptions.MessageRegex.Value != "" {
+		var err error
+		messageRegex, err = regexp.Compile(printerOptions.MessageRegex.Value)
+		if err != nil {
+			return false, err
+		}
 	}
 
 	entries, newEntriesChannel, err := result.GetEntries(ctx)
@@ -30,8 +43,14 @@ func WrapIoWritter(ctx context.Context, result client.LogSearchResult, writer io
 		return false, err
 	}
 
-	for _, entry := range entries {
-		template.Execute(writer, entry)
+	for i, entry := range entries {
+		if messageRegex != nil {
+			matches := messageRegex.FindStringSubmatch(entry.Message)
+			if len(matches) > 1 {
+				entries[i].Message = matches[1]
+			}
+		}
+		tmpl.Execute(writer, entries[i])
 	}
 
 	update()
@@ -41,33 +60,23 @@ func WrapIoWritter(ctx context.Context, result client.LogSearchResult, writer io
 	}
 
 	if newEntriesChannel != nil {
-
-		/*
-			c := make(chan os.Signal, 1)
-			signal.Notify(c, os.Interrupt)
-			go func() {
-				for range c {
-					cancel()
-					return
-				}
-			}()
-		*/
-
 		go func() {
-
 			update()
-
 			for entries := range newEntriesChannel {
 				if len(entries) > 0 {
-					for _, entry := range entries {
-						template.Execute(writer, entry)
+					for i, entry := range entries {
+						if messageRegex != nil {
+							matches := messageRegex.FindStringSubmatch(entry.Message)
+							if len(matches) > 1 {
+								entries[i].Message = matches[1]
+							}
+						}
+						tmpl.Execute(writer, entries[i])
 					}
 					update()
 				}
 			}
-
 		}()
-
 	}
 
 	return newEntriesChannel != nil, nil
