@@ -1,9 +1,9 @@
 package ty
 
 import (
+	"encoding/json"
 	"gopkg.in/yaml.v3"
 )
-import "encoding/json"
 
 type Opt[T interface{}] struct {
 	Value T // inner value
