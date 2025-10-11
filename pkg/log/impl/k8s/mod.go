@@ -93,7 +93,7 @@ func (lc k8sLogClient) Get(ctx context.Context, search *client.LogSearch) (clien
 
 	scanner := bufio.NewScanner(podLogs)
 
-	return reader.GetLogResult(search, scanner, podLogs), nil
+	return reader.GetLogResult(search, scanner, podLogs)
 }
 
 func ensureKubeconfig(kubeconfig string) error {
