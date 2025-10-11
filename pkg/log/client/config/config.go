@@ -143,9 +143,9 @@ type Client struct {
 }
 
 type SearchContext struct {
-	Client        string           `json:"client"`
-	SearchInherit []string         `json:"searchInherit"`
-	Search        client.LogSearch `json:"search"`
+	Client        string           `json:"client" yaml:"client"`
+	SearchInherit []string         `json:"searchInherit" yaml:"searchInherit"`
+	Search        client.LogSearch `json:"search" yaml:"search"`
 }
 
 type Clients map[string]Client
@@ -155,9 +155,9 @@ type Searches map[string]client.LogSearch
 type Contexts map[string]SearchContext
 
 type ContextConfig struct {
-	Clients
-	Searches
-	Contexts
+	Clients  `json:"clients" yaml:"clients"`
+	Searches `json:"searches" yaml:"searches"`
+	Contexts `json:"contexts" yaml:"contexts"`
 }
 
 func (cc ContextConfig) GetSearchContext(contextId string, inherits []string, logSearch client.LogSearch) (SearchContext, error) {
