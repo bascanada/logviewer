@@ -140,20 +140,20 @@ func GetLogResult(
 	closer io.Closer,
 ) ReaderLogResult {
 
-	var namedGroupRegexExtraction *regexp.Regexp
-	if search.FieldExtraction.GroupRegex.Value != "" {
-		namedGroupRegexExtraction = regexp.MustCompile(search.FieldExtraction.GroupRegex.Value)
-	}
+var namedGroupRegexExtraction *regexp.Regexp
+if search.FieldExtraction.GroupRegex.Value != "" {
+	namedGroupRegexExtraction, _ = regexp.Compile(search.FieldExtraction.GroupRegex.Value)
+}
 
-	var kvRegexExtraction *regexp.Regexp
-	if search.FieldExtraction.KvRegex.Value != "" {
-		kvRegexExtraction = regexp.MustCompile(search.FieldExtraction.KvRegex.Value)
-	}
+var kvRegexExtraction *regexp.Regexp
+if search.FieldExtraction.KvRegex.Value != "" {
+	kvRegexExtraction, _ = regexp.Compile(search.FieldExtraction.KvRegex.Value)
+}
 
-	var regexDateExtraction *regexp.Regexp
-	if search.FieldExtraction.TimestampRegex.Value != "" {
-		regexDateExtraction = regexp.MustCompile(search.FieldExtraction.TimestampRegex.Value)
-	}
+var regexDateExtraction *regexp.Regexp
+if search.FieldExtraction.TimestampRegex.Value != "" {
+	regexDateExtraction, _ = regexp.Compile(search.FieldExtraction.TimestampRegex.Value)
+}
 
 	result := ReaderLogResult{
 		search:                    search,
