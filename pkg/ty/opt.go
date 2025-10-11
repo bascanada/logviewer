@@ -61,9 +61,9 @@ func (i *Opt[T]) UnmarshalJSON(data []byte) error {
 // UnmarshalYAML implements yaml.Unmarshaler for Opt[T]
 func (i *Opt[T]) UnmarshalYAML(value *yaml.Node) error {
 	i.Set = true
-	if value.Kind == yaml.ScalarNode && value.Value == "null" {
-i.Valid = false
-		 return nil
+if value.Kind == yaml.ScalarNode && value.Value == "null" {
+		i.Valid = false
+		return nil
 	}
 	var v T
 	if err := value.Decode(&v); err != nil {
