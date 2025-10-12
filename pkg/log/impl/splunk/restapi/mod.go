@@ -30,6 +30,7 @@ type SearchResultsResponse struct {
 
 type SplunkTarget struct {
 	Endpoint string `json:"endpoint"`
+	Headers  ty.MS
 	Auth     http.Auth
 }
 
@@ -102,7 +103,7 @@ func (src SplunkRestClient) GetSearchStatus(
 		"output_mode": "json",
 	}
 
-	err := src.client.Get(searchPath, queryParams, nil, &response, src.target.Auth)
+	err := src.client.Get(searchPath, queryParams, src.target.Headers, nil, &response, src.target.Auth)
 	if err == nil {
 		if len(response.Entry) > 0 {
 			if http.DebugEnabled() {
@@ -132,7 +133,7 @@ func (src SplunkRestClient) GetSearchResult(
 		"count":       strconv.Itoa(count),
 	}
 
-	err := src.client.Get(searchPath, queryParams, nil, &response, src.target.Auth)
+	err := src.client.Get(searchPath, queryParams, src.target.Headers, nil, &response, src.target.Auth)
 	return response, err
 
 }

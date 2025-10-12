@@ -50,6 +50,12 @@ func (mi MI) GetMS(key string) MS {
 			return vv
 		case map[string]string:
 			return MS(vv)
+		case MI:
+			res := MS{}
+			for k, val := range vv {
+				res[k] = fmt.Sprint(val)
+			}
+			return res
 		case map[string]interface{}:
 			res := MS{}
 			for k, val := range vv {
@@ -57,6 +63,7 @@ func (mi MI) GetMS(key string) MS {
 			}
 			return res
 		default:
+			println(vv)
 			return MS{}
 		}
 	}

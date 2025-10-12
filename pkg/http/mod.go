@@ -77,15 +77,15 @@ func (c HttpClient) post(path string, headers ty.MS, buf *bytes.Buffer, response
 		req.Header.Set(k, v)
 	}
 
-	// Log headers but redact sensitive values (Authorization, Cookie, tokens)
-	if Debug {
-		log.Printf("[POST-HEADERS] %s\n", maskHeaderMap(req.Header))
-	}
-
 	if auth != nil {
 		if err = auth.Login(req); err != nil {
 			log.Printf("%s", err.Error())
 		}
+	}
+
+	// Log headers but redact sensitive values (Authorization, Cookie, tokens)
+	if Debug {
+		log.Printf("[POST-HEADERS] %s\n", maskHeaderMap(req.Header))
 	}
 
 	res, err := c.client.Do(req)
@@ -143,7 +143,7 @@ func (c HttpClient) PostJson(path string, headers ty.MS, body interface{}, respo
 
 }
 
-func (c HttpClient) Get(path string, queryParams ty.MS, body interface{}, responseData interface{}, auth Auth) error {
+func (c HttpClient) Get(path string, queryParams ty.MS, headers ty.MS, body interface{}, responseData interface{}, auth Auth) error {
 
 	var buf bytes.Buffer
 
@@ -178,6 +178,10 @@ func (c HttpClient) Get(path string, queryParams ty.MS, body interface{}, respon
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
 
 	if auth != nil {
 		if err = auth.Login(req); err != nil {
