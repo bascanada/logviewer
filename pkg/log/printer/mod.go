@@ -40,6 +40,16 @@ func WrapIoWritter(ctx context.Context, result client.LogSearchResult, writer io
 		}
 	}
 
+	// Prepare messageRegex if present
+	var messageRegex *regexp.Regexp
+	if printerOptions.MessageRegex.Set && printerOptions.MessageRegex.Value != "" {
+		var err error
+		messageRegex, err = regexp.Compile(printerOptions.MessageRegex.Value)
+		if err != nil {
+			return false, err
+		}
+	}
+
 	entries, newEntriesChannel, err := result.GetEntries(ctx)
 	if err != nil {
 		return false, err
