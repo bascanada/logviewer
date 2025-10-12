@@ -58,21 +58,7 @@ func (i *Opt[T]) UnmarshalJSON(data []byte) error {
 
 	return nil
 }
-// UnmarshalYAML implements yaml.Unmarshaler for Opt[T]
-func (i *Opt[T]) UnmarshalYAML(value *yaml.Node) error {
-	i.Set = true
-if value.Kind == yaml.ScalarNode && value.Value == "null" {
-		i.Valid = false
-		return nil
-	}
-	var v T
-	if err := value.Decode(&v); err != nil {
-		 return err
-	}
-	i.Value = v
-	i.Valid = true
-	return nil
-}
+
 
 // MarshalYAML implements yaml.Marshaler for Opt[T]
 func (i Opt[T]) MarshalYAML() (interface{}, error) {
@@ -106,14 +92,6 @@ func (i *Opt[T]) UnmarshalYAML(value *yaml.Node) error {
 	i.Value = concreteValue
 	i.Valid = true
 	return nil
-}
-
-// MarshalYAML implements yaml.Marshaler for Opt[T]
-func (i Opt[T]) MarshalYAML() (interface{}, error) {
-	if !i.Set || !i.Valid {
-		return nil, nil
-	}
-	return i.Value, nil
 }
 
 func (i *Opt[T]) MarshalJSON() ([]byte, error) {

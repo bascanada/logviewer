@@ -178,6 +178,47 @@ There is main way to access the log
 }
 ```
 
+### Splunk
+
+```bash
+# Query max of 10 logs entry in the last 10 minute for an index in an instance
+-> % logviewer --splunk-url "..." --splunk-index "..." --last 10m --size 10 query log
+```
+
+```json
+{
+  "clients": {
+    "local-splunk": {
+      "type": "splunk",
+      "options": {
+        "url": "http://localhost:8088"
+      }
+    }
+  },
+  "contexts": {
+    "splunk-app-logs": {
+      "client": "local-splunk",
+      "searchInherit": [],
+      "search": {
+        "fields": {},
+        "options": {
+          "index": "app-logs",
+          "fields": [
+            "field1",
+            "field2"
+          ]
+        }
+      }
+    }
+  }
+}
+```
+
+#### Fields
+
+In Splunk, some fields are not indexed by default and you need to use the `| fields + <field>` syntax to include them in your search.
+You can use the `fields` option in your `search.options` to add a list of fields to be added to the search query.
+
 
 ### K8S
 

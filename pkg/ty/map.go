@@ -98,6 +98,26 @@ func (mi MI) GetBoolOk(key string) (bool, bool) {
 	return false, false
 }
 
+func (mi MI) GetListOfStringsOk(key string) ([]string, bool) {
+	v, ok := mi[key]
+	if !ok {
+		return nil, false
+	}
+
+	switch vv := v.(type) {
+	case []string:
+		return vv, true
+	case []interface{}:
+		res := make([]string, len(vv))
+		for i, val := range vv {
+			res[i] = fmt.Sprint(val)
+		}
+		return res, true
+	default:
+		return nil, false
+	}
+}
+
 func MergeM[T interface{}](parent map[string]T, child map[string]T) map[string]T {
 	for k, v := range child {
 		parent[k] = v
