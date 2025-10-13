@@ -1,4 +1,4 @@
-.PHONY: build build/all release release/all test test/coverage integration/start integration/stop integration/tests integration/logs install uninstall
+.PHONY: build build/all release release/all test test/coverage integration/start integration/stop integration/tests integration/logs integration/start/logs integration/stop/logs install uninstall
 
 SHA=$(shell git rev-parse --short HEAD)
 # Determine latest tag (fallback to '0.0.0' when repository has no tags or git fails)
@@ -70,10 +70,6 @@ uninstall:
 
 
 
-
-
-
-
 # Unit tests
 
 test:
@@ -83,7 +79,6 @@ test/coverage:
 	@command -v gocover-cobertura >/dev/null 2>&1 || { echo "Installing gocover-cobertura"; go install github.com/boumenot/gocover-cobertura@latest; }
 	@go test -coverprofile=coverage.txt -covermode count ./...
 	@cat coverage.txt | gocover-cobertura > coverage.xml
-
 
 
 
@@ -149,20 +144,28 @@ integration/stop/cloudwatch:
 	@echo "Stopping LocalStack..."
 	@cd integration && docker-compose stop localstack && docker-compose rm -f localstack
 
+integration/start/logs:
+	@echo "Starting log-generator..."
+	@export SPLUNK_HEC_TOKEN=$$(cat ./integration/splunk/.hec_token 2>/dev/null || echo "") && \
+		cd integration && docker-compose -f docker-compose-log-generator.yml up -d
+
+integration/stop/logs:
+	@echo "Stopping log-generator..."
+	@cd integration && docker-compose -f docker-compose-log-generator.yml down -v
+
+
 # Log Generation and Uploading
-integration/logs: integration/logs/splunk integration/logs/opensearch integration/logs/ssh integration/logs/cloudwatch
+integration/logs: integration/logs/generator integration/logs/ssh integration/logs/cloudwatch
 
 integration/logs/cloudwatch:
 	@echo "Sending logs to CloudWatch..."
 	@cd integration/cloudwatch && ./send-logs.sh
 
-integration/logs/splunk:
-	@echo "Sending logs to Splunk..."
-	@cd integration/splunk && ./send-logs.sh
-
-integration/logs/opensearch:
-	@echo "Sending logs to OpenSearch..."
-	@cd integration/opensearch && ./send-logs.sh
+integration/logs/generator:
+	@echo "Deploying sample logs to Splunk and OpenSearch via log-generator..."
+	@curl -s -o /dev/null -G --data-urlencode "message=User 'alice' logged in successfully" http://localhost:8081/log/info
+	@curl -s -o /dev/null -G --data-urlencode "message=Payment failed for order #12345: Insufficient funds" http://localhost:8081/log/error
+	@curl -s -o /dev/null -H "X-Request-ID: xyz-987-abc" -G --data-urlencode "message=API key is approaching expiration date" http://localhost:8081/log/warn
 
 integration/logs/ssh:
 	@echo "Uploading logs to SSH server..."
