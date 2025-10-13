@@ -61,7 +61,7 @@ contexts:
     search:
       fields: {}
       options:
-        cmd: cat integration/logs/app.log
+        cmd: 'tail -n {{or .Size.Value 200}} integration/logs/app.log'
   splunk-app-logs:
     client: local-splunk
     searchInherit: []
@@ -77,7 +77,7 @@ contexts:
     search:
       fields: {}
       options:
-        cmd: tail -n 200 app.log
+        cmd: 'tail -n {{or .Size.Value 200}} app.log'
 
   opensearch-app-logs:
     client: local-opensearch

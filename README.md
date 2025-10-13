@@ -295,9 +295,14 @@ logviewer query log --docker-host "unix:///Users/William.Quintal/.colima/lol/doc
 
 ### Local/SSH
 
-Query from local and ssh don't use mutch of the search field like for opensearch
-in the future with the command builder depending on the context it may be used but for
-now you have to configure the command to run yourself.
+The `cmd` option for local and ssh clients now functions as a Go template, allowing you to inject search parameters directly into your command. The entire `LogSearch` object is available as the data context for the template, allowing access to fields like `{{.Size.Value}}`, `{{.Range.Last.Value}}`, etc.
+
+This allows flags like `--size 50` or `--from "2023-10-27T10:00:00Z"` to dynamically alter the command.
+
+Example:
+```yaml
+cmd: 'grep "{{.Range.Gte.Value}}" my-app.log | tail -n {{or .Size.Value 100}}'
+```
 
 By default no field are extracted but you can use a multiple regex to extract some field
 from the log entry and use this as a filter (like using grep)
