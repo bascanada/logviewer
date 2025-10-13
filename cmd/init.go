@@ -54,6 +54,7 @@ var (
 	fields     []string
 	fieldsOps  []string
 	inherits   []string
+	vars       []string
 	groupRegex string
 	kvRegex    string
 
@@ -145,6 +146,7 @@ func init() {
 	queryCommand.PersistentFlags().StringArrayVar(
 		&fieldsOps, "fields-condition", []string{}, "Field Ops for selection field=value (match, exists, wildcard, regex)",
 	)
+	queryCommand.PersistentFlags().StringArrayVar(&vars, "var", []string{}, "Define a runtime variable for the search context (e.g., --var 'sessionId=abc-123')")
 	queryCommand.PersistentFlags().StringVar(
 		&groupRegex, "fields-group-regex", "",
 		"Regex to extract field from log text using named group, e.g. '.*(?P<Level>INFO|WARN|ERROR).*'")

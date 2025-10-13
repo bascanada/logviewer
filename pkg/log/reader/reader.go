@@ -67,13 +67,15 @@ func (lr *ReaderLogResult) parseLine(line string) bool {
 		}
 	}
 
-	for k, v := range lr.search.Fields {
-		if vv, ok := entry.Fields[k]; ok {
-			if v != vv {
+	if lr.namedGroupRegexExtraction != nil || lr.kvRegexExtraction != nil {
+		for k, v := range lr.search.Fields {
+			if vv, ok := entry.Fields[k]; ok {
+				if v != vv {
+					return false
+				}
+			} else {
 				return false
 			}
-		} else {
-			return false
 		}
 	}
 

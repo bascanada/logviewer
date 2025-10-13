@@ -160,29 +160,34 @@ type ContextConfig struct {
 	Contexts `json:"contexts" yaml:"contexts"`
 }
 
-func (cc ContextConfig) GetSearchContext(contextId string, inherits []string, logSearch client.LogSearch) (SearchContext, error) {
+func (cc ContextConfig) GetSearchContext(contextId string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (SearchContext, error) {
 	if contextId == "" {
-		return SearchContext{}, errors.New("contextId is empty , required when using config")
+		return SearchContext{}, errors.New("contextId is empty, required when using config")
 	}
-	if searchContext, b := cc.Contexts[contextId]; b {
-		inherits := append(searchContext.SearchInherit, inherits...)
-		if len(inherits) > 0 {
-			for _, inherit := range inherits {
-				if inheritSearch, b := cc.Searches[inherit]; b {
-					searchContext.Search.MergeInto(&inheritSearch)
-				} else {
-					return SearchContext{}, errors.New("failed to find a search context for " + inherit)
-				}
-			}
-		}
 
-		searchContext.Search.MergeInto(&logSearch)
-
-		// Resolve env vars inside search options (MI)
-		searchContext.Search.Options = searchContext.Search.Options.ResolveVariables()
-
-		return searchContext, nil
-	} else {
+	searchContext, ok := cc.Contexts[contextId]
+	if !ok {
 		return SearchContext{}, fmt.Errorf("%w: %s", ErrContextNotFound, contextId)
 	}
+
+	// Combine inherits from context and the call
+	allInherits := append(searchContext.SearchInherit, inherits...)
+	if len(allInherits) > 0 {
+		for _, inherit := range allInherits {
+			inheritSearch, found := cc.Searches[inherit]
+			if !found {
+				return SearchContext{}, fmt.Errorf("failed to find a search context for %s", inherit)
+			}
+			searchContext.Search.MergeInto(&inheritSearch)
+		}
+	}
+
+	// Merge the provided logSearch into the context's search
+	searchContext.Search.MergeInto(&logSearch)
+
+	// Resolve variables
+	searchContext.Search.Fields = searchContext.Search.Fields.ResolveVariablesWith(runtimeVars)
+	searchContext.Search.Options = searchContext.Search.Options.ResolveVariablesWith(runtimeVars)
+
+	return searchContext, nil
 }

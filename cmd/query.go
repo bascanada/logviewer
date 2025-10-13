@@ -191,7 +191,16 @@ func resolveSearch() (client.LogSearchResult, error) {
 			return nil, err
 		}
 
-		sr, err := searchFactory.GetSearchResult(context.Background(), contextIds[0], inherits, searchRequest)
+		// Parse --var flags into a map
+		runtimeVars := make(map[string]string)
+		for _, v := range vars {
+			parts := strings.SplitN(v, "=", 2)
+			if len(parts) == 2 {
+				runtimeVars[parts[0]] = parts[1]
+			}
+		}
+
+		sr, err := searchFactory.GetSearchResult(context.Background(), contextIds[0], inherits, searchRequest, runtimeVars)
 		return sr, err
 	}
 

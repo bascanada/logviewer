@@ -7,7 +7,8 @@ import (
 )
 
 type SearchFactory interface {
-	GetSearchResult(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch) (client.LogSearchResult, error)
+	GetSearchResult(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (client.LogSearchResult, error)
+	GetSearchContext(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (*config.SearchContext, error)
 }
 
 type logSearchFactory struct {
@@ -17,9 +18,17 @@ type logSearchFactory struct {
 	config config.ContextConfig
 }
 
-func (sf *logSearchFactory) GetSearchResult(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch) (client.LogSearchResult, error) {
+func (sf *logSearchFactory) GetSearchContext(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (*config.SearchContext, error) {
+	searchContext, err := sf.config.GetSearchContext(contextId, inherits, logSearch, runtimeVars)
+	if err != nil {
+		return nil, err
+	}
+	return &searchContext, nil
+}
 
-	searchContext, err := sf.config.GetSearchContext(contextId, inherits, logSearch)
+func (sf *logSearchFactory) GetSearchResult(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (client.LogSearchResult, error) {
+
+	searchContext, err := sf.config.GetSearchContext(contextId, inherits, logSearch, runtimeVars)
 	if err != nil {
 		return nil, err
 	}
