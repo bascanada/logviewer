@@ -527,7 +527,7 @@ curl -X POST http://localhost:8080/query/fields \
 
 
 
-### Integration environement
+### Integration environment
 
 You can start a integration environment with docker and docker-compose that start:
 
