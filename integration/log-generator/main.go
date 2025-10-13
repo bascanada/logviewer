@@ -21,9 +21,9 @@ type LogEntry struct {
 }
 
 var (
-	splunkHecURL   = "https://splunk:8088/services/collector"
-	splunkHecToken = os.Getenv("SPLUNK_HEC_TOKEN") // Your HEC token
-	opensearchURL  = "http://opensearch:9200/app-logs/_doc"
+splunkHecURL   = os.Getenv("SPLUNK_HEC_URL")
+splunkHecToken = os.Getenv("SPLUNK_HEC_TOKEN") // Your HEC token
+opensearchURL  = os.Getenv("OPENSEARCH_URL")
 )
 
 func main() {
