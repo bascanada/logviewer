@@ -185,9 +185,45 @@ func (cc ContextConfig) GetSearchContext(contextId string, inherits []string, lo
 	// Merge the provided logSearch into the context's search
 	searchContext.Search.MergeInto(&logSearch)
 
-	// Resolve variables
-	searchContext.Search.Fields = searchContext.Search.Fields.ResolveVariablesWith(runtimeVars)
-	searchContext.Search.Options = searchContext.Search.Options.ResolveVariablesWith(runtimeVars)
+	// Build complete variable map: defaults from variable definitions + runtime vars (runtime takes precedence)
+	completeVars := make(map[string]string)
+	// First, add defaults from variable definitions
+	for varName, varDef := range searchContext.Search.Variables {
+		if varDef.Default != nil {
+			completeVars[varName] = fmt.Sprintf("%v", varDef.Default)
+		}
+	}
+	// Then, override with runtime variables
+	for k, v := range runtimeVars {
+		completeVars[k] = v
+	}
+
+	// Resolve variables in all relevant fields
+	searchContext.Search.Fields = searchContext.Search.Fields.ResolveVariablesWith(completeVars)
+	searchContext.Search.FieldsCondition = searchContext.Search.FieldsCondition.ResolveVariablesWith(completeVars)
+	searchContext.Search.Options = searchContext.Search.Options.ResolveVariablesWith(completeVars)
+	
+	// Resolve variables in Opt[string] fields
+	if searchContext.Search.PrinterOptions.Template.Set {
+		resolvedTemplate := ty.ResolveVars(searchContext.Search.PrinterOptions.Template.Value, completeVars)
+		searchContext.Search.PrinterOptions.Template.S(resolvedTemplate)
+	}
+	if searchContext.Search.PrinterOptions.MessageRegex.Set {
+		resolvedMessageRegex := ty.ResolveVars(searchContext.Search.PrinterOptions.MessageRegex.Value, completeVars)
+		searchContext.Search.PrinterOptions.MessageRegex.S(resolvedMessageRegex)
+	}
+	if searchContext.Search.FieldExtraction.GroupRegex.Set {
+		resolvedGroupRegex := ty.ResolveVars(searchContext.Search.FieldExtraction.GroupRegex.Value, completeVars)
+		searchContext.Search.FieldExtraction.GroupRegex.S(resolvedGroupRegex)
+	}
+	if searchContext.Search.FieldExtraction.KvRegex.Set {
+		resolvedKvRegex := ty.ResolveVars(searchContext.Search.FieldExtraction.KvRegex.Value, completeVars)
+		searchContext.Search.FieldExtraction.KvRegex.S(resolvedKvRegex)
+	}
+	if searchContext.Search.FieldExtraction.TimestampRegex.Set {
+		resolvedTimestampRegex := ty.ResolveVars(searchContext.Search.FieldExtraction.TimestampRegex.Value, completeVars)
+		searchContext.Search.FieldExtraction.TimestampRegex.S(resolvedTimestampRegex)
+	}
 
 	return searchContext, nil
 }

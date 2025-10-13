@@ -5,7 +5,7 @@ import (
 	"regexp"
 )
 
-func resolveVars(input string, runtimeVars map[string]string) string {
+func ResolveVars(input string, runtimeVars map[string]string) string {
 	re := regexp.MustCompile(`\$(\{([a-zA-Z_][a-zA-Z0-9_]*)(:-(.*))?\}|\$([a-zA-Z_][a-zA-Z0-9_]*))`)
 	return re.ReplaceAllStringFunc(input, func(v string) string {
 		// First, find the variable name, stripping ${} and $
@@ -26,7 +26,7 @@ func resolveVars(input string, runtimeVars map[string]string) string {
 		matches := re.FindStringSubmatch(v)
 		if len(matches) > 4 && matches[4] != "" {
 			// The default value is in matches[4]. It might contain other variables.
-			return resolveVars(matches[4], runtimeVars)
+			return ResolveVars(matches[4], runtimeVars)
 		}
 
 		// Return the original placeholder if no value is found
@@ -41,7 +41,7 @@ func (ms MS) ResolveVariables() MS {
 func (ms MS) ResolveVariablesWith(vars map[string]string) MS {
 	msResolved := MS{}
 	for k, v := range ms {
-		msResolved[k] = resolveVars(v, vars)
+		msResolved[k] = ResolveVars(v, vars)
 	}
 	return msResolved
 }
@@ -58,7 +58,7 @@ func (mi MI) ResolveVariablesWith(vars map[string]string) MI {
 	for k, v := range mi {
 		switch vv := v.(type) {
 		case string:
-			resolved[k] = resolveVars(vv, vars)
+			resolved[k] = ResolveVars(vv, vars)
 		default:
 			resolved[k] = v
 		}
