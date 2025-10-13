@@ -2,6 +2,15 @@ package client
 
 import "github.com/bascanada/logviewer/pkg/ty"
 
+// VariableDefinition describes a dynamic parameter for a search context.
+// This provides metadata to UIs and LLMs about what inputs are expected.
+type VariableDefinition struct {
+	Description string      `json:"description,omitempty"`
+	Type        string      `json:"type,omitempty"`
+	Default     interface{} `json:"default,omitempty"`
+	Required    bool        `json:"required,omitempty"`
+}
+
 type SearchRange struct {
 	Lte  ty.Opt[string] `json:"lte" yaml:"lte"`
 	Gte  ty.Opt[string] `json:"gte" yaml:"gte"`
@@ -49,6 +58,10 @@ type LogSearch struct {
 	FieldExtraction FieldExtraction `json:"fieldExtraction,omitempty" yaml:"fieldExtraction,omitempty"`
 
 	PrinterOptions PrinterOptions `json:"printerOptions,omitempty" yaml:"printerOptions,omitempty"`
+
+	// Variables defines the dynamic inputs for this search context.
+	// The map key is the variable name (e.g., "sessionId").
+	Variables map[string]VariableDefinition `json:"variables,omitempty"`
 }
 
 func (lr *LogSearch) MergeInto(logSeach *LogSearch) error {
@@ -56,25 +69,33 @@ func (lr *LogSearch) MergeInto(logSeach *LogSearch) error {
 	if lr.Fields == nil {
 		lr.Fields = ty.MS{}
 	}
-	if lr.Fields == nil {
-		lr.Fields = ty.MS{}
+	if lr.FieldsCondition == nil {
+		lr.FieldsCondition = ty.MS{}
 	}
 	if lr.Options == nil {
 		lr.Options = ty.MI{}
 	}
+	if lr.Variables == nil {
+		lr.Variables = make(map[string]VariableDefinition)
+	}
+
+	for k, v := range logSeach.Variables {
+		lr.Variables[k] = v
+	}
 
 	lr.Fields = ty.MergeM(lr.Fields, logSeach.Fields)
-	lr.Fields = ty.MergeM(lr.Fields, logSeach.Fields)
+	lr.FieldsCondition = ty.MergeM(lr.FieldsCondition, logSeach.FieldsCondition)
 	lr.Options = ty.MergeM(lr.Options, logSeach.Options)
 
 	lr.Size.Merge(&logSeach.Size)
 	lr.Refresh.Duration.Merge(&logSeach.Refresh.Duration)
-lr.FieldExtraction.GroupRegex.Merge(&logSeach.FieldExtraction.GroupRegex)
+	lr.FieldExtraction.GroupRegex.Merge(&logSeach.FieldExtraction.GroupRegex)
 	lr.FieldExtraction.KvRegex.Merge(&logSeach.FieldExtraction.KvRegex)
 	lr.FieldExtraction.TimestampRegex.Merge(&logSeach.FieldExtraction.TimestampRegex)
 	lr.PrinterOptions.Template.Merge(&logSeach.PrinterOptions.Template)
 	lr.PrinterOptions.MessageRegex.Merge(&logSeach.PrinterOptions.MessageRegex)
 	lr.Range.Gte.Merge(&logSeach.Range.Gte)
+
 	lr.Range.Lte.Merge(&logSeach.Range.Lte)
 	lr.Range.Last.Merge(&logSeach.Range.Last)
 	lr.PageToken.Merge(&logSeach.PageToken)

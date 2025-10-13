@@ -12,9 +12,10 @@ import (
 
 // Base request structure for query endpoints
 type QueryRequest struct {
-	ContextId string           `json:"contextId"`          // Required
-	Inherits  []string         `json:"inherits,omitempty"` // Optional search inherits
-	Search    client.LogSearch `json:"search"`             // Search overrides
+	ContextId string            `json:"contextId"`          // Required
+	Inherits  []string          `json:"inherits,omitempty"` // Optional search inherits
+	Search    client.LogSearch  `json:"search"`             // Search overrides
+	Variables map[string]string `json:"variables,omitempty"`  // Runtime variables for substitution
 }
 
 // Response for /query/logs endpoint
@@ -101,11 +102,24 @@ func (s *Server) queryLogsGETHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Parse variables: "key1=val1,key2=val2"
+	vars := make(map[string]string)
+	if varsParam := r.URL.Query().Get("vars"); varsParam != "" {
+		for _, pair := range strings.Split(varsParam, ",") {
+			if kv := strings.SplitN(pair, "=", 2); len(kv) == 2 {
+				key := strings.TrimSpace(kv[0])
+				value := strings.TrimSpace(kv[1])
+				vars[key] = value
+			}
+		}
+	}
+
 	// Create QueryRequest and reuse existing logic
 	req := QueryRequest{
 		ContextId: contextId,
 		Inherits:  inherits,
 		Search:    search,
+		Variables: vars,
 	}
 
 	// Log the GET request
@@ -161,7 +175,7 @@ func (s *Server) processQueryLogsRequest(w http.ResponseWriter, r *http.Request,
 
 	startTime := time.Now()
 
-	searchResult, err := s.searchFactory.GetSearchResult(r.Context(), req.ContextId, req.Inherits, req.Search)
+	searchResult, err := s.searchFactory.GetSearchResult(r.Context(), req.ContextId, req.Inherits, req.Search, req.Variables)
 	if err != nil {
 		s.logger.Error("failed to get search result", "err", err, "contextId", req.ContextId)
 		s.writeError(w, http.StatusBadRequest, ErrCodeInvalidSearch, err.Error())
@@ -175,7 +189,7 @@ func (s *Server) processQueryLogsRequest(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	sc, err := s.config.GetSearchContext(req.ContextId, req.Inherits, req.Search)
+	sc, err := s.config.GetSearchContext(req.ContextId, req.Inherits, req.Search, nil)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, ErrCodeContextNotFound, "Could not get search context")
 		return
@@ -233,7 +247,7 @@ func (s *Server) processQueryFieldsRequest(w http.ResponseWriter, r *http.Reques
 
 	startTime := time.Now()
 
-	searchResult, err := s.searchFactory.GetSearchResult(r.Context(), req.ContextId, req.Inherits, req.Search)
+	searchResult, err := s.searchFactory.GetSearchResult(r.Context(), req.ContextId, req.Inherits, req.Search, req.Variables)
 	if err != nil {
 		s.logger.Error("failed to get search result", "err", err, "contextId", req.ContextId)
 		s.writeError(w, http.StatusBadRequest, ErrCodeInvalidSearch, err.Error())
@@ -247,7 +261,7 @@ func (s *Server) processQueryFieldsRequest(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	sc, err := s.config.GetSearchContext(req.ContextId, req.Inherits, req.Search)
+	sc, err := s.config.GetSearchContext(req.ContextId, req.Inherits, req.Search, nil)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, ErrCodeContextNotFound, "Could not get search context")
 		return
