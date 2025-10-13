@@ -185,7 +185,7 @@ There is main way to access the log
 -> % logviewer --splunk-url "..." --splunk-index "..." --last 10m --size 10 query log
 ```
 
-```json
+```yaml
 {
   "clients": {
     "local-splunk": {
