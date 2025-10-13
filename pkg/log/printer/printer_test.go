@@ -46,7 +46,7 @@ func TestMessageRegex(t *testing.T) {
 				{Message: "[INFO] this is a test"},
 			},
 			printerOptions: client.PrinterOptions{
-				MessageRegex: ty.OptWrap("^\\[\\w+\\]\\s*(.*)$$"),
+				MessageRegex: ty.OptWrap("^[\\w\\]+\\s*(.*)$"),
 				Template:     ty.OptWrap("{{.Message}}"),
 			},
 			expectedOutput: "this is a test\n",
