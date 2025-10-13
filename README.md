@@ -519,3 +519,39 @@ curl -X POST http://localhost:8080/query/fields \
     "contextId": "growbe-odoo"
   }'
 ```
+
+
+
+## Development
+
+
+
+
+### Integration environment
+
+You can start a integration environment with docker and docker-compose that start:
+
+* splunk
+* opensearch
+* aws LocalStack
+* k3s
+* ssh server
+
+
+Dependencies:
+
+* docker
+* docker-compose
+* awscli
+* kubectl
+* jq
+
+# Start all instance supported
+make integration/start
+# Start instance to forward logs to opensearch and splunk
+make integration/start/logs
+# Deploy logs everywhere
+make integration/logs
+
+# Now you can use the default config to query the instance in docker
+go run . query  -c ./config.yaml -i splunk-app-logs log

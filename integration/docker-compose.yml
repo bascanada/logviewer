@@ -40,7 +40,7 @@ services:
       - opensearch
 
   ssh-server:
-    image: linuxserver/openssh-server
+    build: ./ssh
     container_name: ssh-server
     ports:
       - "2222:2222"
@@ -76,6 +76,12 @@ services:
     volumes:
       - localstack-data:/var/lib/localstack
       - "/var/run/docker.sock:/var/run/docker.sock"
+
+
+
+networks:
+  default:
+    name: integration_default
 
 volumes:
   splunk-etc:
