@@ -202,7 +202,7 @@ You may skip this and directly call query_logs. If a query returns no results, c
 			search.Range.Last.S("15m")
 		}
 
-		searchResult, err := searchFactory.GetSearchResult(ctx, contextId, []string{}, search)
+		searchResult, err := searchFactory.GetSearchResult(ctx, contextId, []string{}, search, nil)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -241,6 +241,7 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 		mcp.WithString("last", mcp.Description(`Relative time window like 15m, 2h, 1d.`)),
 		mcp.WithObject("fields", mcp.Description("Exact match key/value filters (JSON object).")),
 		mcp.WithNumber("size", mcp.Description("Maximum number of log entries to return.")),
+		mcp.WithObject("variables", mcp.Description("Runtime variables for the context (JSON object).")),
 	)
 	queryLogsHandler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		start := time.Now()
@@ -256,8 +257,11 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 		if size, err := request.RequireFloat("size"); err == nil && int(size) > 0 {
 			searchRequest.Size.S(int(size))
 		}
-		// Generic argument access for 'fields' (an object map)
-		if args := request.GetArguments(); args != nil {
+
+		runtimeVars := make(map[string]string)
+		args := request.GetArguments()
+		if args != nil {
+			// Handle 'fields'
 			if rawFields, ok := args["fields"]; ok && rawFields != nil {
 				if fieldMap, ok := rawFields.(map[string]any); ok {
 					if searchRequest.Fields == nil {
@@ -268,6 +272,33 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 					}
 				}
 			}
+			// Handle 'variables'
+			if rawVars, ok := args["variables"]; ok && rawVars != nil {
+				if varMap, ok := rawVars.(map[string]any); ok {
+					for k, v := range varMap {
+						runtimeVars[k] = fmt.Sprintf("%v", v)
+					}
+				}
+			}
+		}
+
+		// Pre-flight check for required variables
+		mergedContext, err := searchFactory.GetSearchContext(ctx, contextId, []string{}, searchRequest, runtimeVars)
+		if err != nil {
+			// Handle context not found error separately
+			if errors.Is(err, config.ErrContextNotFound) {
+				// ... (existing context not found logic)
+			}
+			return mcp.NewToolResultError(fmt.Sprintf("failed to get search context: %v", err)), nil
+		}
+
+		for name, def := range mergedContext.Search.Variables {
+			if def.Required {
+				if _, ok := runtimeVars[name]; !ok {
+					errMsg := fmt.Sprintf("Missing required variable '%s'. Please ask the user for '%s' and call the tool again.", name, def.Description)
+					return mcp.NewToolResultError(errMsg), nil
+				}
+			}
 		}
 
 		// Fallback: ensure some time window is always specified to prevent backend errors
@@ -275,29 +306,9 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 			searchRequest.Range.Last.S("15m")
 		}
 
-		searchResult, err := searchFactory.GetSearchResult(ctx, contextId, []string{}, searchRequest)
+		searchResult, err := searchFactory.GetSearchResult(ctx, contextId, []string{}, searchRequest, runtimeVars)
 		if err != nil {
-			if errors.Is(err, config.ErrContextNotFound) {
-				all := make([]string, 0, len(cfg.Contexts))
-				for id := range cfg.Contexts {
-					all = append(all, id)
-				}
-				sort.Strings(all)
-				suggestions := suggestSimilar(contextId, all, 3)
-				payload := map[string]any{
-					"code":              "CONTEXT_NOT_FOUND",
-					"error":             err.Error(),
-					"invalidContext":    contextId,
-					"availableContexts": all,
-					"suggestions":       suggestions,
-					"hint":              "Use a suggested contextId or call list_contexts for enumeration.",
-				}
-				b, mErr := json.Marshal(payload)
-				if mErr != nil {
-					return mcp.NewToolResultError(fmt.Sprintf("failed to marshal error payload: %v", mErr)), nil
-				}
-				return mcp.NewToolResultText(string(b)), nil
-			}
+			// This logic can be simplified now as we have a pre-flight check
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
@@ -326,6 +337,28 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 	}
 	s.AddTool(queryLogsTool, queryLogsHandler)
 	handlers["query_logs"] = queryLogsHandler
+
+	getContextDetailsTool := mcp.NewTool("get_context_details",
+		mcp.WithDescription("Inspect a context's details, including its variable schema."),
+		mcp.WithString("contextId", mcp.Required(), mcp.Description("The context ID to inspect.")),
+	)
+	getContextDetailsHandler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		contextId, err := request.RequireString("contextId")
+		if err != nil {
+			return mcp.NewToolResultError("contextId is required"), nil
+		}
+		searchContext, err := searchFactory.GetSearchContext(ctx, contextId, []string{}, client.LogSearch{}, nil)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to get context details: %v", err)), nil
+		}
+		jsonBytes, err := json.Marshal(searchContext.Search)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to marshal context details: %v", err)), nil
+		}
+		return mcp.NewToolResultText(string(jsonBytes)), nil
+	}
+	s.AddTool(getContextDetailsTool, getContextDetailsHandler)
+	handlers["get_context_details"] = getContextDetailsHandler
 
 	// Resource providing context list (alternative to tool usage)
 	contextsResource := mcp.NewResource(

@@ -21,11 +21,21 @@ import (
 // mockSearchFactory is a mock implementation of factory.SearchFactory
 type mockSearchFactory struct{}
 
-func (m *mockSearchFactory) GetSearchResult(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch) (client.LogSearchResult, error) {
+func (m *mockSearchFactory) GetSearchResult(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (client.LogSearchResult, error) {
 	if contextId == "error" {
 		return nil, errors.New("backend error")
 	}
 	return &mockLogSearchResult{}, nil
+}
+
+func (m *mockSearchFactory) GetSearchContext(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (*config.SearchContext, error) {
+	if contextId == "error" {
+		return nil, errors.New("context error")
+	}
+	return &config.SearchContext{
+		Client: "mock_client",
+		Search: client.LogSearch{},
+	}, nil
 }
 
 // mockLogSearchResult is a mock implementation of client.LogSearchResult

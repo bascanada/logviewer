@@ -44,6 +44,9 @@ Example of the core functionality
 
 # Use a config file and context instead of repeating the same field
 -> % logviewer [...] -i cloudwatch-app-logs  --last 10m --size 10 --format "{{.Fields.level}} - {{.Message}}" query log
+
+# Use a config file with variables
+-> % logviewer [...] -i my-context --var "sessionId=1234" query log
 ```
 
 To handle a lot of differents log servers and log context , you can use configuration files to store
@@ -78,6 +81,40 @@ all your configurations. See the `config.json` for exemple configuration. The pa
     }
   }
 }
+```
+
+### Context Variables
+
+You can define variables in your search contexts to make them more dynamic and reusable. Variables are defined in the `variables` section of a `search` block.
+
+**Example:**
+
+```json
+{
+  "contexts": {
+    "user-session-logs": {
+      "client": "local-opensearch",
+      "search": {
+        "fields": {
+          "sessionId": "${sessionId}"
+        },
+        "variables": {
+          "sessionId": {
+            "description": "The user session ID to filter logs for.",
+            "type": "string",
+            "required": true
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+You can then provide values for these variables at runtime using the `--var` flag:
+
+```bash
+logviewer query -i user-session-logs --var "sessionId=abc-123" log
 ```
 
 ## Config file discovery & formats
