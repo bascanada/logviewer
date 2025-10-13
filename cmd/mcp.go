@@ -73,6 +73,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -287,7 +288,25 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 		if err != nil {
 			// Handle context not found error separately
 			if errors.Is(err, config.ErrContextNotFound) {
-				// ... (existing context not found logic)
+				all := make([]string, 0, len(cfg.Contexts))
+				for id := range cfg.Contexts {
+					all = append(all, id)
+				}
+				sort.Strings(all)
+				suggestions := suggestSimilar(contextId, all, 3)
+				payload := map[string]any{
+					"code":              "CONTEXT_NOT_FOUND",
+					"error":             err.Error(),
+					"invalidContext":    contextId,
+					"availableContexts": all,
+					"suggestions":       suggestions,
+					"hint":              "Use a suggested contextId or call list_contexts for enumeration.",
+				}
+				b, mErr := json.Marshal(payload)
+				if mErr != nil {
+					return mcp.NewToolResultError(fmt.Sprintf("failed to marshal error payload: %v", mErr)), nil
+				}
+				return mcp.NewToolResultText(string(b)), nil
 			}
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get search context: %v", err)), nil
 		}
@@ -295,8 +314,10 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 		for name, def := range mergedContext.Search.Variables {
 			if def.Required {
 				if _, ok := runtimeVars[name]; !ok {
-					errMsg := fmt.Sprintf("Missing required variable '%s'. Please ask the user for '%s' and call the tool again.", name, def.Description)
-					return mcp.NewToolResultError(errMsg), nil
+					if _, ok := os.LookupEnv(name); !ok {
+						errMsg := fmt.Sprintf("Missing required variable '%s'. Please ask the user for '%s' and call the tool again.", name, def.Description)
+						return mcp.NewToolResultError(errMsg), nil
+					}
 				}
 			}
 		}
@@ -349,6 +370,27 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 		}
 		searchContext, err := searchFactory.GetSearchContext(ctx, contextId, []string{}, client.LogSearch{}, nil)
 		if err != nil {
+			if errors.Is(err, config.ErrContextNotFound) {
+				all := make([]string, 0, len(cfg.Contexts))
+				for id := range cfg.Contexts {
+					all = append(all, id)
+				}
+				sort.Strings(all)
+				suggestions := suggestSimilar(contextId, all, 3)
+				payload := map[string]any{
+					"code":              "CONTEXT_NOT_FOUND",
+					"error":             err.Error(),
+					"invalidContext":    contextId,
+					"availableContexts": all,
+					"suggestions":       suggestions,
+					"hint":              "Use a suggested contextId or call list_contexts for enumeration.",
+				}
+				b, mErr := json.Marshal(payload)
+				if mErr != nil {
+					return mcp.NewToolResultError(fmt.Sprintf("failed to marshal error payload: %v", mErr)), nil
+				}
+				return mcp.NewToolResultText(string(b)), nil
+			}
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get context details: %v", err)), nil
 		}
 		jsonBytes, err := json.Marshal(searchContext.Search)
