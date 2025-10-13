@@ -2,12 +2,14 @@ package ssh
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"path/filepath"
+	"text/template"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/reader"
@@ -30,11 +32,32 @@ type sshLogClient struct {
 	conn *sshc.Client
 }
 
-func (lc sshLogClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
-	cmd := search.Options.GetString(OptionsCmd)
+func getCommand(search *client.LogSearch) (string, error) {
+	cmdTplStr := search.Options.GetString(OptionsCmd)
 
-	if cmd == "" {
-		panic(errors.New("cmd is missing for sshLogClient"))
+	if cmdTplStr == "" {
+		return "", errors.New("cmd is missing for sshLogClient")
+	}
+
+	tmpl, err := template.New("cmd").Parse(cmdTplStr)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse command template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, search); err != nil {
+		return "", fmt.Errorf("failed to execute command template: %w", err)
+	}
+	return buf.String(), nil
+}
+
+func (lc sshLogClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
+	cmd, err := getCommand(search)
+	if err != nil {
+		if err.Error() == "cmd is missing for sshLogClient" {
+			panic(err)
+		}
+		return nil, err
 	}
 
 	session, err := lc.conn.NewSession()
