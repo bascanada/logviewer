@@ -546,7 +546,6 @@ Dependencies:
 * kubectl
 * jq
 
-´´´bash
 # Start all instance supported
 make integration/start
 # Start instance to forward logs to opensearch and splunk
@@ -556,4 +555,3 @@ make integration/logs
 
 # Now you can use the default config to query the instance in docker
 go run . query  -c ./config.yaml -i splunk-app-logs log
-´´´
