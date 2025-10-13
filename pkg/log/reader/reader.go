@@ -11,7 +11,6 @@ import (
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/ty"
 )
-
 const maxBatchSize = 10
 
 type ReaderLogResult struct {
@@ -138,24 +137,36 @@ func GetLogResult(
 	search *client.LogSearch,
 	scanner *bufio.Scanner,
 	closer io.Closer,
-) ReaderLogResult {
+) (*ReaderLogResult, error) {
 
-var namedGroupRegexExtraction *regexp.Regexp
-if search.FieldExtraction.GroupRegex.Value != "" {
-	namedGroupRegexExtraction, _ = regexp.Compile(search.FieldExtraction.GroupRegex.Value)
-}
+	var namedGroupRegexExtraction *regexp.Regexp
+	if search.FieldExtraction.GroupRegex.Value != "" {
+		var err error
+		namedGroupRegexExtraction, err = regexp.Compile(search.FieldExtraction.GroupRegex.Value)
+		if err != nil {
+			return nil, err
+		}
+	}
 
-var kvRegexExtraction *regexp.Regexp
-if search.FieldExtraction.KvRegex.Value != "" {
-	kvRegexExtraction, _ = regexp.Compile(search.FieldExtraction.KvRegex.Value)
-}
+	var kvRegexExtraction *regexp.Regexp
+	if search.FieldExtraction.KvRegex.Value != "" {
+		var err error
+		kvRegexExtraction, err = regexp.Compile(search.FieldExtraction.KvRegex.Value)
+		if err != nil {
+			return nil, err
+		}
+	}
 
-var regexDateExtraction *regexp.Regexp
-if search.FieldExtraction.TimestampRegex.Value != "" {
-	regexDateExtraction, _ = regexp.Compile(search.FieldExtraction.TimestampRegex.Value)
-}
+	var regexDateExtraction *regexp.Regexp
+	if search.FieldExtraction.TimestampRegex.Value != "" {
+		var err error
+		regexDateExtraction, err = regexp.Compile(search.FieldExtraction.TimestampRegex.Value)
+		if err != nil {
+			return nil, err
+		}
+	}
 
-	result := ReaderLogResult{
+	result := &ReaderLogResult{
 		search:                    search,
 		scanner:                   scanner,
 		closer:                    closer,
@@ -165,5 +176,5 @@ if search.FieldExtraction.TimestampRegex.Value != "" {
 		fields:                    make(ty.UniSet[string]),
 	}
 
-	return result
+	return result, nil
 }

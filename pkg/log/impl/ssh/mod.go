@@ -81,7 +81,7 @@ func (lc sshLogClient) Get(ctx context.Context, search *client.LogSearch) (clien
 
 	scanner := bufio.NewScanner(out)
 
-	return reader.GetLogResult(search, scanner, session), nil
+	return reader.GetLogResult(search, scanner, session)
 }
 
 func GetLogClient(options SSHLogClientOptions) (client.LogClient, error) {

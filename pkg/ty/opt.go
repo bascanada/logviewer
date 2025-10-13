@@ -58,21 +58,7 @@ func (i *Opt[T]) UnmarshalJSON(data []byte) error {
 
 	return nil
 }
-// UnmarshalYAML implements yaml.Unmarshaler for Opt[T]
-func (i *Opt[T]) UnmarshalYAML(value *yaml.Node) error {
-	i.Set = true
-if value.Kind == yaml.ScalarNode && value.Value == "null" {
-		i.Valid = false
-		return nil
-	}
-	var v T
-	if err := value.Decode(&v); err != nil {
-		 return err
-	}
-	i.Value = v
-	i.Valid = true
-	return nil
-}
+
 
 // MarshalYAML implements yaml.Marshaler for Opt[T]
 func (i Opt[T]) MarshalYAML() (interface{}, error) {
@@ -80,6 +66,32 @@ func (i Opt[T]) MarshalYAML() (interface{}, error) {
 		 return nil, nil
 	}
 	return i.Value, nil
+}
+
+// UnmarshalYAML implements yaml.Unmarshaler for Opt[T]
+func (i *Opt[T]) UnmarshalYAML(value *yaml.Node) error {
+	i.Set = true
+	if value.Kind == yaml.ScalarNode && value.Value == "null" {
+		i.Valid = false
+		return nil
+	}
+	var v interface{}
+	if err := value.Decode(&v); err != nil {
+		return err
+	}
+	if v == nil {
+		i.Valid = false
+		return nil
+	}
+
+	// a bit of reflection to set the value
+	var concreteValue T
+	if err := value.Decode(&concreteValue); err != nil {
+		return err
+	}
+	i.Value = concreteValue
+	i.Valid = true
+	return nil
 }
 
 func (i *Opt[T]) MarshalJSON() ([]byte, error) {

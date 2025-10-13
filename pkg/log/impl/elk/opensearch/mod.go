@@ -35,7 +35,7 @@ func (kc openSearchClient) Get(ctx context.Context, search *client.LogSearch) (c
 		return nil, err
 	}
 
-	err = kc.client.Get(fmt.Sprintf("/%s/_search", index), ty.MS{}, &request, &searchResult, nil)
+	err = kc.client.Get(fmt.Sprintf("/%s/_search", index), ty.MS{}, ty.MS{}, &request, &searchResult, nil)
 	if err != nil {
 		return nil, err
 	}

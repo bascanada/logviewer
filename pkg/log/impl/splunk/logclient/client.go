@@ -18,14 +18,19 @@ import (
 // to dispatch on a fresh dev instance.
 const maxRetryDoneJob = 30
 
-type SplunkLogSearchClientOptions struct {
-	Url string `json:"url"`
+type SplunkAuthOptions struct {
+	Header ty.MS `json:"header" yaml:"header"`
+}
 
-	Headers    ty.MS `json:"headers"`
-	SearchBody ty.MS `json:"searchBody"`
+type SplunkLogSearchClientOptions struct {
+	Url string `json:"url" yaml:"url"`
+
+	Auth       SplunkAuthOptions `json:"auth" yaml:"auth"`
+	Headers    ty.MS             `json:"headers" yaml:"headers"`
+	SearchBody ty.MS             `json:"searchBody" yaml:"searchBody"`
 	// Polling configuration
-	PollIntervalSeconds int `json:"pollIntervalSeconds"`
-	MaxRetries          int `json:"maxRetries"`
+	PollIntervalSeconds int `json:"pollIntervalSeconds" yaml:"pollIntervalSeconds"`
+	MaxRetries          int `json:"maxRetries" yaml:"maxRetries"`
 }
 
 type SplunkLogSearchClient struct {
@@ -133,13 +138,14 @@ func GetClient(options SplunkLogSearchClientOptions) (client.LogClient, error) {
 
 	target := restapi.SplunkTarget{
 		Endpoint: options.Url,
+		Headers:  options.Headers,
 	}
 
 	// If headers include Authorization or other fixed headers, pass them as
 	// an Auth implementation so GET requests also include those headers.
-	if options.Headers != nil && len(options.Headers) > 0 {
+	if options.Auth.Header != nil && len(options.Auth.Header) > 0 {
 		// set the Auth on the target so Get requests include the same headers
-		target.Auth = httpPkg.HeaderAuth{Headers: options.Headers}
+		target.Auth = httpPkg.HeaderAuth{Headers: options.Auth.Header}
 	}
 
 	restClient, err := restapi.GetSplunkRestClient(target)

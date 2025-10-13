@@ -66,7 +66,7 @@ func (lc DockerLogClient) Get(ctx context.Context, search *logclient.LogSearch) 
 
 	scanner := bufio.NewScanner(out)
 
-	return reader.GetLogResult(search, scanner, out), nil
+	return reader.GetLogResult(search, scanner, out)
 }
 
 func GetLogClient(host string) (logclient.LogClient, error) {

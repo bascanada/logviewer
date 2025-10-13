@@ -96,6 +96,12 @@ func getSearchRequest(logSearch *client.LogSearch) (ty.MS, error) {
 		query.WriteString(regexQuery.String())
 	}
 
+	if fields, ok := logSearch.Options.GetListOfStringsOk("fields"); ok {
+		if len(fields) > 0 {
+			query.WriteString(fmt.Sprintf(" | fields + %s", strings.Join(fields, ", ")))
+		}
+	}
+
 	ms["search"] = query.String()
 
 	return ms, nil

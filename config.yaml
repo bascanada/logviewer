@@ -39,22 +39,29 @@ clients:
       region: us-east-1
       endpoint: http://localhost:4566
 
+
+
+searches:
+  pretty-print:
+    fieldExtraction:
+      groupRegex: '.*(?P<Level>INFO|WARN|ERROR|DEBUG).*'
+      kvRegex: '(\w+)=(".*?"|[^\s,{}]+)'
+    printerOptions:
+      messageRegex: '^.*--- \\[[^]]+\\]\\s*(.*)$'
+      template: |
+        [{{.Timestamp.Format "15:04:05" }}] [{{.Level}}]
+        {{.Message}}
+
+
+
 contexts:
   local-test:
     client: local
-    searchInherit: []
+    searchInherit: ["pretty-print"]
     search:
       fields: {}
       options:
-        cmd: cat debug/7eed8264-d3f3-4160-b9fa-2b68620b56df.log
-      fieldExtraction:
-        groupRegex: '.*(?P<Level>INFO|WARN|ERROR|DEBUG).*'
-        kvRegex: '(\w+)=(".*?"|[^\s,{}]+)'
-      printerOptions:
-        messageRegex: '^\s*[^{]*\{[^}]*\}\s*(.*)'
-        template: |
-          [{{.Timestamp.Format "15:04:05" }}] [{{.Level}}]
-          {{.Message}}
+        cmd: cat integration/logs/app.log
   splunk-app-logs:
     client: local-splunk
     searchInherit: []

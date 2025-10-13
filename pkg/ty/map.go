@@ -50,6 +50,12 @@ func (mi MI) GetMS(key string) MS {
 			return vv
 		case map[string]string:
 			return MS(vv)
+		case MI:
+			res := MS{}
+			for k, val := range vv {
+				res[k] = fmt.Sprint(val)
+			}
+			return res
 		case map[string]interface{}:
 			res := MS{}
 			for k, val := range vv {
@@ -89,6 +95,26 @@ func (mi MI) GetBoolOk(key string) (bool, bool) {
 	}
 	// Not a recognizable boolean value
 	return false, false
+}
+
+func (mi MI) GetListOfStringsOk(key string) ([]string, bool) {
+	v, ok := mi[key]
+	if !ok {
+		return nil, false
+	}
+
+	switch vv := v.(type) {
+	case []string:
+		return vv, true
+	case []interface{}:
+		res := make([]string, len(vv))
+		for i, val := range vv {
+			res[i] = fmt.Sprint(val)
+		}
+		return res, true
+	default:
+		return nil, false
+	}
 }
 
 func MergeM[T interface{}](parent map[string]T, child map[string]T) map[string]T {

@@ -2,7 +2,9 @@ package printer
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"os"
 	"regexp"
 	"text/template"
 
@@ -23,55 +25,40 @@ func WrapIoWritter(ctx context.Context, result client.LogSearchResult, writer io
 		templateConfig.S("[{{.Timestamp.Format \"15:04:05\" }}] {{.Level}} {{.Message}}")
 	}
 
-	tmpl, err3 := template.New("print_printer").Funcs(GetTemplateFunctionsMap()).Parse(templateConfig.Value + "\n")
-	if err3 != nil {
-		return false, err3
+	tmpl, err := template.New("print_printer").Funcs(GetTemplateFunctionsMap()).Parse(templateConfig.Value + "\n")
+	if err != nil {
+		return false, err
 	}
 
 	// Prepare messageRegex if present
 	var messageRegex *regexp.Regexp
 	if printerOptions.MessageRegex.Set && printerOptions.MessageRegex.Value != "" {
-		var err error
-		messageRegex, err = regexp.Compile(printerOptions.MessageRegex.Value)
-		if err != nil {
-			return false, err
+		var errRegex error
+		messageRegex, errRegex = regexp.Compile(printerOptions.MessageRegex.Value)
+		if errRegex != nil {
+			return false, errRegex
 		}
 	}
+
 
 	entries, newEntriesChannel, err := result.GetEntries(ctx)
 	if err != nil {
 		return false, err
 	}
 
-	for i, entry := range entries {
-		if messageRegex != nil {
-			matches := messageRegex.FindStringSubmatch(entry.Message)
-			if len(matches) > 1 {
-				entries[i].Message = matches[1]
-			}
-		}
-		tmpl.Execute(writer, entries[i])
+	if err := processEntries(writer, tmpl, messageRegex, entries); err != nil {
+		return false, err
 	}
 
 	update()
-
-	if err != nil {
-		return false, err
-	}
 
 	if newEntriesChannel != nil {
 		go func() {
 			update()
 			for entries := range newEntriesChannel {
 				if len(entries) > 0 {
-					for i, entry := range entries {
-						if messageRegex != nil {
-							matches := messageRegex.FindStringSubmatch(entry.Message)
-							if len(matches) > 1 {
-								entries[i].Message = matches[1]
-							}
-						}
-						tmpl.Execute(writer, entries[i])
+					if err := processEntries(writer, tmpl, messageRegex, entries); err != nil {
+						fmt.Fprintf(os.Stderr, "error printing log entries: %v\n", err)
 					}
 					update()
 				}
@@ -80,4 +67,19 @@ func WrapIoWritter(ctx context.Context, result client.LogSearchResult, writer io
 	}
 
 	return newEntriesChannel != nil, nil
+}
+
+func processEntries(writer io.Writer, tmpl *template.Template, messageRegex *regexp.Regexp, entries []client.LogEntry) error {
+	for i, entry := range entries {
+		if messageRegex != nil {
+			matches := messageRegex.FindStringSubmatch(entry.Message)
+			if len(matches) > 1 {
+				entries[i].Message = matches[1]
+			}
+		}
+		if err := tmpl.Execute(writer, entries[i]); err != nil {
+			return err
+		}
+	}
+	return nil
 }

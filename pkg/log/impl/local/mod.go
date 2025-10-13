@@ -39,7 +39,7 @@ func (lc localLogClient) Get(ctx context.Context, search *client.LogSearch) (cli
 
 	scanner := bufio.NewScanner(stdout)
 
-	return reader.GetLogResult(search, scanner, stdout), nil
+	return reader.GetLogResult(search, scanner, stdout)
 }
 
 func GetLogClient() (client.LogClient, error) {
