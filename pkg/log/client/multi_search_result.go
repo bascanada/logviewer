@@ -71,7 +71,10 @@ func (m *MultiLogSearchResult) GetEntries(ctx context.Context) ([]LogEntry, chan
 			}
 
 			// Populate ContextID for each entry
-			contextID := r.GetSearch().Options["__context_id__"].(string)
+			contextID, ok := r.GetSearch().Options["__context_id__"].(string)
+			if !ok {
+				contextID = "unknown"
+			}
 			for i := range entries {
 				entries[i].ContextID = contextID
 			}
@@ -85,7 +88,7 @@ func (m *MultiLogSearchResult) GetEntries(ctx context.Context) ([]LogEntry, chan
 	wg.Wait()
 
 	// Sort the combined slice of log entries by timestamp.
-	sort.Slice(allEntries, func(i, j int) bool {
+	sort.SliceStable(allEntries, func(i, j int) bool {
 		return allEntries[i].Timestamp.Before(allEntries[j].Timestamp)
 	})
 

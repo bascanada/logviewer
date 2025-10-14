@@ -207,16 +207,17 @@ func resolveSearch() (client.LogSearchResult, error) {
 				defer wg.Done()
 				// The search request is copied to avoid data races.
 				reqCopy := searchRequest
-				// Deep copy the Options map to avoid concurrent map writes.
-				if searchRequest.Options == nil {
-					reqCopy.Options = make(ty.MI)
-				} else {
-					reqCopy.Options = make(ty.MI, len(searchRequest.Options))
-					for k, v := range searchRequest.Options {
-						reqCopy.Options[k] = v
+				// Deep copy map fields to avoid concurrent map writes.
+				reqCopy.Options = ty.MergeM(make(ty.MI, len(searchRequest.Options)+1), searchRequest.Options)
+				reqCopy.Options["__context_id__"] = cid
+				reqCopy.Fields = ty.MergeM(make(ty.MS, len(searchRequest.Fields)), searchRequest.Fields)
+				reqCopy.FieldsCondition = ty.MergeM(make(ty.MS, len(searchRequest.FieldsCondition)), searchRequest.FieldsCondition)
+				if searchRequest.Variables != nil {
+					reqCopy.Variables = make(map[string]client.VariableDefinition, len(searchRequest.Variables))
+					for k, v := range searchRequest.Variables {
+						reqCopy.Variables[k] = v
 					}
 				}
-				reqCopy.Options["__context_id__"] = cid
 				sr, err := searchFactory.GetSearchResult(ctx, cid, inherits, reqCopy, runtimeVars)
 				multiResult.Add(sr, err)
 			}(contextId)
