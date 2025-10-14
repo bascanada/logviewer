@@ -22,7 +22,7 @@ func WrapIoWritter(ctx context.Context, result client.LogSearchResult, writer io
 	templateConfig := printerOptions.Template
 
 	if templateConfig.Value == "" {
-		templateConfig.S("[{{.Timestamp.Format \"15:04:05\" }}] {{.Level}} {{.Message}}")
+		templateConfig.S("[{{.Timestamp.Format \"15:04:05\" }}] [{{.ContextID}}] {{.Level}} {{.Message}}")
 	}
 
 	tmpl, err := template.New("print_printer").Funcs(GetTemplateFunctionsMap()).Parse(templateConfig.Value + "\n")

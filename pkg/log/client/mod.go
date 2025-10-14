@@ -12,6 +12,7 @@ type LogEntry struct {
 	Message   string    `json:"message"`
 	Level     string    `json:"level"`
 	Fields    ty.MI     `json:"fields"`
+	ContextID string    `json:"context_id"`
 }
 
 // Result of the search , may be used to get more log
