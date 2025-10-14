@@ -207,9 +207,14 @@ func resolveSearch() (client.LogSearchResult, error) {
 				defer wg.Done()
 				// The search request is copied to avoid data races.
 				reqCopy := searchRequest
-				// A special option to carry the context ID through the search process.
-				if reqCopy.Options == nil {
+				// Deep copy the Options map to avoid concurrent map writes.
+				if searchRequest.Options == nil {
 					reqCopy.Options = make(ty.MI)
+				} else {
+					reqCopy.Options = make(ty.MI, len(searchRequest.Options))
+					for k, v := range searchRequest.Options {
+						reqCopy.Options[k] = v
+					}
 				}
 				reqCopy.Options["__context_id__"] = cid
 				sr, err := searchFactory.GetSearchResult(ctx, cid, inherits, reqCopy, runtimeVars)
