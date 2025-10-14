@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"sync"
 
@@ -26,12 +27,21 @@ type MultiLogSearchResult struct {
 var _ LogSearchResult = (*MultiLogSearchResult)(nil)
 
 // NewMultiLogSearchResult creates and returns a new MultiLogSearchResult.
-func NewMultiLogSearchResult(search *LogSearch) *MultiLogSearchResult {
+// It validates that the search request doesn't contain unsupported features for multi-context queries.
+func NewMultiLogSearchResult(search *LogSearch) (*MultiLogSearchResult, error) {
+	// Validate that unsupported features are not used
+	if len(search.Fields) > 0 {
+		return nil, errors.New("field queries are not supported with multiple contexts; use a single context instead")
+	}
+	if search.PageToken.Set && search.PageToken.Valid {
+		return nil, errors.New("pagination is not supported with multiple contexts; use a single context instead")
+	}
+	
 	return &MultiLogSearchResult{
 		Search:  search,
 		Results: []LogSearchResult{},
 		Errors:  []error{},
-	}
+	}, nil
 }
 
 // Add appends a search result and an associated error to the aggregator.
@@ -98,8 +108,7 @@ func (m *MultiLogSearchResult) GetEntries(ctx context.Context) ([]LogEntry, chan
 // GetFields is not implemented for MultiLogSearchResult as it's ambiguous
 // how to merge fields from different sources.
 func (m *MultiLogSearchResult) GetFields(context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
-	// Returning an empty set as merging fields from multiple contexts is not supported.
-	return make(ty.UniSet[string]), nil, nil
+	return nil, nil, errors.New("field queries are not supported with multiple contexts; use a single context instead")
 }
 
 // GetPaginationInfo returns nil as pagination is not supported for multi-context search results.

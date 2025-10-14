@@ -196,8 +196,17 @@ func resolveSearch() (client.LogSearchResult, error) {
 			return nil, errors.New("no contexts specified for query; use -i to select one or more contexts")
 		}
 
+		// For single context, execute directly without MultiLogSearchResult wrapper
+		if len(contextIds) == 1 {
+			ctx := context.Background()
+			return searchFactory.GetSearchResult(ctx, contextIds[0], inherits, searchRequest, runtimeVars)
+		}
+
 		// Fan-out: execute queries for each context concurrently.
-		multiResult := client.NewMultiLogSearchResult(&searchRequest)
+		multiResult, err := client.NewMultiLogSearchResult(&searchRequest)
+		if err != nil {
+			return nil, err
+		}
 		var wg sync.WaitGroup
 		ctx := context.Background()
 
@@ -375,7 +384,11 @@ var queryFieldCommand = &cobra.Command{
 			os.Exit(1)
 		}
 		searchResult.GetEntries(context.Background())
-		fields, _, _ := searchResult.GetFields(context.Background())
+		fields, _, err := searchResult.GetFields(context.Background())
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
 
 		for k, b := range fields {
 			fmt.Printf("%s \n", k)
