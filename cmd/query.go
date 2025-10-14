@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/client/config"
@@ -137,48 +138,33 @@ func resolveSearch() (client.LogSearchResult, error) {
 	searchRequest.Refresh.Follow.S(refresh)
 
 	// Centralized config handling:
-	// - If an explicit configPath is given, use it (and require exactly one -i).
-	// - If no configPath but a context id (-i) was provided, attempt to load the default config
-	//   (e.g. $HOME/.logviewer/config.yaml) and require exactly one -i.
+	// - If an explicit configPath is given, use it.
+	// - If no configPath but context ids (-i) are provided, attempt to load the default config.
 	// - If no configPath and no -i, do not load any config and continue with non-config flow.
 	if configPath != "" || len(contextIds) > 0 {
-		// When using a config (explicit or default), -i must be exactly one element.
-		if len(contextIds) != 1 {
-			return nil, errors.New("-i required only exactly one element when doing a query log or query tag")
-		}
-
 		var cfg *config.ContextConfig
 		var err error
 		if configPath != "" {
 			cfg, err = config.LoadContextConfig(configPath)
-			if err != nil {
-				switch {
-				case errors.Is(err, config.ErrConfigParse):
-					return nil, fmt.Errorf("invalid configuration file format %s: %w", configPath, err)
-				case errors.Is(err, config.ErrNoClients):
-					return nil, fmt.Errorf("configuration missing 'clients' section %s: %w", configPath, err)
-				case errors.Is(err, config.ErrNoContexts):
-					return nil, fmt.Errorf("configuration missing 'contexts' section %s: %w", configPath, err)
-				default:
-					return nil, err
-				}
-			}
 		} else {
-			// Try default config location. If not found, surface a clear error because
-			// the user provided -i but no config was available.
 			cfg, err = config.LoadContextConfig("")
-			if err != nil {
-				switch {
-				case errors.Is(err, config.ErrConfigParse):
-					return nil, fmt.Errorf("invalid default configuration file format: %w", err)
-				case errors.Is(err, config.ErrNoClients):
-					return nil, fmt.Errorf("default configuration missing 'clients' section: %w", err)
-				case errors.Is(err, config.ErrNoContexts):
-					return nil, fmt.Errorf("default configuration missing 'contexts' section: %w", err)
-				default:
-					return nil, fmt.Errorf("failed to load context config: %w", err)
-				}
+		}
+
+		if err != nil {
+			// Handle all config loading errors uniformly.
+			errorMsg := "failed to load context config"
+			switch {
+			case errors.Is(err, config.ErrConfigParse):
+				errorMsg = "invalid configuration file format"
+			case errors.Is(err, config.ErrNoClients):
+				errorMsg = "configuration missing 'clients' section"
+			case errors.Is(err, config.ErrNoContexts):
+				errorMsg = "configuration missing 'contexts' section"
 			}
+			if configPath != "" {
+				return nil, fmt.Errorf("%s %s: %w", errorMsg, configPath, err)
+			}
+			return nil, fmt.Errorf("%s: %w", errorMsg, err)
 		}
 
 		clientFactory, err := factory.GetLogClientFactory(cfg.Clients)
@@ -191,7 +177,7 @@ func resolveSearch() (client.LogSearchResult, error) {
 			return nil, err
 		}
 
-		// Parse --var flags into a map
+		// Parse --var flags into a map for runtime variable substitution.
 		runtimeVars := make(map[string]string)
 		for _, v := range vars {
 			parts := strings.SplitN(v, "=", 2)
@@ -200,8 +186,54 @@ func resolveSearch() (client.LogSearchResult, error) {
 			}
 		}
 
-		sr, err := searchFactory.GetSearchResult(context.Background(), contextIds[0], inherits, searchRequest, runtimeVars)
-		return sr, err
+		// If no contexts are specified via -i, and we are not in an interactive view,
+		// there's nothing to query.
+		if len(contextIds) == 0 {
+			// This check is to prevent trying to query nothing when in non-interactive mode.
+			// The interactive view has its own logic for handling context selection.
+			// Note: This part of the logic might need adjustment depending on the exact desired CLI behavior
+			// when no contexts are provided.
+			return nil, errors.New("no contexts specified for query; use -i to select one or more contexts")
+		}
+
+		// Fan-out: execute queries for each context concurrently.
+		multiResult := client.NewMultiLogSearchResult(&searchRequest)
+		var wg sync.WaitGroup
+		ctx := context.Background()
+
+		for _, contextId := range contextIds {
+			wg.Add(1)
+			go func(cid string) {
+				defer wg.Done()
+				// The search request is copied to avoid data races.
+				reqCopy := searchRequest
+				// Deep copy map fields to avoid concurrent map writes.
+				reqCopy.Options = ty.MergeM(make(ty.MI, len(searchRequest.Options)+1), searchRequest.Options)
+				reqCopy.Options["__context_id__"] = cid
+				reqCopy.Fields = ty.MergeM(make(ty.MS, len(searchRequest.Fields)), searchRequest.Fields)
+				reqCopy.FieldsCondition = ty.MergeM(make(ty.MS, len(searchRequest.FieldsCondition)), searchRequest.FieldsCondition)
+				if searchRequest.Variables != nil {
+					reqCopy.Variables = make(map[string]client.VariableDefinition, len(searchRequest.Variables))
+					for k, v := range searchRequest.Variables {
+						reqCopy.Variables[k] = v
+					}
+				}
+				sr, err := searchFactory.GetSearchResult(ctx, cid, inherits, reqCopy, runtimeVars)
+				multiResult.Add(sr, err)
+			}(contextId)
+		}
+
+		wg.Wait()
+
+		// Print errors for failed contexts to stderr.
+		if len(multiResult.Errors) > 0 {
+			var errorStrings []string
+			for _, e := range multiResult.Errors {
+				errorStrings = append(errorStrings, e.Error())
+			}
+			fmt.Fprintf(os.Stderr, "errors encountered for some contexts:\n%s\n", strings.Join(errorStrings, "\n"))
+		}
+		return multiResult, nil
 	}
 
 	if headerField != "" {
