@@ -46,6 +46,7 @@ func (s SplunkLogSearchResult) GetEntries(context context.Context) ([]client.Log
 
 				lastTimestamp := time.Now()
 				if len(initialEntries) > 0 {
+					// This is the newest log from the initial batch (due to our parseResults fix)
 					lastTimestamp = initialEntries[len(initialEntries)-1].Timestamp
 				}
 
@@ -57,13 +58,22 @@ func (s SplunkLogSearchResult) GetEntries(context context.Context) ([]client.Log
 					case <-context.Done():
 						return
 					case <-ticker.C:
+						// --- START OF FIX ---
+
+						// Add 1ms to the last timestamp to create an exclusive window.
+						// This prevents re-fetching the last log entry.
+						// We use RFC3339Nano to preserve precision.
+						nextGte := lastTimestamp.Add(1 * time.Millisecond)
+
 						// Create a new search for the time window since our last event
 						newSearch := *s.search
-						newSearch.Range.Gte.S(lastTimestamp.Format(time.RFC3339)) // From last event
-						newSearch.Range.Lte.S("now")                              // To now
-						newSearch.Range.Last.U()                                  // Unset "last" to prefer Gte/Lte
-						newSearch.PageToken.U()                                   // Not paginating
-						newSearch.Refresh.Follow.U()                              // Unset follow to prevent recursion
+						newSearch.Range.Gte.S(nextGte.Format(time.RFC3339Nano)) // <-- FIXED: Use exclusive time
+						newSearch.Range.Lte.S("now")                            // To now
+						newSearch.Range.Last.U()                                // Unset "last" to prefer Gte/Lte
+						newSearch.PageToken.U()                                 // Not paginating
+						newSearch.Refresh.Follow.U()                            // Unset follow to prevent recursion in Get()
+
+						// --- END OF FIX ---
 
 						newResult, err := s.logClient.Get(context, &newSearch)
 						if err != nil {
@@ -78,6 +88,7 @@ func (s SplunkLogSearchResult) GetEntries(context context.Context) ([]client.Log
 						}
 
 						if len(newEntries) > 0 {
+							// Update to the newest timestamp from this batch
 							lastTimestamp = newEntries[len(newEntries)-1].Timestamp
 							logEntriesChan <- newEntries
 						}
