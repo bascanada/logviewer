@@ -66,8 +66,6 @@ contexts:
     client: local-splunk
     searchInherit: []
     search:
-      fields:
-        sourcetype: httpevent
       options:
         index: main
 

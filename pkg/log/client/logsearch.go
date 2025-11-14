@@ -62,6 +62,9 @@ type LogSearch struct {
 	// Variables defines the dynamic inputs for this search context.
 	// The map key is the variable name (e.g., "sessionId").
 	Variables map[string]VariableDefinition `json:"variables,omitempty"`
+
+	// Follow indicates if the search should continuously follow logs.
+	Follow bool `json:"follow,omitempty" yaml:"follow,omitempty"`
 }
 
 func (lr *LogSearch) MergeInto(logSeach *LogSearch) error {

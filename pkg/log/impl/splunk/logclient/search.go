@@ -11,10 +11,12 @@ import (
 	"github.com/bascanada/logviewer/pkg/ty"
 )
 
+
 type SplunkLogSearchResult struct {
 	logClient *SplunkLogSearchClient
 	sid       string
 	search    *client.LogSearch
+	isFollow  bool
 
 	results []restapi.SearchResultsResponse
 
@@ -27,8 +29,46 @@ func (s SplunkLogSearchResult) GetSearch() *client.LogSearch {
 	return s.search
 }
 
-func (s SplunkLogSearchResult) GetEntries(context context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
-	return s.parseResults(&s.results[0]), nil, nil
+func (s *SplunkLogSearchResult) Close() error {
+	if s.isFollow {
+		log.Printf("closing splunk search job %s", s.sid)
+		return s.logClient.client.CancelSearchJob(s.sid)
+	}
+	return nil
+}
+
+func (s SplunkLogSearchResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
+	if !s.isFollow {
+		return s.parseResults(&s.results[0]), nil, nil
+	}
+
+	entryChan := make(chan []client.LogEntry)
+	go func() {
+		defer close(entryChan)
+		offset := 0
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(2 * time.Second):
+				log.Printf("polling for new events for job %s", s.sid)
+				// for a follow, we get all the events every time
+				results, err := s.logClient.client.GetSearchResult(s.sid, offset, 0)
+				if err != nil {
+					log.Printf("error while polling for events: %s", err)
+					continue
+				}
+
+				if len(results.Results) > 0 {
+					entries := s.parseResults(&results)
+					entryChan <- entries
+					offset += len(entries)
+				}
+			}
+		}
+	}()
+
+	return nil, entryChan, nil
 }
 
 func (s SplunkLogSearchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
@@ -50,7 +90,7 @@ func (s SplunkLogSearchResult) GetFields(ctx context.Context) (ty.UniSet[string]
 }
 
 func (s SplunkLogSearchResult) GetPaginationInfo() *client.PaginationInfo {
-	if !s.search.Size.Set {
+	if s.isFollow || !s.search.Size.Set {
 		return nil
 	}
 
@@ -71,6 +111,7 @@ func (s SplunkLogSearchResult) GetPaginationInfo() *client.PaginationInfo {
 		NextPageToken: strconv.Itoa(currentOffset + numResults),
 	}
 }
+
 
 func (s SplunkLogSearchResult) parseResults(searchResponse *restapi.SearchResultsResponse) []client.LogEntry {
 

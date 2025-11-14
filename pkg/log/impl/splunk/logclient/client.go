@@ -56,9 +56,18 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 		return nil, err
 	}
 
-	searchJobResponse, err := s.client.CreateSearchJob(searchRequest["search"], searchRequest["earliest_time"], searchRequest["latest_time"], s.options.Headers, s.options.SearchBody)
+	searchJobResponse, err := s.client.CreateSearchJob(searchRequest["search"], searchRequest["earliest_time"], searchRequest["latest_time"], search.Follow, s.options.Headers, s.options.SearchBody)
 	if err != nil {
 		return nil, err
+	}
+
+	if search.Follow {
+		return SplunkLogSearchResult{
+			logClient: &s,
+			search:    search,
+			sid:       searchJobResponse.Sid,
+			isFollow:  true,
+		}, nil
 	}
 
 	// configure polling
@@ -77,11 +86,15 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 	// wait until job is done or retries exhausted
 	for {
 		if tryCount >= maxRetries {
+			// When the job is done, we should cancel it
+			defer s.client.CancelSearchJob(searchJobResponse.Sid)
 			return nil, errors.New("number of retry for splunk job failed")
 		}
 
 		select {
 		case <-ctx.Done():
+			// When the job is done, we should cancel it
+			defer s.client.CancelSearchJob(searchJobResponse.Sid)
 			return nil, ctx.Err()
 		case <-time.After(pollInterval):
 		}
@@ -101,6 +114,8 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 		}
 
 		if isDone {
+			// When the job is done, we should cancel it
+			defer s.client.CancelSearchJob(searchJobResponse.Sid)
 			break
 		}
 
@@ -125,6 +140,7 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 	return SplunkLogSearchResult{
 		logClient:     &s,
 		search:        search,
+		sid:           searchJobResponse.Sid,
 		results:       []restapi.SearchResultsResponse{firstResult},
 		CurrentOffset: offset,
 	}, nil
