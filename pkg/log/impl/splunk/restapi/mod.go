@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 
 	"github.com/bascanada/logviewer/pkg/http"
 	"github.com/bascanada/logviewer/pkg/ty"
@@ -80,12 +81,12 @@ func buildSearchJobData(searchQuery, earliestTime, latestTime string, isFollow b
 		// small window.
 		if earliestTime == "" {
 			earliestTime = "rt-5m"
-		} else if earliestTime[0] != 'r' {
+		} else if !strings.HasPrefix(earliestTime, "rt") {
 			earliestTime = "rt" + earliestTime
 		}
 		if latestTime == "" {
 			latestTime = "rt"
-		} else if latestTime[0] != 'r' {
+		} else if !strings.HasPrefix(latestTime, "rt") {
 			latestTime = "rt" + latestTime
 		}
 	} else {

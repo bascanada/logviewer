@@ -166,3 +166,34 @@ func TestSplunkLogSearchResult_GetPaginationInfo(t *testing.T) {
 		assert.Equal(t, "10", paginationInfo.NextPageToken)
 	})
 }
+
+func TestSplunkLogSearchClient_Get_Follow(t *testing.T) {
+	defer gock.Off()
+
+	gock.New("http://splunk.com:8080").
+		Post("/search/jobs").
+		MatchType("application/x-www-form-urlencoded").
+		BodyString("search_mode=realtime").
+		Reply(200).
+		JSON(ty.MI{"sid": "my-follow-sid"})
+
+	logClient, err := GetClient(SplunkLogSearchClientOptions{
+		Url: "http://splunk.com:8080",
+	})
+	assert.NoError(t, err)
+
+	logSearch := client.LogSearch{
+		Follow: true,
+	}
+
+	result, err := logClient.Get(context.Background(), &logSearch)
+	assert.NoError(t, err)
+
+	splunkResult, ok := result.(SplunkLogSearchResult)
+	assert.True(t, ok)
+
+	assert.True(t, splunkResult.isFollow)
+	assert.Equal(t, "my-follow-sid", splunkResult.sid)
+
+	assert.True(t, gock.IsDone())
+}

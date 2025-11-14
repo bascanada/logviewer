@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -79,7 +78,8 @@ func (c HttpClient) post(path string, headers ty.MS, buf *bytes.Buffer, response
 
 	if auth != nil {
 		if err = auth.Login(req); err != nil {
-			log.Printf("%s", err.Error())
+			log.Printf("authentication setup failed: %s", err.Error())
+			return err
 		}
 	}
 
@@ -106,7 +106,7 @@ func (c HttpClient) post(path string, headers ty.MS, buf *bytes.Buffer, response
 
 	if res.StatusCode >= 400 {
 		log.Printf("error %d  %s"+ty.LB, res.StatusCode, string(resBody))
-		return errors.New(string(resBody))
+		return fmt.Errorf("request failed with status code %d: %s", res.StatusCode, string(resBody))
 	}
 
 	return json.Unmarshal(resBody, &responseData)
@@ -177,15 +177,10 @@ func (c HttpClient) Get(path string, queryParams ty.MS, headers ty.MS, body inte
 		return err
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-
 	if auth != nil {
 		if err = auth.Login(req); err != nil {
-			log.Printf("%s", err.Error())
+			log.Printf("authentication setup failed: %s", err.Error())
+			return err
 		}
 	}
 
@@ -201,6 +196,11 @@ func (c HttpClient) Get(path string, queryParams ty.MS, headers ty.MS, body inte
 	resBody, readErr := io.ReadAll(res.Body)
 	if readErr != nil {
 		return readErr
+	}
+
+	if res.StatusCode >= 400 {
+		log.Printf("error %d  %s"+ty.LB, res.StatusCode, string(resBody))
+		return fmt.Errorf("request failed with status code %d: %s", res.StatusCode, string(resBody))
 	}
 
 	// Log a truncated GET response body for debugging (avoid huge output)
@@ -238,7 +238,8 @@ func (c HttpClient) Delete(path string, headers ty.MS, auth Auth) error {
 
 	if auth != nil {
 		if err = auth.Login(req); err != nil {
-			log.Printf("%s", err.Error())
+			log.Printf("authentication setup failed: %s", err.Error())
+			return err
 		}
 	}
 
@@ -263,7 +264,7 @@ func (c HttpClient) Delete(path string, headers ty.MS, auth Auth) error {
 
 	if res.StatusCode >= 400 {
 		log.Printf("error %d  %s"+ty.LB, res.StatusCode, string(resBody))
-		return errors.New(string(resBody))
+		return fmt.Errorf("request failed with status code %d: %s", res.StatusCode, string(resBody))
 	}
 
 	return nil

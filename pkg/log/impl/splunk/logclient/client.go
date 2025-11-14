@@ -29,8 +29,9 @@ type SplunkLogSearchClientOptions struct {
 	Headers    ty.MS             `json:"headers" yaml:"headers"`
 	SearchBody ty.MS             `json:"searchBody" yaml:"searchBody"`
 	// Polling configuration
-	PollIntervalSeconds int `json:"pollIntervalSeconds" yaml:"pollIntervalSeconds"`
-	MaxRetries          int `json:"maxRetries" yaml:"maxRetries"`
+	PollIntervalSeconds       int `json:"pollIntervalSeconds" yaml:"pollIntervalSeconds"`
+	FollowPollIntervalSeconds int `json:"followPollIntervalSeconds" yaml:"followPollIntervalSeconds"`
+	MaxRetries                int `json:"maxRetries" yaml:"maxRetries"`
 }
 
 type SplunkLogSearchClient struct {

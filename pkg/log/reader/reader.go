@@ -96,7 +96,7 @@ func (lr *ReaderLogResult) loadEntries() bool {
 
 func (lr ReaderLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
 
-	if !lr.search.Refresh.Follow.Value {
+	if !lr.search.Follow {
 		lr.loadEntries()
 		lr.closer.Close()
 		return lr.entries, nil, nil

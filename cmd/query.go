@@ -135,7 +135,7 @@ func resolveSearch() (client.LogSearchResult, error) {
 		searchRequest.PrinterOptions.Template.S(template)
 	}
 
-	searchRequest.Refresh.Follow.S(refresh)
+	searchRequest.Follow = refresh
 	searchRequest.Follow = refresh
 
 	// Centralized config handling:

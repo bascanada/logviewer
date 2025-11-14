@@ -18,7 +18,6 @@ type SearchRange struct {
 }
 
 type RefreshOptions struct {
-	Follow   ty.Opt[bool]   `json:"follow,omitempty" yaml:"follow,omitempty"`
 	Duration ty.Opt[string] `json:"duration,omitempty" yaml:"duration,omitempty"`
 }
 

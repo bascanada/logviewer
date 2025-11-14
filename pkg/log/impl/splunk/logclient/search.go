@@ -46,11 +46,17 @@ func (s SplunkLogSearchResult) GetEntries(ctx context.Context) ([]client.LogEntr
 	go func() {
 		defer close(entryChan)
 		offset := 0
+		// set polling interval
+		pollInterval := 2 * time.Second
+		if s.logClient.options.FollowPollIntervalSeconds > 0 {
+			pollInterval = time.Duration(s.logClient.options.FollowPollIntervalSeconds) * time.Second
+		}
+
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(2 * time.Second):
+			case <-time.After(pollInterval):
 				log.Printf("polling for new events for job %s", s.sid)
 				// for a follow, we get all the events every time
 				results, err := s.logClient.client.GetSearchResult(s.sid, offset, 0)
