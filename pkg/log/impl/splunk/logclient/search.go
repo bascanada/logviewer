@@ -160,7 +160,8 @@ func (s SplunkLogSearchResult) GetPaginationInfo() *client.PaginationInfo {
 
 func (s SplunkLogSearchResult) parseResults(searchResponse *restapi.SearchResultsResponse) []client.LogEntry {
 
-	entries := make([]client.LogEntry, len(searchResponse.Results))
+	n := len(searchResponse.Results)
+	entries := make([]client.LogEntry, n)
 
 	for i, result := range searchResponse.Results {
 		timestamp, err := time.Parse(time.RFC3339, result.GetString("_time"))
@@ -168,18 +169,25 @@ func (s SplunkLogSearchResult) parseResults(searchResponse *restapi.SearchResult
 			log.Println("warning failed to parsed timestamp " + result.GetString("_time"))
 		}
 
-		entries[i].Message = result.GetString("_raw")
-		entries[i].Timestamp = timestamp
-		entries[i].Level = ""
-		entries[i].Fields = ty.MI{}
+		// Create the LogEntry struct first
+		entry := client.LogEntry{
+			Message:   result.GetString("_raw"),
+			Timestamp: timestamp,
+			Level:     "",
+			Fields:    ty.MI{},
+		}
 
 		for k, v := range result {
 			if k[0] != '_' {
-				entries[i].Fields[k] = v
+				entry.Fields[k] = v
 			}
 		}
+
+		// FIX: Splunk's results are newest-first (i=0 is newest).
+		// We place our newest item (i=0) at the end of our slice (index n-1-i)
+		// so the final 'entries' slice is oldest-first.
+		entries[n-1-i] = entry
 	}
 
 	return entries
-
 }

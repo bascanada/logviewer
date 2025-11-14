@@ -40,11 +40,11 @@ func TestSplunkLogClient(t *testing.T) {
 			"results": []ty.MS{
 				{
 					"_raw":             "mylogentry",
-					"_subsecond":       ".681",
-					"_time":            "2024-06-21T08:56:05.681-07:00",
+					"_subsecond":       ".682",
+					"_time":            "2024-06-21T08:56:05.682-07:00",
 					"application_name": "wq.services.pet",
 					"cat":              "BusinessExceptionHandler",
-					"handler":          "CreatePet",
+					"handler":          "DeletePet",
 				},
 				{
 					"_raw":             "mylogentry",
@@ -52,7 +52,7 @@ func TestSplunkLogClient(t *testing.T) {
 					"_time":            "2024-06-21T08:56:05.681-07:00",
 					"application_name": "wq.services.pet",
 					"cat":              "BusinessExceptionHandler",
-					"handler":          "DeletePet",
+					"handler":          "CreatePet",
 				},
 			},
 		})
@@ -92,7 +92,7 @@ func TestSplunkLogClient(t *testing.T) {
 
 	logTimestamp, _ := time.Parse(time.RFC3339, "2024-06-21T08:56:05.681-07:00")
 
-	assert.Equal(t, []string{"CreatePet", "DeletePet"}, fields["handler"])
+	assert.Equal(t, []string{"DeletePet", "CreatePet"}, fields["handler"])
 	assert.Equal(t, "mylogentry", logEntry[0].Message)
 	assert.Equal(t, "CreatePet", logEntry[0].Fields.GetString("handler"))
 	assert.Equal(t, logTimestamp, logEntry[0].Timestamp)
