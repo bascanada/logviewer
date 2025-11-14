@@ -75,36 +75,38 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 	tryCount := 0
 
 	// wait until job is done or retries exhausted
-	for {
-		if tryCount >= maxRetries {
-			return nil, errors.New("number of retry for splunk job failed")
+	if !search.Refresh.Follow.Value {
+		for {
+			if tryCount >= maxRetries {
+				return nil, errors.New("number of retry for splunk job failed")
+			}
+
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(pollInterval):
+			}
+			log.Printf("waiting for splunk job %s to complete (try %d/%d)", searchJobResponse.Sid, tryCount+1, maxRetries)
+
+			status, err := s.client.GetSearchStatus(searchJobResponse.Sid)
+
+			if err != nil {
+				return nil, err
+			}
+
+			// Guard against responses with no entry
+			if len(status.Entry) > 0 {
+				isDone = status.Entry[0].Content.IsDone
+			} else {
+				isDone = false
+			}
+
+			if isDone {
+				break
+			}
+
+			tryCount += 1
 		}
-
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(pollInterval):
-		}
-		log.Printf("waiting for splunk job %s to complete (try %d/%d)", searchJobResponse.Sid, tryCount+1, maxRetries)
-
-		status, err := s.client.GetSearchStatus(searchJobResponse.Sid)
-
-		if err != nil {
-			return nil, err
-		}
-
-		// Guard against responses with no entry
-		if len(status.Entry) > 0 {
-			isDone = status.Entry[0].Content.IsDone
-		} else {
-			isDone = false
-		}
-
-		if isDone {
-			break
-		}
-
-		tryCount += 1
 	}
 
 	offset := 0
@@ -124,6 +126,7 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 
 	return SplunkLogSearchResult{
 		logClient:     &s,
+		sid:           searchJobResponse.Sid,
 		search:        search,
 		results:       []restapi.SearchResultsResponse{firstResult},
 		CurrentOffset: offset,

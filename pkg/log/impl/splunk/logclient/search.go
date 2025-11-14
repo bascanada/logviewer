@@ -28,6 +28,34 @@ func (s SplunkLogSearchResult) GetSearch() *client.LogSearch {
 }
 
 func (s SplunkLogSearchResult) GetEntries(context context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
+	if s.search.Refresh.Follow.Value {
+		logEntriesChan := make(chan []client.LogEntry, 1)
+		go func() {
+			defer close(logEntriesChan)
+			offset := s.CurrentOffset + len(s.results[0].Results)
+			pollInterval := 5 * time.Second
+			if s.logClient.options.PollIntervalSeconds > 0 {
+				pollInterval = time.Duration(s.logClient.options.PollIntervalSeconds) * time.Second
+			}
+			for {
+				select {
+				case <-context.Done():
+					return
+				case <-time.After(pollInterval):
+					results, err := s.logClient.client.GetSearchResult(s.sid, offset, 0)
+					if err != nil {
+						log.Printf("error fetching splunk results: %v", err)
+						continue
+					}
+					if len(results.Results) > 0 {
+						logEntriesChan <- s.parseResults(&results)
+						offset += len(results.Results)
+					}
+				}
+			}
+		}()
+		return s.parseResults(&s.results[0]), logEntriesChan, nil
+	}
 	return s.parseResults(&s.results[0]), nil, nil
 }
 

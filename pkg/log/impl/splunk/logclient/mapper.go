@@ -23,7 +23,18 @@ func getSearchRequest(logSearch *client.LogSearch) (ty.MS, error) {
 	// over explicit gte/lte. We translate it to an earliest_time of
 	// "-<last>" and latest_time of "now" which Splunk understands as a
 	// relative time window.
-	if logSearch.Range.Last.Value != "" {
+	if logSearch.Refresh.Follow.Value {
+		if logSearch.Range.Lte.Value != "" && logSearch.Range.Lte.Value != "now" {
+			return nil, fmt.Errorf("cannot use a historical time range with the follow flag")
+		}
+
+		if logSearch.Range.Last.Value != "" {
+			ms["earliest_time"] = "rt-" + logSearch.Range.Last.Value
+		} else {
+			ms["earliest_time"] = "rt"
+		}
+		ms["latest_time"] = "rt"
+	} else if logSearch.Range.Last.Value != "" {
 		ms["earliest_time"] = "-" + logSearch.Range.Last.Value
 		ms["latest_time"] = "now"
 	}
