@@ -34,7 +34,7 @@ func getSearchRequest(logSearch *client.LogSearch, usePollingFollow bool) (ty.MS
 			ms["earliest_time"] = "rt"
 		}
 		ms["latest_time"] = "rt"
-	} else if logSearch.Range.Last.Value != "" {
+	} else if logSearch.Range.Last.Set && logSearch.Range.Last.Value != "" {
 		ms["earliest_time"] = "-" + logSearch.Range.Last.Value
 		ms["latest_time"] = "now"
 	}

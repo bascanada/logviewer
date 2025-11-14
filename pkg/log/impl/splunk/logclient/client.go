@@ -44,12 +44,16 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 
 	// initiate the things and wait for query to be done
 
-	if s.options.Headers == nil {
-		s.options.Headers = ty.MS{}
+	// Make a copy of headers and searchBody to avoid race conditions with
+	// concurrent requests, since the HTTP client may modify them.
+	headers := make(ty.MS, len(s.options.Headers))
+	for k, v := range s.options.Headers {
+		headers[k] = v
 	}
 
-	if s.options.SearchBody == nil {
-		s.options.SearchBody = ty.MS{}
+	searchBody := make(ty.MS, len(s.options.SearchBody))
+	for k, v := range s.options.SearchBody {
+		searchBody[k] = v
 	}
 
 	searchRequest, err := getSearchRequest(search, s.options.UsePollingFollow)
@@ -57,7 +61,7 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 		return nil, err
 	}
 
-	searchJobResponse, err := s.client.CreateSearchJob(searchRequest["search"], searchRequest["earliest_time"], searchRequest["latest_time"], s.options.Headers, s.options.SearchBody)
+	searchJobResponse, err := s.client.CreateSearchJob(searchRequest["search"], searchRequest["earliest_time"], searchRequest["latest_time"], headers, searchBody)
 	if err != nil {
 		return nil, err
 	}
