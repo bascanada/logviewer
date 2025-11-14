@@ -99,6 +99,80 @@ func TestSplunkLogClient(t *testing.T) {
 
 }
 
+func TestSplunkLogClient_PollingFollow(t *testing.T) {
+	defer gock.Off()
+
+	// Initial search
+	gock.New("http://splunk.com:8080").
+		Post("/search/jobs").
+		Reply(200).
+		JSON(ty.MI{"Sid": "mycid1"})
+
+	gock.New("http://splunk.com:8080").
+		Get("/search/jobs/mycid1").
+		Reply(200).
+		JSON(ty.MI{
+			"entry": []ty.MI{
+				{"content": ty.MI{"isDone": true}},
+			},
+		})
+
+	gock.New("http://splunk.com:8080").
+		Get("/search/jobs/mycid1/events").
+		Reply(200).
+		JSON(ty.MI{
+			"results": []ty.MS{
+				{"_raw": "initial log", "_time": "2024-06-21T08:56:05.681-07:00"},
+			},
+		})
+
+	// Polling search
+	gock.New("http://splunk.com:8080").
+		Post("/search/jobs").
+		Reply(200).
+		JSON(ty.MI{"Sid": "mycid2"})
+
+	gock.New("http://splunk.com:8080").
+		Get("/search/jobs/mycid2").
+		Reply(200).
+		JSON(ty.MI{
+			"entry": []ty.MI{
+				{"content": ty.MI{"isDone": true}},
+			},
+		})
+
+	gock.New("http://splunk.com:8080").
+		Get("/search/jobs/mycid2/events").
+		Reply(200).
+		JSON(ty.MI{
+			"results": []ty.MS{
+				{"_raw": "polled log", "_time": "2024-06-21T08:56:06.681-07:00"},
+			},
+		})
+
+	logClient, _ := GetClient(SplunkLogSearchClientOptions{
+		Url:              "http://splunk.com:8080",
+		UsePollingFollow: true,
+	})
+
+	logSearch := client.LogSearch{}
+	logSearch.Refresh.Follow.S(true)
+
+	result, _ := logClient.Get(context.Background(), &logSearch)
+	initialEntries, entriesChan, _ := result.GetEntries(context.Background())
+
+	assert.Equal(t, 1, len(initialEntries))
+	assert.Equal(t, "initial log", initialEntries[0].Message)
+
+	select {
+	case newEntries := <-entriesChan:
+		assert.Equal(t, 1, len(newEntries))
+		assert.Equal(t, "polled log", newEntries[0].Message)
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for polled logs")
+	}
+}
+
 func TestSplunkLogSearchResult_GetPaginationInfo(t *testing.T) {
 	t.Run("no size set, no pagination", func(t *testing.T) {
 		search := &client.LogSearch{}

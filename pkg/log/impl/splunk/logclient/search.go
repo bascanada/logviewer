@@ -28,35 +28,93 @@ func (s SplunkLogSearchResult) GetSearch() *client.LogSearch {
 }
 
 func (s SplunkLogSearchResult) GetEntries(context context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
+
+	initialEntries := s.parseResults(&s.results[0])
+
 	if s.search.Refresh.Follow.Value {
 		logEntriesChan := make(chan []client.LogEntry, 1)
-		go func() {
-			defer close(logEntriesChan)
-			offset := s.CurrentOffset + len(s.results[0].Results)
-			pollInterval := 5 * time.Second
-			if s.logClient.options.PollIntervalSeconds > 0 {
-				pollInterval = time.Duration(s.logClient.options.PollIntervalSeconds) * time.Second
-			}
-			for {
-				select {
-				case <-context.Done():
-					return
-				case <-time.After(pollInterval):
-					results, err := s.logClient.client.GetSearchResult(s.sid, offset, 0)
-					if err != nil {
-						log.Printf("error fetching splunk results: %v", err)
-						continue
-					}
-					if len(results.Results) > 0 {
-						logEntriesChan <- s.parseResults(&results)
-						offset += len(results.Results)
+
+		// Use the new polling strategy if configured
+		if s.logClient.options.UsePollingFollow {
+			go func() {
+				defer close(logEntriesChan)
+
+				pollInterval := 5 * time.Second
+				if s.logClient.options.PollIntervalSeconds > 0 {
+					pollInterval = time.Duration(s.logClient.options.PollIntervalSeconds) * time.Second
+				}
+
+				lastTimestamp := time.Now()
+				if len(initialEntries) > 0 {
+					lastTimestamp = initialEntries[len(initialEntries)-1].Timestamp
+				}
+
+				ticker := time.NewTicker(pollInterval)
+				defer ticker.Stop()
+
+				for {
+					select {
+					case <-context.Done():
+						return
+					case <-ticker.C:
+						// Create a new search for the time window since our last event
+						newSearch := *s.search
+						newSearch.Range.Gte.S(lastTimestamp.Format(time.RFC3339)) // From last event
+						newSearch.Range.Lte.S("now")                              // To now
+						newSearch.Range.Last.U()                                  // Unset "last" to prefer Gte/Lte
+						newSearch.PageToken.U()                                   // Not paginating
+						newSearch.Refresh.Follow.U()                              // Unset follow to prevent recursion
+
+						newResult, err := s.logClient.Get(context, &newSearch)
+						if err != nil {
+							log.Printf("error during splunk follow-poll: %v", err)
+							continue
+						}
+
+						newEntries, _, err := newResult.GetEntries(context)
+						if err != nil {
+							log.Printf("error getting entries from follow-poll: %v", err)
+							continue
+						}
+
+						if len(newEntries) > 0 {
+							lastTimestamp = newEntries[len(newEntries)-1].Timestamp
+							logEntriesChan <- newEntries
+						}
 					}
 				}
-			}
-		}()
-		return s.parseResults(&s.results[0]), logEntriesChan, nil
+			}()
+		} else {
+			// Use the original real-time (rt_search) polling logic
+			go func() {
+				defer close(logEntriesChan)
+				offset := s.CurrentOffset + len(s.results[0].Results)
+				pollInterval := 5 * time.Second
+				if s.logClient.options.PollIntervalSeconds > 0 {
+					pollInterval = time.Duration(s.logClient.options.PollIntervalSeconds) * time.Second
+				}
+				for {
+					select {
+					case <-context.Done():
+						return
+					case <-time.After(pollInterval):
+						results, err := s.logClient.client.GetSearchResult(s.sid, offset, 0)
+						if err != nil {
+							log.Printf("error fetching splunk results: %v", err)
+							continue
+						}
+						if len(results.Results) > 0 {
+							logEntriesChan <- s.parseResults(&results)
+							offset += len(results.Results)
+						}
+					}
+				}
+			}()
+		}
+
+		return initialEntries, logEntriesChan, nil
 	}
-	return s.parseResults(&s.results[0]), nil, nil
+	return initialEntries, nil, nil
 }
 
 func (s SplunkLogSearchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {

@@ -31,6 +31,7 @@ type SplunkLogSearchClientOptions struct {
 	// Polling configuration
 	PollIntervalSeconds int `json:"pollIntervalSeconds" yaml:"pollIntervalSeconds"`
 	MaxRetries          int `json:"maxRetries" yaml:"maxRetries"`
+	UsePollingFollow    bool `json:"usePollingFollow" yaml:"usePollingFollow"`
 }
 
 type SplunkLogSearchClient struct {
@@ -51,7 +52,7 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 		s.options.SearchBody = ty.MS{}
 	}
 
-	searchRequest, err := getSearchRequest(search)
+	searchRequest, err := getSearchRequest(search, s.options.UsePollingFollow)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +76,7 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 	tryCount := 0
 
 	// wait until job is done or retries exhausted
-	if !search.Refresh.Follow.Value {
+	if !search.Refresh.Follow.Value || s.options.UsePollingFollow {
 		for {
 			if tryCount >= maxRetries {
 				return nil, errors.New("number of retry for splunk job failed")

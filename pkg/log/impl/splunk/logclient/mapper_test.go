@@ -20,7 +20,7 @@ func TestSearchRequest(t *testing.T) {
 		logSearch.Range.Gte.S("24h@h")
 		logSearch.Range.Lte.S("now")
 
-		requestBodyFields, err := getSearchRequest(logSearch)
+		requestBodyFields, err := getSearchRequest(logSearch, false)
 		assert.NoError(t, err)
 		assert.Equal(t, `index=nonprod application_name="wq.services.pet"`, requestBodyFields["search"])
 	})
@@ -34,7 +34,7 @@ func TestSearchRequest(t *testing.T) {
 		logSearch.Range.Gte.S("24h@h")
 		logSearch.Range.Lte.S("now")
 
-		requestBodyFields, err := getSearchRequest(logSearch)
+		requestBodyFields, err := getSearchRequest(logSearch, false)
 		assert.NoError(t, err)
 		// should include index and quoted phrase after it
 		assert.Equal(t, `index=nonprod "error occurred"`, requestBodyFields["search"])
@@ -49,7 +49,7 @@ func TestSearchRequest(t *testing.T) {
 		logSearch.Range.Gte.S("24h@h")
 		logSearch.Range.Lte.S("now")
 
-		requestBodyFields, err := getSearchRequest(logSearch)
+		requestBodyFields, err := getSearchRequest(logSearch, false)
 		assert.NoError(t, err)
 		assert.Contains(t, requestBodyFields["search"], `index=nonprod`)
 		assert.Contains(t, requestBodyFields["search"], `application_name="wq.services.pet"`)
@@ -65,7 +65,7 @@ func TestSearchRequest(t *testing.T) {
 		logSearch.Range.Gte.S("24h@h")
 		logSearch.Range.Lte.S("now")
 
-		requestBodyFields, err := getSearchRequest(logSearch)
+		requestBodyFields, err := getSearchRequest(logSearch, false)
 		assert.NoError(t, err)
 		assert.Equal(t, `index=nonprod application_name="wq.services*"`, requestBodyFields["search"])
 	})
@@ -79,7 +79,7 @@ func TestSearchRequest(t *testing.T) {
 		logSearch.Range.Gte.S("24h@h")
 		logSearch.Range.Lte.S("now")
 
-		requestBodyFields, err := getSearchRequest(logSearch)
+		requestBodyFields, err := getSearchRequest(logSearch, false)
 		assert.NoError(t, err)
 		assert.Equal(t, `index=nonprod application_name="wq services*"`, requestBodyFields["search"])
 	})
@@ -93,7 +93,7 @@ func TestSearchRequest(t *testing.T) {
 		logSearch.Range.Gte.S("24h@h")
 		logSearch.Range.Lte.S("now")
 
-		requestBodyFields, err := getSearchRequest(logSearch)
+		requestBodyFields, err := getSearchRequest(logSearch, false)
 		assert.NoError(t, err)
 		assert.Equal(t, `index=nonprod trace_id=*`, requestBodyFields["search"])
 	})
@@ -107,7 +107,7 @@ func TestSearchRequest(t *testing.T) {
 		logSearch.Range.Gte.S("24h@h")
 		logSearch.Range.Lte.S("now")
 
-		requestBodyFields, err := getSearchRequest(logSearch)
+		requestBodyFields, err := getSearchRequest(logSearch, false)
 		assert.NoError(t, err)
 		assert.Equal(t, `index=nonprod | regex message="(error|fail)"`, requestBodyFields["search"])
 	})
@@ -131,7 +131,7 @@ func TestSearchRequest(t *testing.T) {
 		logSearch.Range.Gte.S("24h@h")
 		logSearch.Range.Lte.S("now")
 
-		requestBodyFields, err := getSearchRequest(logSearch)
+		requestBodyFields, err := getSearchRequest(logSearch, false)
 		assert.NoError(t, err)
 		assert.Contains(t, requestBodyFields["search"], `index=nonprod`)
 		assert.Contains(t, requestBodyFields["search"], `application_name="wq.services.pet*"`)
@@ -149,7 +149,7 @@ func TestSearchRequest(t *testing.T) {
 		logSearch.Range.Gte.S("24h@h")
 		logSearch.Range.Lte.S("now")
 
-		requestBodyFields, err := getSearchRequest(logSearch)
+		requestBodyFields, err := getSearchRequest(logSearch, false)
 		assert.NoError(t, err)
 		assert.Equal(t, `index=nonprod message="this is a test"`, requestBodyFields["search"])
 	})
@@ -163,7 +163,7 @@ func TestSearchRequest(t *testing.T) {
 		logSearch.Range.Gte.S("24h@h")
 		logSearch.Range.Lte.S("now")
 
-		requestBodyFields, err := getSearchRequest(logSearch)
+		requestBodyFields, err := getSearchRequest(logSearch, false)
 		assert.NoError(t, err)
 		assert.Equal(t, `index=nonprod message="this is a \"test\""`, requestBodyFields["search"])
 	})
@@ -176,7 +176,7 @@ func TestSearchRequest(t *testing.T) {
 		}
 		logSearch.Range.Last.S("1min")
 
-		requestBodyFields, err := getSearchRequest(logSearch)
+		requestBodyFields, err := getSearchRequest(logSearch, false)
 		assert.NoError(t, err)
 		assert.Equal(t, "-1min", requestBodyFields["earliest_time"])
 		assert.Equal(t, "now", requestBodyFields["latest_time"])

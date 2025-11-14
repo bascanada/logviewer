@@ -13,7 +13,7 @@ func escapeSplunkValue(value string) string {
 	return strings.ReplaceAll(value, "\"", "\\\"")
 }
 
-func getSearchRequest(logSearch *client.LogSearch) (ty.MS, error) {
+func getSearchRequest(logSearch *client.LogSearch, usePollingFollow bool) (ty.MS, error) {
 	ms := ty.MS{
 		"earliest_time": logSearch.Range.Gte.Value,
 		"latest_time":   logSearch.Range.Lte.Value,
@@ -23,7 +23,7 @@ func getSearchRequest(logSearch *client.LogSearch) (ty.MS, error) {
 	// over explicit gte/lte. We translate it to an earliest_time of
 	// "-<last>" and latest_time of "now" which Splunk understands as a
 	// relative time window.
-	if logSearch.Refresh.Follow.Value {
+	if logSearch.Refresh.Follow.Value && !usePollingFollow {
 		if logSearch.Range.Lte.Value != "" && logSearch.Range.Lte.Value != "now" {
 			return nil, fmt.Errorf("cannot use a historical time range with the follow flag")
 		}

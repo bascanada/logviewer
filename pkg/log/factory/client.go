@@ -104,10 +104,11 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 					authOptions.Header = ty.MI(authMap).GetMS("header")
 				}
 				vv, err := splunk.GetClient(splunk.SplunkLogSearchClientOptions{
-					Url:        v.Options.GetString("url"),
-					Auth:       authOptions,
-					Headers:    v.Options.GetMS("headers").ResolveVariables(),
-					SearchBody: v.Options.GetMS("searchBody").ResolveVariables(),
+					Url:              v.Options.GetString("url"),
+					Auth:             authOptions,
+					Headers:          v.Options.GetMS("headers").ResolveVariables(),
+					SearchBody:       v.Options.GetMS("searchBody").ResolveVariables(),
+					UsePollingFollow: v.Options.GetBool("usePollingFollow"), // <-- Add this line
 				})
 				if err != nil {
 					return nil, err
