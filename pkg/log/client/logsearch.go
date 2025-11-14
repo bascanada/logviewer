@@ -89,6 +89,7 @@ func (lr *LogSearch) MergeInto(logSeach *LogSearch) error {
 
 	lr.Size.Merge(&logSeach.Size)
 	lr.Refresh.Duration.Merge(&logSeach.Refresh.Duration)
+	lr.Refresh.Follow.Merge(&logSeach.Refresh.Follow)
 	lr.FieldExtraction.GroupRegex.Merge(&logSeach.FieldExtraction.GroupRegex)
 	lr.FieldExtraction.KvRegex.Merge(&logSeach.FieldExtraction.KvRegex)
 	lr.FieldExtraction.TimestampRegex.Merge(&logSeach.FieldExtraction.TimestampRegex)
