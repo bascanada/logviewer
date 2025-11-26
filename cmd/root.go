@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/rivo/tview"
 	"github.com/spf13/cobra"
 )
 
@@ -18,11 +17,7 @@ var rootCmd = &cobra.Command{
 	Long:   ``,
 	PreRun: onCommandStart,
 	Run: func(cmd *cobra.Command, args []string) {
-
-		box := tview.NewBox().SetBorder(true).SetTitle("logviewer")
-		if err := tview.NewApplication().SetRoot(box, true).Run(); err != nil {
-			panic(err)
-		}
+		cmd.Help()
 	},
 }
 
