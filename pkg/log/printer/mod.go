@@ -66,6 +66,15 @@ func WrapIoWritter(ctx context.Context, result client.LogSearchResult, writer io
 		}()
 	}
 
+	// new goroutine to listen for errors
+	if errChan := result.Err(); errChan != nil {
+		go func() {
+			for err := range errChan {
+				fmt.Fprintf(os.Stderr, "an error occurred: %v\n", err)
+			}
+		}()
+	}
+
 	return newEntriesChannel != nil, nil
 }
 

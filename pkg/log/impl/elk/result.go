@@ -138,6 +138,10 @@ func (sr ElkSearchResult) GetPaginationInfo() *client.PaginationInfo {
 	}
 }
 
+func (sr ElkSearchResult) Err() <-chan error {
+	return nil
+}
+
 func (sr ElkSearchResult) onChange(ctx context.Context) (chan []client.LogEntry, error) {
 	if sr.search.Refresh.Duration.Value == "" {
 		return nil, nil

@@ -22,6 +22,7 @@ type LogSearchResult interface {
 	GetEntries(context context.Context) ([]LogEntry, chan []LogEntry, error)
 	GetFields(context context.Context) (ty.UniSet[string], chan ty.UniSet[string], error)
 	GetPaginationInfo() *PaginationInfo
+	Err() <-chan error
 }
 
 type PaginationInfo struct {

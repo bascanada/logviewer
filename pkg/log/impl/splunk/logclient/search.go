@@ -97,3 +97,7 @@ func (s SplunkLogSearchResult) parseResults(searchResponse *restapi.SearchResult
 	return entries
 
 }
+
+func (s SplunkLogSearchResult) Err() <-chan error {
+	return nil
+}

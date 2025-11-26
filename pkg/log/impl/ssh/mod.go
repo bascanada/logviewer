@@ -55,7 +55,7 @@ func (lc sshLogClient) Get(ctx context.Context, search *client.LogSearch) (clien
 	cmd, err := getCommand(search)
 	if err != nil {
 		if err.Error() == "cmd is missing for sshLogClient" {
-			panic(err)
+			return nil, fmt.Errorf("configuration error: %w", err)
 		}
 		return nil, err
 	}
@@ -91,20 +91,24 @@ func (lc sshLogClient) Get(ctx context.Context, search *client.LogSearch) (clien
 		return nil, err
 	}
 
+	errChan := make(chan error, 1)
 	go func() {
-		_, err = session.Output(cmd)
+		defer close(errChan)
+		w, err := session.Output(cmd)
 		if err != nil {
-
 			by, _ := ioutil.ReadAll(errOut)
-			fmt.Println("Error : " + string(by))
-
-			panic(err)
+			errChan <- fmt.Errorf("ssh command failed: %w (remote output: %s) (output: %s)", err, string(by), string(w))
 		}
 	}()
 
 	scanner := bufio.NewScanner(out)
 
-	return reader.GetLogResult(search, scanner, session)
+	result, err := reader.GetLogResult(search, scanner, session)
+	if err != nil {
+		return nil, err
+	}
+	result.ErrChan = errChan
+	return result, nil
 }
 
 func GetLogClient(options SSHLogClientOptions) (client.LogClient, error) {

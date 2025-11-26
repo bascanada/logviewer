@@ -33,6 +33,10 @@ func (m *MockLogSearchResult) GetPaginationInfo() *client.PaginationInfo {
 	return nil
 }
 
+func (m *MockLogSearchResult) Err() <-chan error {
+	return nil
+}
+
 func TestMessageRegex(t *testing.T) {
 	tests := []struct {
 		name           string
