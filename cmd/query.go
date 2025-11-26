@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -414,6 +415,34 @@ var queryLogCommand = &cobra.Command{
 
 		if paginationInfo := searchResult.GetPaginationInfo(); paginationInfo != nil && paginationInfo.HasMore {
 			fmt.Fprintf(os.Stderr, "More results available. To fetch the next page, run the same command with --page-token \"%s\"\n", paginationInfo.NextPageToken)
+		}
+
+		if jsonOutput {
+			// Machine Mode (NDJSON for lnav/jq)
+			enc := json.NewEncoder(os.Stdout)
+			entries, c, err := searchResult.GetEntries(context.Background())
+
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+
+			// Helper to encode a slice of entries
+			printJSON := func(es []client.LogEntry) {
+				for _, e := range es {
+					enc.Encode(e)
+				}
+			}
+
+			printJSON(entries)
+
+			// Handle live/follow mode
+			if c != nil {
+				for newEntries := range c {
+					printJSON(newEntries)
+				}
+			}
+			return // End execution for this mode
 		}
 
 		outputter := printer.PrintPrinter{}
