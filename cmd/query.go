@@ -433,7 +433,7 @@ var queryCommand = &cobra.Command{
 	Short:  "Query a login system for logs and available fields",
 	PreRun: onCommandStart,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Please use 'logviewer query log' to stream logs or 'logviewer query field' to inspect fields.")
+		cmd.Println("Please use 'logviewer query log' to stream logs or 'logviewer query field' to inspect fields.")
 		cmd.Help()
 	},
 }
