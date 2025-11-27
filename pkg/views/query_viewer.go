@@ -32,6 +32,12 @@ func (tv tviewWrapper) Display(ctx context.Context, result client.LogSearchResul
 		tv.app.QueueUpdateDraw(func() {
 			tv.tv.ScrollToEnd()
 		})
+	}, func(err error) {
+		// In TUI mode, we don't want to exit on error, just display it.
+		// A more sophisticated implementation could show this in a modal.
+		tv.app.QueueUpdateDraw(func() {
+			tv.tv.Write([]byte("[red]Error: " + err.Error() + "[-]\n"))
+		})
 	})
 
 	return nil

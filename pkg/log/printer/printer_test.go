@@ -80,7 +80,7 @@ func TestMessageRegex(t *testing.T) {
 			}
 
 			var buf bytes.Buffer
-			_, err := WrapIoWritter(context.Background(), result, &buf, func() {})
+			_, err := WrapIoWritter(context.Background(), result, &buf, func() {}, func(err error) {})
 
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expectedOutput, buf.String())

@@ -36,13 +36,15 @@ type ElkSearchResult struct {
 	// store extracted fields
 	// parsed offset from the incoming page token (set by client.Get)
 	CurrentOffset int
+	ErrChan       chan error
 }
 
 func GetSearchResult(client client.LogClient, search *client.LogSearch, hits Hits) ElkSearchResult {
 	return ElkSearchResult{
-		client: client,
-		search: search,
-		result: hits,
+		client:  client,
+		search:  search,
+		result:  hits,
+		ErrChan: make(chan error, 1),
 	}
 }
 
@@ -139,7 +141,7 @@ func (sr ElkSearchResult) GetPaginationInfo() *client.PaginationInfo {
 }
 
 func (sr ElkSearchResult) Err() <-chan error {
-	return nil
+	return sr.ErrChan
 }
 
 func (sr ElkSearchResult) onChange(ctx context.Context) (chan []client.LogEntry, error) {
@@ -160,7 +162,7 @@ func (sr ElkSearchResult) onChange(ctx context.Context) (chan []client.LogEntry,
 				{
 					date, err := time.Parse(time.RFC3339, sr.search.Range.Lte.Value)
 					if err != nil {
-						log.Println("error parsing Gte.Value " + err.Error())
+						sr.ErrChan <- fmt.Errorf("error parsing Gte.Value: %w", err)
 						continue
 					}
 					date = date.Add(time.Second * 1)
@@ -168,7 +170,7 @@ func (sr ElkSearchResult) onChange(ctx context.Context) (chan []client.LogEntry,
 					sr.search.Range.Lte.Value = time.Now().Format(time.RFC3339)
 					result, err1 := sr.client.Get(ctx, sr.search)
 					if err1 != nil {
-						fmt.Println("failed to get new logs " + err1.Error())
+						sr.ErrChan <- fmt.Errorf("failed to get new logs: %w", err1)
 					}
 					c <- result.(ElkSearchResult).parseResults()
 				}

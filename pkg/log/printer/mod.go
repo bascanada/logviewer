@@ -15,7 +15,7 @@ type LogPrinter interface {
 	Display(ctx context.Context, result client.LogSearchResult) error
 }
 
-func WrapIoWritter(ctx context.Context, result client.LogSearchResult, writer io.Writer, update func()) (bool, error) {
+func WrapIoWritter(ctx context.Context, result client.LogSearchResult, writer io.Writer, update func(), onError func(error)) (bool, error) {
 
 	printerOptions := result.GetSearch().PrinterOptions
 
@@ -70,7 +70,7 @@ func WrapIoWritter(ctx context.Context, result client.LogSearchResult, writer io
 	if errChan := result.Err(); errChan != nil {
 		go func() {
 			for err := range errChan {
-				fmt.Fprintf(os.Stderr, "an error occurred: %v\n", err)
+				onError(err)
 			}
 		}()
 	}

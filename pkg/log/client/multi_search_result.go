@@ -123,7 +123,8 @@ func (m *MultiLogSearchResult) GetPaginationInfo() *PaginationInfo {
 // channels are closed.
 func (m *MultiLogSearchResult) Err() <-chan error {
 	var wg sync.WaitGroup
-	mergedErrChan := make(chan error)
+	// a buffer size equal to the number of results
+	mergedErrChan := make(chan error, len(m.Results))
 
 	for _, r := range m.Results {
 		if r.Err() == nil {

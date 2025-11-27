@@ -91,13 +91,16 @@ func (lc sshLogClient) Get(ctx context.Context, search *client.LogSearch) (clien
 		return nil, err
 	}
 
+	if err := session.Start(cmd); err != nil {
+		return nil, fmt.Errorf("failed to start ssh command: %w", err)
+	}
+
 	errChan := make(chan error, 1)
 	go func() {
 		defer close(errChan)
-		w, err := session.Output(cmd)
-		if err != nil {
+		if err := session.Wait(); err != nil {
 			by, _ := ioutil.ReadAll(errOut)
-			errChan <- fmt.Errorf("ssh command failed: %w (remote output: %s) (output: %s)", err, string(by), string(w))
+			errChan <- fmt.Errorf("ssh command failed: %w (remote output: %s)", err, string(by))
 		}
 	}()
 

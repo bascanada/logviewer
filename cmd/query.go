@@ -417,7 +417,11 @@ var queryLogCommand = &cobra.Command{
 		}
 
 		outputter := printer.PrintPrinter{}
-		continous, err := outputter.Display(context.Background(), searchResult)
+		onError := func(err error) {
+			fmt.Fprintf(os.Stderr, "Error displaying logs: %v\n", err)
+			os.Exit(1)
+		}
+		continous, err := outputter.Display(context.Background(), searchResult, onError)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error displaying logs: %v\n", err)
 			os.Exit(1)
