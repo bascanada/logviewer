@@ -22,7 +22,6 @@ import (
 	"github.com/bascanada/logviewer/pkg/log/impl/ssh"
 	"github.com/bascanada/logviewer/pkg/log/printer"
 	"github.com/bascanada/logviewer/pkg/ty"
-	"github.com/bascanada/logviewer/pkg/views"
 
 	"github.com/spf13/cobra"
 )
@@ -434,15 +433,7 @@ var queryCommand = &cobra.Command{
 	Short:  "Query a login system for logs and available fields",
 	PreRun: onCommandStart,
 	Run: func(cmd *cobra.Command, args []string) {
-		cfg, err := config.LoadContextConfig(configPath)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "failed to load config:", err)
-			os.Exit(1)
-		}
-
-		if err := views.RunQueryViewApp(*cfg, contextIds); err != nil {
-			fmt.Fprintln(os.Stderr, "view error:", err)
-			os.Exit(1)
-		}
+		cmd.Println("Please use 'logviewer query log' to stream logs or 'logviewer query field' to inspect fields.")
+		cmd.Help()
 	},
 }
