@@ -597,3 +597,7 @@ make integration/logs
 
 # Now you can use the default config to query the instance in docker
 go run . query  -c ./config.yaml -i splunk-app-logs log
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
