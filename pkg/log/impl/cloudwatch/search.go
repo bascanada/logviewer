@@ -101,6 +101,10 @@ func (r *CloudWatchLogSearchResult) fetchEntries(ctx context.Context) error {
 	return nil
 }
 
+func (r *CloudWatchLogSearchResult) Err() <-chan error {
+	return nil
+}
+
 func (r *CloudWatchLogSearchResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
 	if err := r.fetchEntries(ctx); err != nil {
 		return nil, nil, err

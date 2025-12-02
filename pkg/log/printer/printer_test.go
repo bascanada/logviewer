@@ -33,6 +33,10 @@ func (m *MockLogSearchResult) GetPaginationInfo() *client.PaginationInfo {
 	return nil
 }
 
+func (m *MockLogSearchResult) Err() <-chan error {
+	return nil
+}
+
 func TestMessageRegex(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -76,7 +80,7 @@ func TestMessageRegex(t *testing.T) {
 			}
 
 			var buf bytes.Buffer
-			_, err := WrapIoWritter(context.Background(), result, &buf, func() {})
+			_, err := WrapIoWritter(context.Background(), result, &buf, func() {}, func(err error) {})
 
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expectedOutput, buf.String())

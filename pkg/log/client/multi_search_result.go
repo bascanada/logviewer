@@ -116,3 +116,33 @@ func (m *MultiLogSearchResult) GetPaginationInfo() *PaginationInfo {
 	// Pagination is not supported for merged results.
 	return nil
 }
+
+// Err merges the error channels from all underlying LogSearchResult objects.
+// It returns a new channel that will receive errors from any of the individual
+// search results. The returned channel is closed once all underlying error
+// channels are closed.
+func (m *MultiLogSearchResult) Err() <-chan error {
+	var wg sync.WaitGroup
+	// a buffer size equal to the number of results
+	mergedErrChan := make(chan error, len(m.Results))
+
+	for _, r := range m.Results {
+		if r.Err() == nil {
+			continue
+		}
+		wg.Add(1)
+		go func(errChan <-chan error) {
+			defer wg.Done()
+			for err := range errChan {
+				mergedErrChan <- err
+			}
+		}(r.Err())
+	}
+
+	go func() {
+		wg.Wait()
+		close(mergedErrChan)
+	}()
+
+	return mergedErrChan
+}
