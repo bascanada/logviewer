@@ -25,6 +25,12 @@ type ReaderLogResult struct {
 	kvRegexExtraction         *regexp.Regexp
 	namedGroupRegexExtraction *regexp.Regexp
 	regexDate                 *regexp.Regexp
+
+	ErrChan chan error
+}
+
+func (lr ReaderLogResult) Err() <-chan error {
+	return lr.ErrChan
 }
 
 func (lr ReaderLogResult) GetSearch() *client.LogSearch {

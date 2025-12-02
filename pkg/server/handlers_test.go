@@ -50,6 +50,10 @@ func (m *mockLogSearchResult) GetFields(ctx context.Context) (ty.UniSet[string],
 	return ty.UniSet[string]{"field1": {"value1"}}, nil, nil
 }
 
+func (m *mockLogSearchResult) Err() <-chan error {
+	return nil
+}
+
 func newTestServer(t *testing.T, cfg *config.ContextConfig, searchFactory factory.SearchFactory) *Server {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	if cfg == nil {

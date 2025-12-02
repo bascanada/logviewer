@@ -161,8 +161,13 @@ integration/logs/cloudwatch:
 	@echo "Sending logs to CloudWatch..."
 	@cd integration/cloudwatch && ./send-logs.sh
 
-integration/logs/generator:
+integration/logs/generator: integration/start/logs
 	@echo "Deploying sample logs to Splunk and OpenSearch via log-generator..."
+	@for i in $$(seq 1 30); do \
+		if curl -s http://localhost:8081 >/dev/null; then break; fi; \
+		echo "Waiting for log-generator..."; \
+		sleep 1; \
+	done
 	@curl -s -o /dev/null -G --data-urlencode "message=User 'alice' logged in successfully" http://localhost:8081/log/info
 	@curl -s -o /dev/null -G --data-urlencode "message=Payment failed for order #12345: Insufficient funds" http://localhost:8081/log/error
 	@curl -s -o /dev/null -H "X-Request-ID: xyz-987-abc" -G --data-urlencode "message=API key is approaching expiration date" http://localhost:8081/log/warn
