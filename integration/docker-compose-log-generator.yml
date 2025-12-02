@@ -5,7 +5,7 @@ services:
     ports:
       - "8081:8081"
     environment:
-      - SPLUNK_HEC_URL=https://splunk:8089/services/collector # Note: Port 8089 for HEC SSL
+      - SPLUNK_HEC_URL=https://splunk:8088/services/collector # Note: Port 8088 for HEC SSL
       - SPLUNK_HEC_TOKEN=${SPLUNK_HEC_TOKEN:-} # Pass the token from an env var
       - OPENSEARCH_URL=http://opensearch:9200/app-logs/_doc
     networks:

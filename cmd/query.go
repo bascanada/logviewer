@@ -428,18 +428,27 @@ var queryLogCommand = &cobra.Command{
 			}
 
 			// Helper to encode a slice of entries
-			printJSON := func(es []client.LogEntry) {
+			printJSON := func(es []client.LogEntry) error {
 				for _, e := range es {
-					enc.Encode(e)
+					if err := enc.Encode(e); err != nil {
+						return err
+					}
 				}
+				return nil
 			}
 
-			printJSON(entries)
+			if err := printJSON(entries); err != nil {
+				fmt.Fprintf(os.Stderr, "Error writing initial JSON output: %v\n", err)
+				os.Exit(1)
+			}
 
 			// Handle live/follow mode
 			if c != nil {
 				for newEntries := range c {
-					printJSON(newEntries)
+					if err := printJSON(newEntries); err != nil {
+						fmt.Fprintf(os.Stderr, "Error writing streaming JSON output: %v\n", err)
+						break
+					}
 				}
 			}
 			return // End execution for this mode
