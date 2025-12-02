@@ -72,7 +72,8 @@ var (
 	myLog     bool
 	debugHttp bool
 
-	pageToken string
+	pageToken  string
+	jsonOutput bool
 )
 
 func onCommandStart(cmd *cobra.Command, args []string) {
@@ -164,6 +165,7 @@ func init() {
 		&template,
 		"format",
 		"", "Format for the log entry")
+	queryLogCommand.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output logs in JSON format (NDJSON)")
 
 	queryCommand.PersistentFlags().StringArrayVar(&inherits, "inherits", []string{}, "When using config , list of inherits to execute on top of the one configure for the search")
 

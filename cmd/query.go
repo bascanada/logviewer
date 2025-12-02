@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -22,7 +23,6 @@ import (
 	"github.com/bascanada/logviewer/pkg/log/impl/ssh"
 	"github.com/bascanada/logviewer/pkg/log/printer"
 	"github.com/bascanada/logviewer/pkg/ty"
-	"github.com/bascanada/logviewer/pkg/views"
 
 	"github.com/spf13/cobra"
 )
@@ -416,6 +416,43 @@ var queryLogCommand = &cobra.Command{
 			fmt.Fprintf(os.Stderr, "More results available. To fetch the next page, run the same command with --page-token \"%s\"\n", paginationInfo.NextPageToken)
 		}
 
+		if jsonOutput {
+			// Machine Mode (NDJSON for lnav/jq)
+			enc := json.NewEncoder(os.Stdout)
+			entries, c, err := searchResult.GetEntries(context.Background())
+
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+
+			// Helper to encode a slice of entries
+			printJSON := func(es []client.LogEntry) error {
+				for _, e := range es {
+					if err := enc.Encode(e); err != nil {
+						return err
+					}
+				}
+				return nil
+			}
+
+			if err := printJSON(entries); err != nil {
+				fmt.Fprintf(os.Stderr, "Error writing initial JSON output: %v\n", err)
+				os.Exit(1)
+			}
+
+			// Handle live/follow mode
+			if c != nil {
+				for newEntries := range c {
+					if err := printJSON(newEntries); err != nil {
+						fmt.Fprintf(os.Stderr, "Error writing streaming JSON output: %v\n", err)
+						break
+					}
+				}
+			}
+			return // End execution for this mode
+		}
+
 		outputter := printer.PrintPrinter{}
 		onError := func(err error) {
 			fmt.Fprintf(os.Stderr, "Error displaying logs: %v\n", err)
@@ -439,15 +476,7 @@ var queryCommand = &cobra.Command{
 	Short:  "Query a login system for logs and available fields",
 	PreRun: onCommandStart,
 	Run: func(cmd *cobra.Command, args []string) {
-		cfg, err := config.LoadContextConfig(configPath)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "failed to load config:", err)
-			os.Exit(1)
-		}
-
-		if err := views.RunQueryViewApp(*cfg, contextIds); err != nil {
-			fmt.Fprintln(os.Stderr, "view error:", err)
-			os.Exit(1)
-		}
+		cmd.Println("Please use 'logviewer query log' to stream logs or 'logviewer query field' to inspect fields.")
+		cmd.Help()
 	},
 }
