@@ -12,3 +12,5 @@ integration/ssh/id_rsa
 integration/ssh/id_rsa.pub
 integration/ssh/authorized_keys
 integration/k8s/k3s.*
+
+.DS_Store

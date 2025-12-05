@@ -16,7 +16,7 @@ func TestSplunkLogSearchResult_GetEntries_Follow(t *testing.T) {
 
 	sid := "my-follow-sid"
 	gock.New("http://splunk.com:8080").
-		Get("/search/jobs/"+sid+"/events").
+		Get("/search/jobs/" + sid + "/events").
 		Reply(200).
 		JSON(ty.MI{
 			"results": []ty.MS{

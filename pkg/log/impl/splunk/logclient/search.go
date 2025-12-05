@@ -11,7 +11,6 @@ import (
 	"github.com/bascanada/logviewer/pkg/ty"
 )
 
-
 type SplunkLogSearchResult struct {
 	logClient *SplunkLogSearchClient
 	sid       string
@@ -117,7 +116,6 @@ func (s SplunkLogSearchResult) GetPaginationInfo() *client.PaginationInfo {
 		NextPageToken: strconv.Itoa(currentOffset + numResults),
 	}
 }
-
 
 func (s SplunkLogSearchResult) parseResults(searchResponse *restapi.SearchResultsResponse) []client.LogEntry {
 

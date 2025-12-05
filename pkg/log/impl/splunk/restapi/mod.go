@@ -118,7 +118,6 @@ func (src SplunkRestClient) CancelSearchJob(sid string) error {
 	return nil
 }
 
-
 func (src SplunkRestClient) GetSearchStatus(
 	sid string,
 ) (JobStatusResponse, error) {

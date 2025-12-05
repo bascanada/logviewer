@@ -1,7 +1,4 @@
 clients:
-  local:
-    type: local
-
   local-splunk:
     type: splunk
     options:
@@ -39,25 +36,21 @@ clients:
       region: us-east-1
       endpoint: http://localhost:4566
 
-
-
 searches:
-  pretty-print:
+  demo-file-regex:
     fieldExtraction:
-      groupRegex: '.*(?P<Level>INFO|WARN|ERROR|DEBUG).*'
-      kvRegex: '(\w+)=(".*?"|[^\s,{}]+)'
+      groupRegex: '.*(?P<level>INFO|WARN|ERROR|DEBUG).*---\s*\[(?P<thread>[^\]]+)\]\s+(?P<class>[\w.$-]+)\s+:'
+      timestampRegex: '^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(\.\d+)?)'
+      kvRegex: '([A-Z]{2,}):\s([^\s,]+)'
+  pretty-print:
     printerOptions:
-      messageRegex: '^.*--- \\[[^]]+\\]\\s*(.*)$'
-      template: |
-        [{{.Timestamp.Format "15:04:05" }}] [{{.Level}}]
-        {{.Message}}
-
-
+      messageRegex: '^[\s\S]*[\w.$-]+\s+:\s*(.*)$'
+      template: '[{{.Timestamp.Format "15:04:05" }}] [{{.Level}}] {{.Message}}'
 
 contexts:
   local-test:
     client: local
-    searchInherit: ["pretty-print"]
+    searchInherit: ["demo-file-regex"]
     search:
       fields: {}
       options:

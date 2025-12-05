@@ -177,6 +177,12 @@ func (c HttpClient) Get(path string, queryParams ty.MS, headers ty.MS, body inte
 		return err
 	}
 
+	req.Header.Set("Content-Type", "application/json")
+
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+
 	if auth != nil {
 		if err = auth.Login(req); err != nil {
 			log.Printf("authentication setup failed: %s", err.Error())

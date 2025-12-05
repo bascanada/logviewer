@@ -12,10 +12,10 @@ import (
 
 // Base request structure for query endpoints
 type QueryRequest struct {
-	ContextId string            `json:"contextId"`          // Required
-	Inherits  []string          `json:"inherits,omitempty"` // Optional search inherits
-	Search    client.LogSearch  `json:"search"`             // Search overrides
-	Variables map[string]string `json:"variables,omitempty"`  // Runtime variables for substitution
+	ContextId string            `json:"contextId"`           // Required
+	Inherits  []string          `json:"inherits,omitempty"`  // Optional search inherits
+	Search    client.LogSearch  `json:"search"`              // Search overrides
+	Variables map[string]string `json:"variables,omitempty"` // Runtime variables for substitution
 }
 
 // Response for /query/logs endpoint

@@ -24,7 +24,7 @@ type RefreshOptions struct {
 type FieldExtraction struct {
 	GroupRegex     ty.Opt[string] `json:"groupRegex,omitempty" yaml:"groupRegex,omitempty"`
 	KvRegex        ty.Opt[string] `json:"kvRegex,omitempty" yaml:"kvRegex,omitempty"`
-	TimestampRegex ty.Opt[string] `json:"date,omitempty" yaml:"date,omitempty"`
+	TimestampRegex ty.Opt[string] `json:"timestampRegex,omitempty" yaml:"timestampRegex,omitempty"`
 }
 
 type PrinterOptions struct {

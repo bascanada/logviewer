@@ -90,8 +90,12 @@ func LoadContextConfig(configPath string) (*ContextConfig, error) {
 		return nil, fmt.Errorf("%w: %s", ErrNoContexts, configPath)
 	}
 
-	if len(config.Clients) == 0 {
-		return nil, fmt.Errorf("%w: %s", ErrNoClients, configPath)
+	// Ensure the clients map exists and provide a default "local" client
+	if config.Clients == nil {
+		config.Clients = Clients{}
+	}
+	if _, ok := config.Clients["local"]; !ok {
+		config.Clients["local"] = Client{Type: "local", Options: ty.MI{}}
 	}
 
 	if err := validateClients(&config); err != nil {
@@ -202,7 +206,7 @@ func (cc ContextConfig) GetSearchContext(contextId string, inherits []string, lo
 	searchContext.Search.Fields = searchContext.Search.Fields.ResolveVariablesWith(completeVars)
 	searchContext.Search.FieldsCondition = searchContext.Search.FieldsCondition.ResolveVariablesWith(completeVars)
 	searchContext.Search.Options = searchContext.Search.Options.ResolveVariablesWith(completeVars)
-	
+
 	// Resolve variables in Opt[string] fields
 	if searchContext.Search.PrinterOptions.Template.Set {
 		resolvedTemplate := ty.ResolveVars(searchContext.Search.PrinterOptions.Template.Value, completeVars)
