@@ -11,6 +11,7 @@ import (
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/ty"
 )
+
 const maxBatchSize = 10
 
 type ReaderLogResult struct {
@@ -46,7 +47,23 @@ func (lr *ReaderLogResult) parseLine(line string) bool {
 	// check if we have a date at the beginning and parse / remove it
 	if lr.regexDate != nil {
 		entry.Message = strings.TrimLeft(lr.regexDate.ReplaceAllStringFunc(line, func(v string) string {
-			entry.Timestamp, _ = time.Parse(ty.Format, v)
+			// Try parsing using the configured format (typically RFC3339),
+			// then fallback to common space-separated layouts used in logs.
+			var parsed time.Time
+			var err error
+
+			parsed, err = time.Parse(ty.Format, v)
+			if err != nil {
+				// Try space-separated layout with milliseconds in local timezone
+				parsed, err = time.ParseInLocation("2006-01-02 15:04:05.000", v, time.Local)
+			}
+			if err != nil {
+				// Try without milliseconds
+				parsed, err = time.ParseInLocation("2006-01-02 15:04:05", v, time.Local)
+			}
+			if err == nil {
+				entry.Timestamp = parsed
+			}
 			return ""
 		}), " ")
 	}
@@ -56,8 +73,9 @@ func (lr *ReaderLogResult) parseLine(line string) bool {
 		if len(match) > 0 {
 			for i, name := range lr.namedGroupRegexExtraction.SubexpNames() {
 				if i != 0 && name != "" {
-					lr.fields.Add(name, match[i])
-					entry.Fields[name] = match[i]
+					trimmedValue := strings.TrimSpace(match[i])
+					lr.fields.Add(name, trimmedValue)
+					entry.Fields[name] = trimmedValue
 				}
 			}
 		}
@@ -67,8 +85,10 @@ func (lr *ReaderLogResult) parseLine(line string) bool {
 		matches := lr.kvRegexExtraction.FindAllStringSubmatch(line, -1)
 		for _, match := range matches {
 			if len(match) >= 3 {
-				lr.fields.Add(match[1], match[2])
-				entry.Fields[match[1]] = match[2]
+				trimmedKey := strings.TrimSpace(match[1])
+				trimmedValue := strings.TrimSpace(match[2])
+				lr.fields.Add(trimmedKey, trimmedValue)
+				entry.Fields[trimmedKey] = trimmedValue
 			}
 		}
 	}
@@ -85,7 +105,12 @@ func (lr *ReaderLogResult) parseLine(line string) bool {
 		}
 	}
 
-	entry.Level = entry.Fields.GetString("Level")
+	// Try both lowercase and uppercase versions for Level field
+	if level := entry.Fields.GetString("level"); level != "" {
+		entry.Level = level
+	} else if level := entry.Fields.GetString("Level"); level != "" {
+		entry.Level = level
+	}
 	lr.entries = append(lr.entries, entry)
 	return true
 }
@@ -102,7 +127,7 @@ func (lr *ReaderLogResult) loadEntries() bool {
 
 func (lr ReaderLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
 
-	if !lr.search.Refresh.Follow.Value {
+	if !lr.search.Follow {
 		lr.loadEntries()
 		lr.closer.Close()
 		return lr.entries, nil, nil

@@ -53,8 +53,11 @@ func TestLoadContextConfig_JSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(cfg.Clients) != 1 || len(cfg.Contexts) != 1 {
-		t.Fatalf("unexpected config contents: clients=%d contexts=%d", len(cfg.Clients), len(cfg.Contexts))
+	if len(cfg.Contexts) != 1 {
+		t.Fatalf("unexpected config contents: contexts=%d", len(cfg.Contexts))
+	}
+	if _, ok := cfg.Clients["c1"]; !ok {
+		t.Fatalf("expected client 'c1' present")
 	}
 }
 
@@ -64,8 +67,11 @@ func TestLoadContextConfig_YAML(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(cfg.Clients) != 1 || len(cfg.Contexts) != 1 {
-		t.Fatalf("unexpected config contents: clients=%d contexts=%d", len(cfg.Clients), len(cfg.Contexts))
+	if len(cfg.Contexts) != 1 {
+		t.Fatalf("unexpected config contents: contexts=%d", len(cfg.Contexts))
+	}
+	if _, ok := cfg.Clients["c1"]; !ok {
+		t.Fatalf("expected client 'c1' present")
 	}
 }
 
@@ -83,8 +89,11 @@ func TestLoadContextConfig_EnvVarPrecedence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error loading via env var, got %v", err)
 	}
-	if len(cfg.Clients) != 1 || len(cfg.Contexts) != 1 {
-		t.Fatalf("unexpected config contents from env var: clients=%d contexts=%d", len(cfg.Clients), len(cfg.Contexts))
+	if len(cfg.Contexts) != 1 {
+		t.Fatalf("unexpected config contents from env var: contexts=%d", len(cfg.Contexts))
+	}
+	if _, ok := cfg.Clients["c1"]; !ok {
+		t.Fatalf("expected client 'c1' present from env var config")
 	}
 
 	// ensure env var path takes precedence: create a default file that would be different
@@ -98,8 +107,11 @@ func TestLoadContextConfig_EnvVarPrecedence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error loading via env var (default override), got %v", err)
 	}
-	if len(cfg2.Clients) != 1 || len(cfg2.Contexts) != 1 {
-		t.Fatalf("unexpected config contents from overridden env var: clients=%d contexts=%d", len(cfg2.Clients), len(cfg2.Contexts))
+	if len(cfg2.Contexts) != 1 {
+		t.Fatalf("unexpected config contents from overridden env var: contexts=%d", len(cfg2.Contexts))
+	}
+	if _, ok := cfg2.Clients["c1"]; !ok {
+		t.Fatalf("expected client 'c1' present from overridden env var config")
 	}
 
 	// cleanup env var
@@ -125,12 +137,15 @@ func TestLoadContextConfig_InvalidContent(t *testing.T) {
 }
 
 func TestLoadContextConfig_MissingSections(t *testing.T) {
-	// create a file with no clients
+	// create a file with no clients: the loader should add a default 'local' client
 	noClients := `{"searches":{}, "contexts": {"a": {"client":"c","searchInherit":[],"search":{}}}}`
 	path := writeTemp(t, "", "noclients.json", noClients)
-	_, err := LoadContextConfig(path)
-	if err == nil || !errors.Is(err, ErrNoClients) {
-		t.Fatalf("expected ErrNoClients, got %v", err)
+	cfg, err := LoadContextConfig(path)
+	if err != nil {
+		t.Fatalf("expected config to load and default local client added, got %v", err)
+	}
+	if _, ok := cfg.Clients["local"]; !ok {
+		t.Fatalf("expected default 'local' client to be added")
 	}
 
 	// create a file with no contexts
@@ -229,4 +244,3 @@ func TestGetSearchContext_VariableDefaults(t *testing.T) {
 		t.Errorf("expected cmd with error.log (runtime), got %s", cmdOpt2)
 	}
 }
-

@@ -135,7 +135,7 @@ func resolveSearch() (client.LogSearchResult, error) {
 		searchRequest.PrinterOptions.Template.S(template)
 	}
 
-	searchRequest.Refresh.Follow.S(refresh)
+	searchRequest.Follow = refresh
 
 	// Centralized config handling:
 	// - If an explicit configPath is given, use it.
@@ -467,6 +467,12 @@ var queryLogCommand = &cobra.Command{
 			c := make(chan os.Signal, 1)
 			signal.Notify(c, os.Interrupt)
 			<-c
+			// try to close the search result, if it supports it
+			if closer, ok := searchResult.(interface{ Close() error }); ok {
+				if err := closer.Close(); err != nil {
+					fmt.Fprintln(os.Stderr, "error closing search:", err)
+				}
+			}
 		}
 	},
 }

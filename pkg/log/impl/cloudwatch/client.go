@@ -231,7 +231,7 @@ func (r *staticCloudWatchResult) GetFields(ctx context.Context) (ty.UniSet[strin
 	return ty.UniSet[string]{}, nil, nil
 }
 func (r *staticCloudWatchResult) GetPaginationInfo() *client.PaginationInfo { return nil }
-func (r *staticCloudWatchResult) Err() <-chan error                       { return nil }
+func (r *staticCloudWatchResult) Err() <-chan error                         { return nil }
 
 // GetLogClient creates a new CloudWatch Logs client.
 // It uses the 'region' and 'profile' from the options if provided.

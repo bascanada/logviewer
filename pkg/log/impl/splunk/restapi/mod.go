@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 
 	"github.com/bascanada/logviewer/pkg/http"
 	"github.com/bascanada/logviewer/pkg/ty"
@@ -43,9 +44,8 @@ func (src SplunkRestClient) CreateSearchJob(
 	searchQuery string,
 	earliestTime string,
 	latestTime string,
-
+	isFollow bool, // <-- Add isFollow parameter
 	headers ty.MS,
-
 	data ty.MS,
 ) (SearchJobResponse, error) {
 	var searchJobResponse SearchJobResponse
@@ -59,25 +59,41 @@ func (src SplunkRestClient) CreateSearchJob(
 
 	// Build the form data for the search job in a small helper so tests can
 	// validate its shape without performing HTTP calls.
-	body := buildSearchJobData(searchQuery, earliestTime, latestTime, data)
+	body := buildSearchJobData(searchQuery, earliestTime, latestTime, isFollow, data) // <-- Pass isFollow
 
 	err := src.client.PostData(searchPath, headers, body, &searchJobResponse, src.target.Auth)
 
 	return searchJobResponse, err
-
 }
 
 // buildSearchJobData returns the form body to POST to Splunk to create a
 // search job. It defaults empty time ranges to -24h@h / now and only sets the
 // standard earliest_time/latest_time fields (avoids custom.dispatch.*).
-func buildSearchJobData(searchQuery, earliestTime, latestTime string, data ty.MS) ty.MS {
+func buildSearchJobData(searchQuery, earliestTime, latestTime string, isFollow bool, data ty.MS) ty.MS {
 	if data == nil {
 		data = ty.MS{}
 	}
 
-	if earliestTime == "" && latestTime == "" {
-		earliestTime = "-24h@h"
-		latestTime = "now"
+	if isFollow {
+		data["search_mode"] = "realtime"
+		// For real-time searches, "rt" prefix is used. If the user provided a
+		// relative time, we assume it's for real-time. Otherwise, default to a
+		// small window.
+		if earliestTime == "" {
+			earliestTime = "rt-5m"
+		} else if !strings.HasPrefix(earliestTime, "rt") {
+			earliestTime = "rt" + earliestTime
+		}
+		if latestTime == "" {
+			latestTime = "rt"
+		} else if !strings.HasPrefix(latestTime, "rt") {
+			latestTime = "rt" + latestTime
+		}
+	} else {
+		if earliestTime == "" && latestTime == "" {
+			earliestTime = "-24h@h"
+			latestTime = "now"
+		}
 	}
 
 	if latestTime != "" {
@@ -90,6 +106,16 @@ func buildSearchJobData(searchQuery, earliestTime, latestTime string, data ty.MS
 
 	data["search"] = "search " + searchQuery
 	return data
+}
+
+func (src SplunkRestClient) CancelSearchJob(sid string) error {
+	searchPath := fmt.Sprintf("/search/jobs/%s", sid)
+	err := src.client.Delete(searchPath, src.target.Headers, src.target.Auth)
+	if err != nil {
+		return fmt.Errorf("failed to cancel splunk search job %s: %w", sid, err)
+	}
+	log.Printf("splunk search job %s cancelled", sid)
+	return nil
 }
 
 func (src SplunkRestClient) GetSearchStatus(

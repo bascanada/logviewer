@@ -47,7 +47,7 @@ func (lc DockerLogClient) Get(ctx context.Context, search *logclient.LogSearch) 
 		tail = fmt.Sprintf("%d", search.Size.Value)
 	}
 
-	follow := search.Refresh.Follow.Value
+	follow := search.Follow
 
 	options := container.LogsOptions{
 		ShowStdout: search.Options.GetOr("showStdout", true).(bool),

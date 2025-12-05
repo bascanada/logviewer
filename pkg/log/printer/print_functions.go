@@ -54,10 +54,28 @@ func ExpandJson(value string) string {
 	return str
 }
 
+// GetField provides case-insensitive field access for templates.
+// Usage in template: {{Field . "level"}} or {{Field . "thread"}}
+func GetField(fields ty.MI, key string) interface{} {
+	// Try exact match first
+	if val, ok := fields[key]; ok {
+		return val
+	}
+	// Try capitalized version (common for struct fields)
+	if len(key) > 0 {
+		capKey := string(key[0]-32) + key[1:]
+		if val, ok := fields[capKey]; ok {
+			return val
+		}
+	}
+	return ""
+}
+
 func GetTemplateFunctionsMap() template.FuncMap {
 	return template.FuncMap{
 		"Format":     FormatDate,
 		"MultiLine":  MultlineFields,
 		"ExpandJson": ExpandJson,
+		"Field":      GetField,
 	}
 }

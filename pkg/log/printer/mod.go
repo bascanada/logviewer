@@ -40,7 +40,6 @@ func WrapIoWritter(ctx context.Context, result client.LogSearchResult, writer io
 		}
 	}
 
-
 	entries, newEntriesChannel, err := result.GetEntries(ctx)
 	if err != nil {
 		return false, err

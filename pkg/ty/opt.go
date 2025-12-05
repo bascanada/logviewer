@@ -59,11 +59,10 @@ func (i *Opt[T]) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-
 // MarshalYAML implements yaml.Marshaler for Opt[T]
 func (i Opt[T]) MarshalYAML() (interface{}, error) {
 	if !i.Set || !i.Valid {
-		 return nil, nil
+		return nil, nil
 	}
 	return i.Value, nil
 }

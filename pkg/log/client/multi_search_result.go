@@ -36,7 +36,7 @@ func NewMultiLogSearchResult(search *LogSearch) (*MultiLogSearchResult, error) {
 	if search.PageToken.Set && search.PageToken.Valid {
 		return nil, errors.New("pagination is not supported with multiple contexts; use a single context instead")
 	}
-	
+
 	return &MultiLogSearchResult{
 		Search:  search,
 		Results: []LogSearchResult{},

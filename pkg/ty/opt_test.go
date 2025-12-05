@@ -19,7 +19,7 @@ func TestOpt_UnmarshalYAML(t *testing.T) {
 		expected TestStruct
 	}{
 		{
-			name:     "String and Int present",
+			name: "String and Int present",
 			yamlData: `optionalString: "hello"
 optionalInt: 123`,
 			expected: TestStruct{

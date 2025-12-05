@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -79,7 +78,8 @@ func (c HttpClient) post(path string, headers ty.MS, buf *bytes.Buffer, response
 
 	if auth != nil {
 		if err = auth.Login(req); err != nil {
-			log.Printf("%s", err.Error())
+			log.Printf("authentication setup failed: %s", err.Error())
+			return err
 		}
 	}
 
@@ -106,7 +106,7 @@ func (c HttpClient) post(path string, headers ty.MS, buf *bytes.Buffer, response
 
 	if res.StatusCode >= 400 {
 		log.Printf("error %d  %s"+ty.LB, res.StatusCode, string(resBody))
-		return errors.New(string(resBody))
+		return fmt.Errorf("request failed with status code %d: %s", res.StatusCode, string(resBody))
 	}
 
 	return json.Unmarshal(resBody, &responseData)
@@ -185,7 +185,8 @@ func (c HttpClient) Get(path string, queryParams ty.MS, headers ty.MS, body inte
 
 	if auth != nil {
 		if err = auth.Login(req); err != nil {
-			log.Printf("%s", err.Error())
+			log.Printf("authentication setup failed: %s", err.Error())
+			return err
 		}
 	}
 
@@ -203,6 +204,11 @@ func (c HttpClient) Get(path string, queryParams ty.MS, headers ty.MS, body inte
 		return readErr
 	}
 
+	if res.StatusCode >= 400 {
+		log.Printf("error %d  %s"+ty.LB, res.StatusCode, string(resBody))
+		return fmt.Errorf("request failed with status code %d: %s", res.StatusCode, string(resBody))
+	}
+
 	// Log a truncated GET response body for debugging (avoid huge output)
 	if Debug && len(resBody) > 0 {
 		s := string(resBody)
@@ -215,6 +221,56 @@ func (c HttpClient) Get(path string, queryParams ty.MS, headers ty.MS, body inte
 	jsonErr := json.Unmarshal(resBody, &responseData)
 	if jsonErr != nil {
 		return jsonErr
+	}
+
+	return nil
+}
+
+func (c HttpClient) Delete(path string, headers ty.MS, auth Auth) error {
+	path = c.url + path
+
+	if Debug {
+		log.Printf("[DELETE]%s"+ty.LB, path)
+	}
+
+	req, err := http.NewRequest("DELETE", path, nil)
+	if err != nil {
+		return err
+	}
+
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+
+	if auth != nil {
+		if err = auth.Login(req); err != nil {
+			log.Printf("authentication setup failed: %s", err.Error())
+			return err
+		}
+	}
+
+	// Log headers but redact sensitive values (Authorization, Cookie, tokens)
+	if Debug {
+		log.Printf("[DELETE-HEADERS] %s\n", maskHeaderMap(req.Header))
+	}
+
+	res, err := c.client.Do(req)
+	if err != nil {
+		return err
+	}
+
+	if res.Body != nil {
+		defer res.Body.Close()
+	}
+
+	resBody, err := io.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
+
+	if res.StatusCode >= 400 {
+		log.Printf("error %d  %s"+ty.LB, res.StatusCode, string(resBody))
+		return fmt.Errorf("request failed with status code %d: %s", res.StatusCode, string(resBody))
 	}
 
 	return nil

@@ -18,14 +18,13 @@ type SearchRange struct {
 }
 
 type RefreshOptions struct {
-	Follow   ty.Opt[bool]   `json:"follow,omitempty" yaml:"follow,omitempty"`
 	Duration ty.Opt[string] `json:"duration,omitempty" yaml:"duration,omitempty"`
 }
 
 type FieldExtraction struct {
 	GroupRegex     ty.Opt[string] `json:"groupRegex,omitempty" yaml:"groupRegex,omitempty"`
 	KvRegex        ty.Opt[string] `json:"kvRegex,omitempty" yaml:"kvRegex,omitempty"`
-	TimestampRegex ty.Opt[string] `json:"date,omitempty" yaml:"date,omitempty"`
+	TimestampRegex ty.Opt[string] `json:"timestampRegex,omitempty" yaml:"timestampRegex,omitempty"`
 }
 
 type PrinterOptions struct {
@@ -62,6 +61,9 @@ type LogSearch struct {
 	// Variables defines the dynamic inputs for this search context.
 	// The map key is the variable name (e.g., "sessionId").
 	Variables map[string]VariableDefinition `json:"variables,omitempty"`
+
+	// Follow indicates if the search should continuously follow logs.
+	Follow bool `json:"follow,omitempty" yaml:"follow,omitempty"`
 }
 
 func (lr *LogSearch) MergeInto(logSeach *LogSearch) error {
