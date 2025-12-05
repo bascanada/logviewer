@@ -30,51 +30,234 @@ Way to use logviewer
 * CLI like Curl
 * MCP to integrate with your favorite LLM agent like copilot, gemini or claude.
 
+## Why LogViewer?
+
+**The Problem:** Modern applications spread logs across multiple systems—Kubernetes pods, CloudWatch, Splunk, Docker containers, SSH servers. Each system has its own CLI tool, query syntax, and authentication method. Debugging issues that span multiple services means juggling multiple terminals and commands.
+
+**The Solution:** LogViewer provides a single, unified CLI to query all your log sources with consistent syntax:
+
+* **One tool, multiple sources** - Query Kubernetes, CloudWatch, Splunk, OpenSearch, Docker, and local files with the same commands
+* **Unified query syntax** - Learn once, use everywhere. No need to remember SPL, KQL, or different CLIs
+* **Powerful field extraction** - Extract structured data from unstructured logs using regex patterns
+* **Flexible formatting** - Custom templates let you format output for humans or pipe to other tools
+* **Config-driven** - Save common queries as reusable contexts instead of maintaining complex shell scripts
+* **Multi-context search** - Query multiple environments (dev/staging/prod) simultaneously and get merged, time-sorted results
+* **AI integration** - Use as an MCP server with Claude, Copilot, or Gemini for natural language log queries
+
+**Perfect for:**
+* DevOps engineers managing logs across multiple platforms
+* SREs debugging distributed systems
+* Developers who need quick access to logs without learning platform-specific tools
+* Teams wanting to standardize log access across their infrastructure
+
 ## How to use (CLI)
 
 ![demo](demo.gif)
 
-Example of the core functionality
+LogViewer works with or without a config file. Start simple and add complexity as needed.
+
+### 1. Basic Usage - No Config Required
+
+Query local files directly using the `--cmd` flag:
 
 ```bash
-# Query for log in the last 10 minutes
--> % logviewer [...] --last 10m --size 10 query log
+# Read last 100 lines from a log file
+logviewer --cmd "tail -n 100 /var/log/app.log" query log
 
-# Query for the search field
--> % logviewer [...] --last 10m --size 10 query field
+# Read from Docker container
+logviewer --docker-container my-app --docker-host "unix:///var/run/docker.sock" query log
 
-# Query with a filter on a field
--> % logviewer [...] --last 10m --size 10 -f level=INFO query log
-
-# Query with a custom format , all fields can be used and more , it's go template
--> % logviewer [...] --last 10m --size 10 --format "{{.Fields.level}} - {{.Message}}" query log
-
-# Use a config file and context instead of repeating the same field
--> % logviewer [...] -i cloudwatch-app-logs  --last 10m --size 10 --format "{{.Fields.level}} - {{.Message}}" query log
-
+# Read from SSH server
+logviewer --ssh-user admin --ssh-addr "server.com:22" --cmd "tail -n 100 /var/log/app.log" query log
 ```
 
-## How to install
+### 2. Add Time Filtering
 
-You can check [the release folder](https://github.com/bascanada/logviewer/releases) for prebuild binary.
-You can use the development build or the standard release.
-
-Build manually
+Narrow down results to a specific time window:
 
 ```bash
-make release
-make install PREFIX=$HOME/.local/bin
+# Last 10 minutes
+logviewer --cmd "tail -n 1000 /var/log/app.log" --last 10m query log
+
+# Last hour, limit to 50 entries
+logviewer --cmd "tail -n 5000 /var/log/app.log" --last 1h --size 50 query log
+
+# Specific time range
+logviewer --cmd "cat /var/log/app.log" --from "2025-12-05T10:00:00Z" --to "2025-12-05T11:00:00Z" query log
 ```
 
-Use docker to run the application , for exemple with zsh function
+### 3. Custom Output Formatting
+
+Format log output using Go templates:
 
 ```bash
+# Simple format - just the message
+logviewer --cmd "tail /var/log/app.log" --format "{{.Message}}" query log
+
+# Add timestamp
+logviewer --cmd "tail /var/log/app.log" --format "{{.Timestamp.Format \"15:04:05\"}} {{.Message}}" query log
+
+# Multi-line format with fields
+logviewer --cmd "tail /var/log/app.log" --format "[{{.Timestamp.Format \"15:04:05\"}}] {{.Level}}\n{{.Message}}" query log
+```
+
+### 4. Create a Config File
+
+Save common queries in `~/.logviewer/config.yaml`:
+
+```yaml
+clients:
+  local:
+    type: local
+
+contexts:
+  app-logs:
+    client: local
+    search:
+      options:
+        cmd: 'tail -n {{or .Size.Value 200}} /var/log/app.log'
+```
+
+Now use contexts instead of repeating flags:
+
+```bash
+# Query using context
+logviewer -i app-logs query log
+
+# Override size from config
+logviewer -i app-logs --size 50 query log
+
+# Add time range
+logviewer -i app-logs --last 1h query log
+```
+
+### 5. Extract and Filter by Fields
+
+Add field extraction to make logs searchable (see [Field Extraction](#field-extraction) for details):
+
+```yaml
+searches:
+  spring-boot-logs:
+    fieldExtraction:
+      timestampRegex: '^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(\.\d+)?)'
+      groupRegex: '.*(?P<level>INFO|WARN|ERROR|DEBUG).*---\s*\[(?P<thread>[^\]]+)\]'
+      kvRegex: '([A-Z]{2,}):\s([^\s,]+)'
+
+contexts:
+  app-logs:
+    client: local
+    searchInherit: ["spring-boot-logs"]
+    search:
+      options:
+        cmd: 'tail -n {{or .Size.Value 500}} /var/log/app.log'
+```
+
+Now filter by extracted fields:
+
+```bash
+# Filter by log level
+logviewer -i app-logs -f level=ERROR query log
+
+# Filter by multiple fields
+logviewer -i app-logs -f level=ERROR -f thread=nio-8080-exec-1 query log
+
+# Discover available fields
+logviewer -i app-logs query field
+```
+
+### 6. Add Custom Templates
+
+Combine field extraction with templates for formatted output:
+
+```yaml
+searches:
+  spring-boot-logs:
+    fieldExtraction:
+      groupRegex: '.*(?P<level>INFO|WARN|ERROR|DEBUG).*---\s*\[(?P<thread>[^\]]+)\]'
+    printerOptions:
+      template: '[{{.Timestamp.Format "15:04:05"}}] [{{.Field "level"}}] [{{.Field "thread"}}] {{.Message}}'
+```
+
+```bash
+logviewer -i app-logs query log
+# Output: [10:30:45] [ERROR] [nio-8080-exec-7] Payment failed for order ID: 12345
+```
+
+### 7. Query Multiple Sources
+
+Search across multiple environments simultaneously:
+
+```yaml
+contexts:
+  app-prod:
+    client: k8s-prod
+    search:
+      options:
+        namespace: production
+        pod: app-*
+  
+  app-staging:
+    client: k8s-staging
+    search:
+      options:
+        namespace: staging
+        pod: app-*
+```
+
+```bash
+# Query both contexts, results merged and sorted by timestamp
+logviewer -i app-prod -i app-staging --last 10m query log
+```
+
+### Common Patterns
+
+```bash
+# Real-time log tailing (refreshes every 2 seconds)
+logviewer -i app-logs --refresh 2s query log
+
+# Save logs to file
+logviewer -i app-logs --last 1h query log > logs.txt
+
+# Pipe to other tools
+logviewer -i app-logs query log | grep "error" | wc -l
+
+# Use with environment variables for dynamic values
+export LOG_FILE="/var/log/app-$(date +%Y%m%d).log"
+logviewer --cmd "tail -n 100 $LOG_FILE" query log
+```
+
+## Installation
+
+### Quick Install (Linux & macOS)
+
+Run the following command to download the latest release and install it to `/usr/local/bin`:
+
+```bash
+curl -L "https://github.com/bascanada/logviewer/releases/latest/download/logviewer-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m | sed 's/x86_64/amd64/')" -o ./logviewer && chmod +x ./logviewer
+sudo mv ./logviewer /usr/local/bin/
+```
+
+### Docker
+
+Run LogViewer without installing it on your host system. Add this function to your shell configuration (`.zshrc` or `.bashrc`):
+
+```bash
+# Add to ~/.zshrc or ~/.bashrc
 logviewer() {
-   docker run -it -v $HOME/.logviewer/config.json:/config.json -v $HOME/.ssh:/.ssh ghcr.io/bascanada/logviewer:latest "$@"
+   docker run -it --rm \
+     -v $HOME/.logviewer/config.yaml:/config.yaml \
+     -v $HOME/.ssh:/.ssh \
+     -v /var/run/docker.sock:/var/run/docker.sock \
+     ghcr.io/bascanada/logviewer:latest "$@"
 }
-logviewer_update() {
-   docker pull ghcr.io/bascanada/logviewer:latest
-}
+```
+
+### Build from Source
+
+```bash
+git clone https://github.com/bascanada/logviewer.git
+cd logviewer
+make install PREFIX=$HOME/.local/bin
 ```
 
 ## Features
@@ -188,6 +371,136 @@ logviewer -i app-dev -i app-staging -i app-prod query log -f level=ERROR
 * Compare logs across multiple environments (dev, staging, production)
 * Search multiple related microservices simultaneously
 * Correlate events across different log sources by timestamp
+
+#### Field Extraction
+
+LogViewer can extract structured fields from unstructured log lines using regex patterns. This is particularly useful for text-based log sources (local files, Docker, Kubernetes, SSH).
+
+**Why Field Extraction?**
+
+Turn this:
+```
+2025-08-22 10:01:19.200  ERROR 18748 --- [nio-8080-exec-7] com.example.service.PaymentService : Payment failed for order ID: 12345
+```
+
+Into searchable fields: `level=ERROR`, `thread=nio-8080-exec-7`, `class=com.example.service.PaymentService`, `ID=12345`
+
+**Configuration:**
+
+```yaml
+searches:
+  spring-boot-logs:
+    fieldExtraction:
+      # Extract timestamp at the beginning of the line
+      timestampRegex: '^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(\.\d+)?)'
+      
+      # Extract named groups (Level, Thread, Class)
+      groupRegex: '.*(?P<level>INFO|WARN|ERROR|DEBUG).*---\s*\[(?P<thread>[^\]]+)\]\s+(?P<class>[\w.$-]+)\s+:'
+      
+      # Extract key-value pairs (ID: 12345, IP: 192.168.1.1)
+      kvRegex: '([A-Z]{2,}):\s([^\s,]+)'
+```
+
+**Regex Types:**
+
+1. **`timestampRegex`**: Extracts and parses timestamps from the beginning of each log line
+   - Supports multiple formats (RFC3339, space-separated dates)
+   - Removed from message text after extraction
+
+2. **`groupRegex`**: Extracts named fields using `(?P<fieldname>...)` syntax
+   - Use for structured patterns that appear in consistent positions
+   - Field names can be lowercase (automatically handled)
+   - Example: `(?P<level>INFO|WARN|ERROR)` creates a `level` field
+
+3. **`kvRegex`**: Extracts key-value pairs scattered throughout the message
+   - Matches patterns like `key=value` or `KEY: value`
+   - Useful for extracting IDs, IPs, counts, etc.
+   - Example: `([A-Z]{2,}):\s([^\s,]+)` matches `ID: 12345`
+
+**Using Extracted Fields:**
+
+```bash
+# Filter by extracted fields
+logviewer -i app-logs -f level=ERROR query log
+
+# Access in templates
+logviewer -i app-logs --format "{{.Field \"level\"}} {{.Field \"thread\"}}: {{.Message}}" query log
+
+# Discover available fields
+logviewer -i app-logs query field
+```
+
+**Tips:**
+
+* Start simple: extract one field at a time and test with `query field`
+* Use online regex testers (regex101.com) with sample log lines
+* Field values are automatically trimmed of whitespace
+* Both uppercase and lowercase field names work in templates
+* Use `(?P<name>...)` for named groups that become searchable fields
+
+#### Template Functions
+
+LogViewer templates use Go's `text/template` engine with additional helper functions:
+
+**Built-in Fields:**
+
+* `{{.Timestamp}}` - Log entry timestamp (time.Time)
+* `{{.Message}}` - Log message text
+* `{{.Level}}` - Log level (if extracted)
+* `{{.ContextID}}` - Source context (in multi-context queries)
+* `{{.Fields}}` - Map of all extracted fields
+
+**Helper Functions:**
+
+* **`{{.Timestamp.Format "layout"}}`** - Format timestamp
+  ```yaml
+  # Common layouts
+  {{.Timestamp.Format "15:04:05"}}           # 10:30:45
+  {{.Timestamp.Format "2006-01-02 15:04:05"}} # 2025-12-05 10:30:45
+  {{.Timestamp.Format "Jan _2 15:04:05"}}     # Dec  5 10:30:45
+  ```
+
+* **`{{.Field "name"}}`** - Access fields case-insensitively
+  ```yaml
+  {{.Field "level"}}   # Access level field (lowercase or uppercase)
+  {{.Field "thread"}}  # Access thread field
+  {{.Field "ID"}}      # Access extracted ID
+  ```
+
+* **`{{MultiLine .Fields}}`** - Format all fields as multi-line list
+  ```yaml
+  Message: {{.Message}}{{MultiLine .Fields}}
+  # Output:
+  # Message: Payment failed
+  #  * level=ERROR
+  #  * ID=12345
+  ```
+
+* **`{{ExpandJson .Message}}`** - Pretty-print JSON in message
+  ```yaml
+  {{ExpandJson .Message}}
+  # Finds JSON objects and formats them with color and indentation
+  ```
+
+**Template Examples:**
+
+```yaml
+# Compact one-liner
+template: '[{{.Timestamp.Format "15:04:05"}}] {{.Field "level"}} {{.Message}}'
+
+# Detailed multi-line
+template: |
+  [{{.Timestamp.Format "2006-01-02 15:04:05"}}] [{{.Field "level"}}] [{{.ContextID}}]
+  Thread: {{.Field "thread"}}
+  Class: {{.Field "class"}}
+  {{.Message}}
+
+# JSON extraction
+template: |
+  {{.Timestamp.Format "15:04:05"}} {{.Field "level"}}
+  {{.Message}}
+  {{ExpandJson .Message}}
+```
 
 ### Implementations
 
@@ -395,14 +708,32 @@ contexts:
         useInsights: false
 ```
 
-### MCP Server
+### MCP Server (AI Integration)
 
-LogViewer can also be run as an MCP server, exposing its core functionalities as a tool for Large Language Models (LLMs) and other AI agents.
-This enables programmatic access to log contexts, fields, and querying capabilities through natural language or structured commands.
+Turn your favorite LLM into an expert DevOps assistant. LogViewer implements the **Model Context Protocol (MCP)**, allowing AI agents (like Claude Desktop, GitHub Copilot, or custom agents) to directly query and analyze your logs.
 
-It support the following type:
+**Why use LogViewer with AI?**
 
-* stdio
+* **Autonomous Investigation**: The AI can explore logs, refine searches, and drill down into errors without your constant input.
+* **Context Aware**: It understands your environments (dev, staging, prod) through your configuration.
+* **Smart Filtering**: It discovers available fields and applies precise filters to cut through the noise.
+* **Root Cause Analysis**: Ask "Why did the payment fail?" and watch it query multiple services, correlate timestamps, and present the evidence.
+
+#### Available Tools
+
+The MCP server exposes the following tools to the AI:
+
+* **`list_contexts`**: Discovers all available log sources (e.g., `k8s-prod`, `aws-lambda`, `local-dev`).
+* **`query_logs`**: The core tool. Fetches logs with powerful filtering:
+  * Time windows (`last=15m`, `last=24h`)
+  * Field filtering (`fields={"level": "ERROR", "service": "payment"}`)
+  * Pagination and sizing
+* **`get_fields`**: Introspects logs to find searchable fields (e.g., "Is there a `requestId` field I can filter on?").
+* **`get_context_details`**: Inspects configuration and required variables for specific contexts.
+
+#### Built-in Prompts
+
+* **`log_investigation`**: A guided workflow that instructs the AI on the best strategy to investigate an incident (Query -> Analyze -> Refine).
 
 #### Starting the MCP Server
 
@@ -436,6 +767,171 @@ Exemple of a configuration in github copilot
 2025-12-04 16:53:48.897 [info] Connection state: Running
 2025-12-04 16:53:48.930 [info] Discovered 4 tools
 ```
+
+## Troubleshooting
+
+### Common Issues
+
+**"Config file not found"**
+```bash
+# Check if config exists
+ls ~/.logviewer/config.yaml
+
+# Specify explicit path
+logviewer -c /path/to/config.yaml -i context query log
+
+# Or use environment variable
+export LOGVIEWER_CONFIG=/path/to/config.yaml
+```
+
+**"Context not found"**
+```bash
+# List available contexts in your config
+grep -A1 "contexts:" config.yaml
+
+# Check context name matches exactly (case-sensitive)
+logviewer -i exact-context-name query log
+```
+
+**"No logs returned"**
+
+* Check time range: `--last 24h` instead of `--last 10m`
+* Verify client connectivity (credentials, network, endpoints)
+* Test without filters first: remove `-f` flags
+* For field filters, ensure fields exist: `logviewer -i context query field`
+
+**"Timestamp shows 00:00:00"**
+
+* Your `timestampRegex` is extracting but not parsing correctly
+* Check timestamp format in logs matches the regex
+* LogViewer supports: RFC3339, `YYYY-MM-DD HH:MM:SS.mmm`, and `YYYY-MM-DD HH:MM:SS`
+
+**"Field extraction not working"**
+
+* Test regex on sample log lines using regex101.com
+* Verify named groups use `(?P<name>...)` syntax (not `(?<name>...)`)
+* Check that field names are alphanumeric
+* Run `query field` to see what's actually extracted
+
+**"Template error"**
+
+* Ensure fields exist before accessing: `{{.Field "name"}}`
+* Use `.Field` method for case-insensitive access
+* Check for typos in field names and template syntax
+
+### Debug Tips
+
+**Enable verbose logging:**
+```bash
+# Set log level (not implemented yet - coming soon)
+# For now, check stderr for error messages
+logviewer -i context query log 2>errors.log
+```
+
+**Test queries incrementally:**
+```bash
+# 1. Start simple
+logviewer -i context query log --size 5
+
+# 2. Add time range
+logviewer -i context --last 1h query log --size 5
+
+# 3. Add filters
+logviewer -i context --last 1h -f level=ERROR query log --size 5
+
+# 4. Add formatting
+logviewer -i context --last 1h -f level=ERROR --format "{{.Message}}" query log
+```
+
+**Verify regex patterns:**
+```bash
+# Use a small sample first
+logviewer --cmd "head -n 10 /var/log/app.log" query field
+
+# Then test filters
+logviewer --cmd "head -n 50 /var/log/app.log" -f level=ERROR query log
+```
+
+## FAQ
+
+**Q: Can LogViewer tail logs in real-time?**
+
+A: Yes! Use the `--refresh` flag with a duration:
+```bash
+logviewer -i context --refresh 2s query log
+```
+
+**Q: How do I authenticate to Splunk/CloudWatch/Kubernetes?**
+
+A: Authentication varies by source:
+* **Kubernetes**: Uses kubeconfig file (same as kubectl)
+* **CloudWatch**: Uses AWS credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, or IAM role)
+* **Splunk**: Pass auth token in headers via config
+* **OpenSearch**: Basic auth or API keys in endpoint URL
+* **SSH**: Private key file (default: `~/.ssh/id_rsa`)
+
+**Q: Can I pipe LogViewer output to other tools?**
+
+A: Absolutely! LogViewer outputs to stdout:
+```bash
+# Pipe to grep
+logviewer -i context query log | grep "error"
+
+# Pipe to jq (if using JSON format)
+logviewer -i context --format "{{json .}}" query log | jq '.message'
+
+# Save to file
+logviewer -i context query log > logs.txt
+```
+
+**Q: How do I query logs from multiple Kubernetes namespaces?**
+
+A: Create multiple contexts:
+```yaml
+contexts:
+  k8s-namespace1:
+    client: k8s-prod
+    search:
+      options:
+        namespace: namespace1
+  k8s-namespace2:
+    client: k8s-prod
+    search:
+      options:
+        namespace: namespace2
+```
+
+Then use multi-context search:
+```bash
+logviewer -i k8s-namespace1 -i k8s-namespace2 query log
+```
+
+**Q: What's the difference between `searchInherit` and inline config?**
+
+A: `searchInherit` lets you reuse common settings:
+```yaml
+searches:
+  common-formatting:
+    printerOptions:
+      template: "{{.Timestamp.Format \"15:04:05\"}} {{.Message}}"
+
+contexts:
+  app-logs:
+    searchInherit: ["common-formatting"]  # Reuse template
+    search:
+      options:
+        cmd: "tail app.log"
+```
+
+Inline config is specific to one context. Use `searchInherit` for shared settings across multiple contexts.
+
+**Q: Does LogViewer store or send my logs anywhere?**
+
+A: No. LogViewer is a CLI tool that queries your log sources directly and displays results locally. Nothing is stored or transmitted except to your configured log sources.
+
+**Q: Can I contribute or request features?**
+
+A: Yes! This project is open source. Open an issue or PR on GitHub.
 
 ## License
 

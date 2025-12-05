@@ -2,14 +2,16 @@
 Output demo.gif
 
 Set Shell zsh
-Set FontSize 20
+Set FontSize 22
+Set Width 1600
+Set Height 900
+Set Padding 40
+Set Theme "Catppuccin Mocha"
 
 
 # --- 1. Window & Layout Aesthetics ---
 # Démarrage de la démo
 Hide
-Type "export COLUMNS=160 LINES=40"
-Enter
 Type "export PATH=$PATH:$(pwd)/build"
 Enter
 Type "alias logviewer='./build/logviewer'"
@@ -32,14 +34,9 @@ Sleep 4s
 Type "clear"
 Enter
 
-Type "logviewer -c config.yaml -i local-test query log -f Level=ERROR"
+Type "logviewer -c config.yaml -i local-test query log -f level=ERROR"
 Sleep 500ms
 Enter
 Sleep 4s
 Type "clear"
 Enter
-
-Type 'logviewer -c config.yaml -i local-test query log -f Level=INFO --format "[{{.Timestamp.Format \"15:04:05\"}}] {{.Fields.Thread}} -> {{.Message}}"'
-Sleep 500ms
-Enter
-Sleep 5s

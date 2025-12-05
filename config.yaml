@@ -39,7 +39,7 @@ clients:
 searches:
   demo-file-regex:
     fieldExtraction:
-      groupRegex: '.*(?P<level>INFO|WARN|ERROR|DEBUG).*---\s*\[(?P<thread>[^\]]+)\]\s+(?P<class>[\w.$-]+)\s+:'
+      groupRegex: '.*(?P<level>INFO|WARN|ERROR|DEBUG).*---\s*\[(?P<thread>[^\]]+)\]'
       timestampRegex: '^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(\.\d+)?)'
       kvRegex: '([A-Z]{2,}):\s([^\s,]+)'
   pretty-print:
