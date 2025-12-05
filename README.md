@@ -1,7 +1,7 @@
 # logviewer
 
 <p align="center">
-  <img src="logo.svg" alt="logviewer logo" width="120" style="height:auto;" />
+  <img src="https://raw.githubusercontent.com/bascanada/logviewer/main/logo.svg" alt="logviewer logo" width="120" style="height:auto;" />
 
   <span>***this application is in early development , i'm still testing things out , if you like give me feedback***</span>
 </p>
@@ -52,7 +52,7 @@ Way to use logviewer
 
 ## How to use (CLI)
 
-![demo](demo.gif)
+![demo](https://raw.githubusercontent.com/bascanada/logviewer/main/demo.gif)
 
 LogViewer works with or without a config file. Start simple and add complexity as needed.
 
