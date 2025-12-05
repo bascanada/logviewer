@@ -45,7 +45,7 @@ searches:
   pretty-print:
     printerOptions:
       messageRegex: '^[\s\S]*[\w.$-]+\s+:\s*(.*)$'
-      template: '[{{.Timestamp.Format "15:04:05" }}] [{{.Level}}] {{.Message}}'
+      template: '[{{.Timestamp.Format "15:04:05" }}] [{{.Fields.level}}] {{.Message}}'
 
 contexts:
   local-test:

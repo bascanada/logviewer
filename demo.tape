@@ -34,7 +34,7 @@ Sleep 4s
 Type "clear"
 Enter
 
-Type "logviewer -c config.yaml -i local-test query log -f level=ERROR"
+Type "logviewer -c config.yaml -i local-test --inherits pretty-print query log -f level=ERROR"
 Sleep 500ms
 Enter
 Sleep 4s
