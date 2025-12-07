@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"strings"
 	"text/template"
 	"time"
 
@@ -36,14 +37,11 @@ func MultlineFields(values ty.MI) string {
 }
 
 func KV(values ty.MI) string {
-	str := ""
+	items := make([]string, 0, len(values))
 	for k, v := range values {
-		if str != "" {
-			str += " "
-		}
-		str += fmt.Sprintf("%s=%v", k, v)
+		items = append(items, fmt.Sprintf("%s=%v", k, v))
 	}
-	return str
+	return strings.Join(items, " ")
 }
 
 func ExpandJson(value string) string {

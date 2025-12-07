@@ -460,16 +460,6 @@ LogViewer templates use Go's `text/template` engine with additional helper funct
 
 **Helper Functions:**
 
-* `{{Format "layout" .Timestamp}}` - Format timestamp (e.g., `{{Format "15:04:05" .Timestamp}}`)
-* `{{MultiLine .Fields}}` - Format fields as a multi-line list
-* `{{KV .Fields}}` - Format fields as key=value pairs
-* `{{ExpandJson .Message}}` - Pretty-print JSON found in the message
-* `{{Field .Fields "key"}}` - Case-insensitive field lookup
-
-* `{{.Fields}}` - Map of all extracted fields
-
-**Helper Functions:**
-
 * **`{{.Timestamp.Format "layout"}}`** - Format timestamp
   ```yaml
   # Common layouts
@@ -494,11 +484,19 @@ LogViewer templates use Go's `text/template` engine with additional helper funct
   #  * ID=12345
   ```
 
+* **`{{KV .Fields}}`** - Format fields as key=value pairs
+  ```yaml
+  [{{.Level}}] {{KV .Fields}} {{.Message}}
+  # Output: [INFO] logger=http duration=5ms Request processed
+  ```
+
 * **`{{ExpandJson .Message}}`** - Pretty-print JSON in message
   ```yaml
   {{ExpandJson .Message}}
   # Finds JSON objects and formats them with color and indentation
   ```
+
+* **`{{.Fields}}`** - Map of all extracted fields (useful for debugging)
 
 **Template Examples:**
 

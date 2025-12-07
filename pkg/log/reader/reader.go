@@ -49,21 +49,7 @@ func (lr *ReaderLogResult) parseLine(line string) bool {
 	// check if we have a date at the beginning and parse / remove it
 	if lr.regexDate != nil {
 		entry.Message = strings.TrimLeft(lr.regexDate.ReplaceAllStringFunc(line, func(v string) string {
-			// Try parsing using the configured format (typically RFC3339),
-			// then fallback to common space-separated layouts used in logs.
-			var parsed time.Time
-			var err error
-
-			parsed, err = time.Parse(ty.Format, v)
-			if err != nil {
-				// Try space-separated layout with milliseconds in local timezone
-				parsed, err = time.ParseInLocation("2006-01-02 15:04:05.000", v, time.Local)
-			}
-			if err != nil {
-				// Try without milliseconds
-				parsed, err = time.ParseInLocation("2006-01-02 15:04:05", v, time.Local)
-			}
-			if err == nil {
+			if parsed, err := parseTimestamp(v); err == nil {
 				entry.Timestamp = parsed
 			}
 			return ""
@@ -112,24 +98,7 @@ func (lr *ReaderLogResult) parseLine(line string) bool {
 			}
 
 			if v, ok := jsonMap[tsKey]; ok {
-				var parsed time.Time
-				var err error
-				switch t := v.(type) {
-				case string:
-					parsed, err = time.Parse(ty.Format, t)
-					if err != nil {
-						parsed, err = time.ParseInLocation("2006-01-02 15:04:05.000", t, time.Local)
-					}
-					if err != nil {
-						parsed, err = time.ParseInLocation("2006-01-02 15:04:05", t, time.Local)
-					}
-				case float64:
-					sec := int64(t)
-					nsec := int64((t - float64(sec)) * 1e9)
-					parsed = time.Unix(sec, nsec)
-				}
-
-				if err == nil && !parsed.IsZero() {
+				if parsed, err := parseTimestamp(v); err == nil && !parsed.IsZero() {
 					entry.Timestamp = parsed
 				}
 			}
@@ -278,4 +247,28 @@ func GetLogResult(
 	}
 
 	return result, nil
+}
+
+func parseTimestamp(v interface{}) (time.Time, error) {
+	var parsed time.Time
+	var err error
+
+	switch t := v.(type) {
+	case string:
+		parsed, err = time.Parse(ty.Format, t)
+		if err != nil {
+			parsed, err = time.ParseInLocation("2006-01-02 15:04:05.000", t, time.Local)
+		}
+		if err != nil {
+			parsed, err = time.ParseInLocation("2006-01-02 15:04:05", t, time.Local)
+		}
+	case float64:
+		sec := int64(t)
+		nsec := int64((t - float64(sec)) * 1e9)
+		parsed = time.Unix(sec, nsec)
+	default:
+		return time.Time{}, fmt.Errorf("unsupported timestamp format: %T", v)
+	}
+
+	return parsed, err
 }
