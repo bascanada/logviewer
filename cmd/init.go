@@ -26,6 +26,8 @@ var (
 	// docker
 	dockerHost      string
 	dockerContainer string
+	dockerService   string
+	dockerProject   string
 
 	// ssh options
 	sshOptions ssh.SSHLogClientOptions
@@ -108,6 +110,8 @@ func init() {
 	// DOCKER
 	queryCommand.PersistentFlags().StringVar(&dockerHost, "docker-host", "", "Docker context")
 	queryCommand.PersistentFlags().StringVar(&dockerContainer, "docker-container", "", "Docker container")
+	queryCommand.PersistentFlags().StringVar(&dockerService, "docker-service", "", "Docker Compose service name")
+	queryCommand.PersistentFlags().StringVar(&dockerProject, "docker-project", "", "Docker Compose project name")
 
 	// SSH
 	queryCommand.PersistentFlags().StringVar(&sshOptions.Addr, "ssh-addr", "", "SSH address and port localhost:22")
