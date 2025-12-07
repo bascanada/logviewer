@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/docker/cli/cli/connhelper"
 	"github.com/docker/docker/api/types/container"
@@ -50,6 +51,11 @@ func (lc DockerLogClient) Get(ctx context.Context, search *logclient.LogSearch) 
 
 		if len(containers) == 0 {
 			return nil, fmt.Errorf("no running containers found for service %s", service)
+		}
+
+		// TODO: Use MultiLogSearchResult to merge logs from all containers when multiple replicas exist
+		if len(containers) > 1 {
+			fmt.Fprintf(os.Stderr, "WARN: Found %d containers for service '%s'. Showing logs for the first one (%s).\n", len(containers), service, containers[0].ID[:12])
 		}
 
 		// Use the first matching container
@@ -99,21 +105,21 @@ func (lc DockerLogClient) Get(ctx context.Context, search *logclient.LogSearch) 
 }
 
 func GetLogClient(host string) (logclient.LogClient, error) {
-	// Préparation des options de base
+	// Prepare basic options
 	opts := []client.Opt{
 		client.FromEnv,
 		client.WithHost(host),
 		client.WithAPIVersionNegotiation(),
 	}
 
-	// Tenter de récupérer un helper de connexion (ex: pour ssh://)
+	// Try to get a connection helper (e.g., for ssh://)
 	helper, err := connhelper.GetConnectionHelper(host)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get connection helper: %w", err)
 	}
 
-	// Si un helper est trouvé (cas du SSH), on injecte son DialContext
-	// C'est ce qui permet d'utiliser le binaire ssh système et le fichier .ssh/config
+	// If a helper is found (SSH case), inject its DialContext
+	// This allows using the system ssh binary and .ssh/config file
 	if helper != nil {
 		opts = append(opts, client.WithDialContext(helper.Dialer))
 	}

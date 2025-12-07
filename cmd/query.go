@@ -255,8 +255,13 @@ func resolveSearch() (client.LogSearchResult, error) {
 	}
 
 	if dockerContainer != "" {
-
-		searchRequest.Options["Container"] = dockerContainer
+		searchRequest.Options["container"] = dockerContainer
+	}
+	if dockerService != "" {
+		searchRequest.Options["service"] = dockerService
+	}
+	if dockerProject != "" {
+		searchRequest.Options["project"] = dockerProject
 	}
 
 	var err error
@@ -278,12 +283,12 @@ func resolveSearch() (client.LogSearchResult, error) {
 		}
 	} else if endpointSplunk != "" {
 		system = "splunk"
-	} else if dockerContainer != "" {
+	} else if dockerContainer != "" || dockerService != "" {
 		system = "docker"
 	} else {
 		return nil, errors.New(`
         failed to select a system for logging provide one of the following:
-			* --docker-container
+			* --docker-container or --docker-service
 			* --splunk-endpoint
 			* --kibana-endpoint
             * --openseach-endpoint

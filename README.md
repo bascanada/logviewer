@@ -539,11 +539,19 @@ contexts:
 
 ##### Docker
 
-Will used your `$DOCKER_HOST` if `--docker-host` is not provided , only required arguments is the name
-of the container to query log for.
+Supports connecting to local and remote Docker hosts. Uses your `$DOCKER_HOST` if `--docker-host` is not provided. Remote hosts are supported via SSH using Docker's connhelper (e.g., `ssh://user@host:port`).
+
+For Docker Compose environments, you can specify a `service` name instead of a `container` ID/name. This dynamically resolves the container using Docker Compose labels. Optionally, restrict to a specific `project` to avoid conflicts when multiple Compose projects are running.
 
 ```bash
-logviewer query log --docker-host "unix:///Users/William.Quintal/.colima/lol/docker.sock" --docker-container "growbe-portal" --refresh --last 42h
+# Local Docker
+logviewer query log --docker-host "unix:///var/run/docker.sock" --docker-container "my-app"
+
+# Remote Docker via SSH
+logviewer query log --docker-host "ssh://user@remote-host:22" --docker-container "my-app"
+
+# Docker Compose service discovery
+logviewer query log --docker-host "unix:///var/run/docker.sock" --docker-service "api" --docker-project "my-project"
 ```
 
 ```yaml
@@ -552,6 +560,10 @@ clients:
     type: docker
     options:
       host: unix:///var/run/docker.sock
+  remote-docker:
+    type: docker
+    options:
+      host: ssh://user@remote-host:22
 contexts:
   docker-sample-container:
     client: local-docker
@@ -564,7 +576,24 @@ contexts:
         showStderr: true
         timestamps: true
         details: false
+  docker-compose-service:
+    client: local-docker
+    search:
+      options:
+        service: "api"
+        project: "my-project"  # Optional
+        showStdout: true
+        showStderr: true
+        timestamps: true
 ```
+
+**Docker Options:**
+
+* `host`: Docker daemon socket or URL (supports SSH via connhelper)
+* `container`: Container ID or name (for direct specification)
+* `service`: Docker Compose service name (for dynamic resolution)
+* `project`: Docker Compose project name (optional, for service filtering)
+* `showStdout`, `showStderr`, `timestamps`, `details`: Log output options
 
 ##### Local/SSH
 
