@@ -417,6 +417,15 @@ searches:
    - Useful for extracting IDs, IPs, counts, etc.
    - Example: `([A-Z]{2,}):\s([^\s,]+)` matches `ID: 12345`
 
+4. **`json`**: Enables native JSON parsing
+   - Set `json: true` to enable
+   - Automatically flattens JSON objects into fields
+   - Configurable keys for standard fields:
+     - `jsonMessageKey`: Key for the main message (default: "message")
+     - `jsonLevelKey`: Key for the log level (default: "level")
+     - `jsonTimestampKey`: Key for the timestamp (default: "timestamp")
+   - Supports numeric timestamps (Unix epoch) and string formats
+
 **Using Extracted Fields:**
 
 ```bash
@@ -448,6 +457,15 @@ LogViewer templates use Go's `text/template` engine with additional helper funct
 * `{{.Message}}` - Log message text
 * `{{.Level}}` - Log level (if extracted)
 * `{{.ContextID}}` - Source context (in multi-context queries)
+
+**Helper Functions:**
+
+* `{{Format "layout" .Timestamp}}` - Format timestamp (e.g., `{{Format "15:04:05" .Timestamp}}`)
+* `{{MultiLine .Fields}}` - Format fields as a multi-line list
+* `{{KV .Fields}}` - Format fields as key=value pairs
+* `{{ExpandJson .Message}}` - Pretty-print JSON found in the message
+* `{{Field .Fields "key"}}` - Case-insensitive field lookup
+
 * `{{.Fields}}` - Map of all extracted fields
 
 **Helper Functions:**

@@ -35,6 +35,17 @@ func MultlineFields(values ty.MI) string {
 	return str
 }
 
+func KV(values ty.MI) string {
+	str := ""
+	for k, v := range values {
+		if str != "" {
+			str += " "
+		}
+		str += fmt.Sprintf("%s=%v", k, v)
+	}
+	return str
+}
+
 func ExpandJson(value string) string {
 	reg := regexp.MustCompile(regexJsonExtraction)
 	f := colorjson.NewFormatter()
@@ -77,5 +88,6 @@ func GetTemplateFunctionsMap() template.FuncMap {
 		"MultiLine":  MultlineFields,
 		"ExpandJson": ExpandJson,
 		"Field":      GetField,
+		"KV":         KV,
 	}
 }
