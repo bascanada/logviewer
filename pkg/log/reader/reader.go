@@ -3,6 +3,8 @@ package reader
 import (
 	"bufio"
 	"context"
+	"encoding/json"
+	"fmt"
 	"io"
 	"regexp"
 	"strings"
@@ -47,25 +49,60 @@ func (lr *ReaderLogResult) parseLine(line string) bool {
 	// check if we have a date at the beginning and parse / remove it
 	if lr.regexDate != nil {
 		entry.Message = strings.TrimLeft(lr.regexDate.ReplaceAllStringFunc(line, func(v string) string {
-			// Try parsing using the configured format (typically RFC3339),
-			// then fallback to common space-separated layouts used in logs.
-			var parsed time.Time
-			var err error
-
-			parsed, err = time.Parse(ty.Format, v)
-			if err != nil {
-				// Try space-separated layout with milliseconds in local timezone
-				parsed, err = time.ParseInLocation("2006-01-02 15:04:05.000", v, time.Local)
-			}
-			if err != nil {
-				// Try without milliseconds
-				parsed, err = time.ParseInLocation("2006-01-02 15:04:05", v, time.Local)
-			}
-			if err == nil {
+			if parsed, err := parseTimestamp(v); err == nil {
 				entry.Timestamp = parsed
 			}
 			return ""
 		}), " ")
+	}
+
+	if lr.search.FieldExtraction.Json.Value {
+		var jsonMap map[string]interface{}
+		jsonContent := entry.Message
+		if idx := strings.LastIndex(entry.Message, "{"); idx != -1 {
+			jsonContent = entry.Message[idx:]
+		}
+		decoder := json.NewDecoder(strings.NewReader(jsonContent))
+		if err := decoder.Decode(&jsonMap); err == nil {
+			msgKey := "message"
+			if lr.search.FieldExtraction.JsonMessageKey.Set {
+				msgKey = lr.search.FieldExtraction.JsonMessageKey.Value
+			}
+			levelKey := "level"
+			if lr.search.FieldExtraction.JsonLevelKey.Set {
+				levelKey = lr.search.FieldExtraction.JsonLevelKey.Value
+			}
+			tsKey := "timestamp"
+			if lr.search.FieldExtraction.JsonTimestampKey.Set {
+				tsKey = lr.search.FieldExtraction.JsonTimestampKey.Value
+			}
+
+			for k, v := range jsonMap {
+				if k == msgKey || k == levelKey || k == tsKey {
+					continue
+				}
+				entry.Fields[k] = v
+				lr.fields.Add(k, fmt.Sprintf("%v", v))
+			}
+
+			if v, ok := jsonMap[msgKey]; ok {
+				if s, ok := v.(string); ok {
+					entry.Message = s
+				}
+			}
+
+			if v, ok := jsonMap[levelKey]; ok {
+				if s, ok := v.(string); ok {
+					entry.Level = s
+				}
+			}
+
+			if v, ok := jsonMap[tsKey]; ok {
+				if parsed, err := parseTimestamp(v); err == nil && !parsed.IsZero() {
+					entry.Timestamp = parsed
+				}
+			}
+		}
 	}
 
 	if lr.namedGroupRegexExtraction != nil {
@@ -93,7 +130,7 @@ func (lr *ReaderLogResult) parseLine(line string) bool {
 		}
 	}
 
-	if lr.namedGroupRegexExtraction != nil || lr.kvRegexExtraction != nil {
+	if lr.namedGroupRegexExtraction != nil || lr.kvRegexExtraction != nil || lr.search.FieldExtraction.Json.Value {
 		for k, v := range lr.search.Fields {
 			if vv, ok := entry.Fields[k]; ok {
 				if v != vv {
@@ -210,4 +247,28 @@ func GetLogResult(
 	}
 
 	return result, nil
+}
+
+func parseTimestamp(v interface{}) (time.Time, error) {
+	var parsed time.Time
+	var err error
+
+	switch t := v.(type) {
+	case string:
+		parsed, err = time.Parse(ty.Format, t)
+		if err != nil {
+			parsed, err = time.ParseInLocation("2006-01-02 15:04:05.000", t, time.Local)
+		}
+		if err != nil {
+			parsed, err = time.ParseInLocation("2006-01-02 15:04:05", t, time.Local)
+		}
+	case float64:
+		sec := int64(t)
+		nsec := int64((t - float64(sec)) * 1e9)
+		parsed = time.Unix(sec, nsec)
+	default:
+		return time.Time{}, fmt.Errorf("unsupported timestamp format: %T", v)
+	}
+
+	return parsed, err
 }

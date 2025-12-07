@@ -417,6 +417,15 @@ searches:
    - Useful for extracting IDs, IPs, counts, etc.
    - Example: `([A-Z]{2,}):\s([^\s,]+)` matches `ID: 12345`
 
+4. **`json`**: Enables native JSON parsing
+   - Set `json: true` to enable
+   - Automatically flattens JSON objects into fields
+   - Configurable keys for standard fields:
+     - `jsonMessageKey`: Key for the main message (default: "message")
+     - `jsonLevelKey`: Key for the log level (default: "level")
+     - `jsonTimestampKey`: Key for the timestamp (default: "timestamp")
+   - Supports numeric timestamps (Unix epoch) and string formats
+
 **Using Extracted Fields:**
 
 ```bash
@@ -448,7 +457,6 @@ LogViewer templates use Go's `text/template` engine with additional helper funct
 * `{{.Message}}` - Log message text
 * `{{.Level}}` - Log level (if extracted)
 * `{{.ContextID}}` - Source context (in multi-context queries)
-* `{{.Fields}}` - Map of all extracted fields
 
 **Helper Functions:**
 
@@ -476,11 +484,19 @@ LogViewer templates use Go's `text/template` engine with additional helper funct
   #  * ID=12345
   ```
 
+* **`{{KV .Fields}}`** - Format fields as key=value pairs
+  ```yaml
+  [{{.Level}}] {{KV .Fields}} {{.Message}}
+  # Output: [INFO] logger=http duration=5ms Request processed
+  ```
+
 * **`{{ExpandJson .Message}}`** - Pretty-print JSON in message
   ```yaml
   {{ExpandJson .Message}}
   # Finds JSON objects and formats them with color and indentation
   ```
+
+* **`{{.Fields}}`** - Map of all extracted fields (useful for debugging)
 
 **Template Examples:**
 

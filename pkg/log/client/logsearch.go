@@ -25,6 +25,11 @@ type FieldExtraction struct {
 	GroupRegex     ty.Opt[string] `json:"groupRegex,omitempty" yaml:"groupRegex,omitempty"`
 	KvRegex        ty.Opt[string] `json:"kvRegex,omitempty" yaml:"kvRegex,omitempty"`
 	TimestampRegex ty.Opt[string] `json:"timestampRegex,omitempty" yaml:"timestampRegex,omitempty"`
+
+	Json             ty.Opt[bool]   `json:"json,omitempty" yaml:"json,omitempty"`
+	JsonMessageKey   ty.Opt[string] `json:"jsonMessageKey,omitempty" yaml:"jsonMessageKey,omitempty"`
+	JsonLevelKey     ty.Opt[string] `json:"jsonLevelKey,omitempty" yaml:"jsonLevelKey,omitempty"`
+	JsonTimestampKey ty.Opt[string] `json:"jsonTimestampKey,omitempty" yaml:"jsonTimestampKey,omitempty"`
 }
 
 type PrinterOptions struct {
@@ -94,6 +99,10 @@ func (lr *LogSearch) MergeInto(logSeach *LogSearch) error {
 	lr.FieldExtraction.GroupRegex.Merge(&logSeach.FieldExtraction.GroupRegex)
 	lr.FieldExtraction.KvRegex.Merge(&logSeach.FieldExtraction.KvRegex)
 	lr.FieldExtraction.TimestampRegex.Merge(&logSeach.FieldExtraction.TimestampRegex)
+	lr.FieldExtraction.Json.Merge(&logSeach.FieldExtraction.Json)
+	lr.FieldExtraction.JsonMessageKey.Merge(&logSeach.FieldExtraction.JsonMessageKey)
+	lr.FieldExtraction.JsonLevelKey.Merge(&logSeach.FieldExtraction.JsonLevelKey)
+	lr.FieldExtraction.JsonTimestampKey.Merge(&logSeach.FieldExtraction.JsonTimestampKey)
 	lr.PrinterOptions.Template.Merge(&logSeach.PrinterOptions.Template)
 	lr.PrinterOptions.MessageRegex.Merge(&logSeach.PrinterOptions.MessageRegex)
 	lr.Range.Gte.Merge(&logSeach.Range.Gte)

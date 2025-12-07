@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"strings"
 	"text/template"
 	"time"
 
@@ -33,6 +34,14 @@ func MultlineFields(values ty.MI) string {
 	}
 
 	return str
+}
+
+func KV(values ty.MI) string {
+	items := make([]string, 0, len(values))
+	for k, v := range values {
+		items = append(items, fmt.Sprintf("%s=%v", k, v))
+	}
+	return strings.Join(items, " ")
 }
 
 func ExpandJson(value string) string {
@@ -77,5 +86,6 @@ func GetTemplateFunctionsMap() template.FuncMap {
 		"MultiLine":  MultlineFields,
 		"ExpandJson": ExpandJson,
 		"Field":      GetField,
+		"KV":         KV,
 	}
 }
