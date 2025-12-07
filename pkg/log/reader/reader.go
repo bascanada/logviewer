@@ -73,7 +73,7 @@ func (lr *ReaderLogResult) parseLine(line string) bool {
 	if lr.search.FieldExtraction.Json.Value {
 		var jsonMap map[string]interface{}
 		jsonContent := entry.Message
-		if idx := strings.Index(entry.Message, "{"); idx != -1 {
+		if idx := strings.LastIndex(entry.Message, "{"); idx != -1 {
 			jsonContent = entry.Message[idx:]
 		}
 		decoder := json.NewDecoder(strings.NewReader(jsonContent))
