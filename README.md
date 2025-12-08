@@ -275,6 +275,60 @@ make install PREFIX=$HOME/.local/bin
 
 ## Features
 
+### Quick Start with Interactive Configuration
+
+The fastest way to get started with logviewer is using the interactive configuration wizard:
+
+```bash
+logviewer configure
+```
+
+This launches an interactive wizard that helps you set up your first log source. It supports:
+
+* **Splunk** - With multiple authentication methods (Splunk Token, Bearer with MD5, or pre-computed hash)
+* **OpenSearch / Elasticsearch** - With optional authentication
+* **Kubernetes (K3s/K8s)** - With custom or default kubeconfig
+* **Docker** - Local Docker daemon
+* **SSH** - Remote files over SSH
+* **AWS CloudWatch** - With optional LocalStack support
+* **Local Files** - Direct file access
+
+The wizard will:
+
+1. Guide you through selecting your log source type
+2. Prompt for required connection details
+3. Configure authentication (passwords are hidden)
+4. Show a preview of the generated configuration
+5. Save to `~/.logviewer/config.yaml` (or merge with existing config)
+
+**Examples:**
+
+```bash
+# Create config in default location (~/.logviewer/config.yaml)
+logviewer configure
+
+# Create config at custom path
+logviewer configure -c /path/to/custom-config.yaml
+
+# Use environment variable for config path
+export LOGVIEWER_CONFIG=/path/to/config.yaml
+logviewer configure
+```
+
+The wizard will indicate whether it's creating a new file or updating an existing one:
+
+* 📄 "Creating new configuration file: ..."
+* 📝 "Updating existing configuration file: ..."
+
+After configuration, the wizard shows you the exact command to test your setup:
+
+```bash
+✅ Configuration saved to /Users/you/.logviewer/config.yaml
+
+🎉 You're all set! Try it now:
+   logviewer query -i production-splunk-default
+```
+
 ### Configuration
 
 logviewer supports JSON and YAML config files and looks for the configuration in the following order:

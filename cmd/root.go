@@ -4,6 +4,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
@@ -18,6 +19,18 @@ var rootCmd = &cobra.Command{
 	Long:   ``,
 	PreRun: onCommandStart,
 	Run: func(cmd *cobra.Command, args []string) {
+		// Check if config exists before showing generic help
+		home, err := os.UserHomeDir()
+		if err == nil {
+			configPath := filepath.Join(home, ".logviewer", "config.yaml")
+			if _, err := os.Stat(configPath); os.IsNotExist(err) {
+				fmt.Println("Welcome to logviewer!")
+				fmt.Println("\nNo configuration found.")
+				fmt.Println("   Run 'logviewer configure' to get started with an interactive setup wizard.")
+				fmt.Println("\nOr use 'logviewer --help' to see all available options.")
+				return
+			}
+		}
 		cmd.Help()
 	},
 }
