@@ -1,0 +1,76 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/bascanada/logviewer/cmd.sha1ver={{ .Version }}
+
+archives:
+  - id: default
+    # this name template makes the tarballs look like logviewer_Linux_x86_64.tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+
+brews:
+  - repository:
+      owner: bascanada
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    
+    name: logviewer
+    homepage: "https://github.com/bascanada/logviewer"
+    description: "CLI log client for multiple sources (Splunk, K8s, Docker, etc)"
+    install: |
+      bin.install "logviewer"
+
+aurs:
+  - name: logviewer-bin
+    homepage: "https://github.com/bascanada/logviewer"
+    description: "CLI log client for multiple sources (Splunk, K8s, Docker, etc)"
+    maintainers:
+      - "Bascanada <info@bascanada.com>"
+    license: "GPL-3.0"
+    
+    git_url: "ssh://aur@aur.archlinux.org/logviewer-bin.git"
+    
+    private_key: "{{ .Env.AUR_KEY }}"
+    
+    package: |-
+      # bin is simply installed to /usr/bin
+      install -Dm755 "./logviewer" "${pkgdir}/usr/bin/logviewer"
+      
+      # Install license and readme
+      install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+      install -Dm644 "./README.md" "${pkgdir}/usr/share/doc/${pkgname}/README.md"

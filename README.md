@@ -228,9 +228,20 @@ logviewer --cmd "tail -n 100 $LOG_FILE" query log
 
 ## Installation
 
+### Homebrew (macOS & Linux)
+
+```bash
+brew tap bascanada/tap
+brew install logviewer
+```
+
+### AUR (Arch Linux)
+
+[Link to AUR Bin release](https://aur.archlinux.org/logviewer-bin.git)
+
 ### Quick Install (Linux & macOS)
 
-Run the following command to download the latest release and install it to `/usr/local/bin`:
+Download the latest release and install it to `/usr/local/bin`:
 
 ```bash
 curl -L "https://github.com/bascanada/logviewer/releases/latest/download/logviewer-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m | sed 's/x86_64/amd64/')" -o ./logviewer && chmod +x ./logviewer
@@ -257,6 +268,7 @@ logviewer() {
 ```bash
 git clone https://github.com/bascanada/logviewer.git
 cd logviewer
+make build
 make install PREFIX=$HOME/.local/bin
 ```
 
