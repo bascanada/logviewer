@@ -237,7 +237,7 @@ brew install logviewer
 
 ### AUR (Arch Linux)
 
-[Link to AUR Bin release](https://aur.archlinux.org/logviewer-bin.git)
+[Link to AUR Bin release](https://aur.archlinux.org/packages/logviewer-bin)
 
 ### Quick Install (Linux & macOS)
 
