@@ -97,21 +97,34 @@ func TestLoadContextConfig_EnvVarPrecedence(t *testing.T) {
 	}
 
 	// ensure env var path takes precedence: create a default file that would be different
-	defaultDir := filepath.Join(dir, DefaultConfigDir)
-	defaultPath := writeTemp(t, defaultDir, DefaultConfigFile, sampleJSON)
-	// override env var to point to a different file and verify it's used
-	if err := os.Setenv(EnvConfigPath, defaultPath); err != nil {
-		t.Fatalf("failed to set env var to default path: %v", err)
-	}
+	// Wait, precedence: Explicit > Env > Default.
+	// But in this test we are calling with empty string, so Explicit is empty.
+	// So Env should take precedence.
+
+	// But wait, the previous test implementation checked that Env takes precedence over Default.
+	// Let's implement that.
+
+	// Create a fake home dir structure to simulate default config
+	homeDir := filepath.Join(dir, "home")
+	os.Setenv("HOME", homeDir) // This might not work on Windows but let's assume *nix for now or proper mocks
+
+	// Actually LoadContextConfig uses os.UserHomeDir(), which respects HOME on unix.
+
+	defaultDir := filepath.Join(homeDir, DefaultConfigDir)
+	// Write a file that defines a different context
+	defaultContent := `contexts: { "defaultCtx": { "client": "c1", "search": {} } }`
+	writeTemp(t, defaultDir, DefaultConfigFile, defaultContent)
+
+	// We still have EnvConfigPath set to 'path' which contains 'ctx1'.
 	cfg2, err := LoadContextConfig("")
 	if err != nil {
 		t.Fatalf("expected no error loading via env var (default override), got %v", err)
 	}
-	if len(cfg2.Contexts) != 1 {
-		t.Fatalf("unexpected config contents from overridden env var: contexts=%d", len(cfg2.Contexts))
+	if _, ok := cfg2.Contexts["ctx1"]; !ok {
+		t.Fatalf("expected 'ctx1' from env var, but not found. Maybe default was loaded?")
 	}
-	if _, ok := cfg2.Clients["c1"]; !ok {
-		t.Fatalf("expected client 'c1' present from overridden env var config")
+	if _, ok := cfg2.Contexts["defaultCtx"]; ok {
+		t.Fatalf("expected 'defaultCtx' NOT to be loaded when Env var is set")
 	}
 
 	// cleanup env var
@@ -242,5 +255,86 @@ func TestGetSearchContext_VariableDefaults(t *testing.T) {
 	cmdOpt2 := ctx2.Search.Options.GetString("cmd")
 	if cmdOpt2 != "cat /var/log/error.log" {
 		t.Errorf("expected cmd with error.log (runtime), got %s", cmdOpt2)
+	}
+}
+
+func TestLoadContextConfig_MultiFileMerge(t *testing.T) {
+	// Create a temporary HOME directory structure
+	tmpHome := t.TempDir()
+	configDir := filepath.Join(tmpHome, DefaultConfigDir)
+	dropInDir := filepath.Join(configDir, "configs")
+
+	if err := os.MkdirAll(dropInDir, 0755); err != nil {
+		t.Fatalf("failed to create config dirs: %v", err)
+	}
+
+	// Mock UserHomeDir via env var (assuming internal implementation or system respects it)
+	// Note: os.UserHomeDir() respects HOME on Unix.
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", oldHome)
+
+	// 1. Create main config file
+	mainContent := `
+clients:
+  c1: { type: local, options: {} }
+contexts:
+  mainCtx: { client: c1, search: {} }
+`
+	if err := os.WriteFile(filepath.Join(configDir, DefaultConfigFile), []byte(mainContent), 0644); err != nil {
+		t.Fatalf("failed to write main config: %v", err)
+	}
+
+	// 2. Create a drop-in config file
+	dropInContent := `
+contexts:
+  dropInCtx: { client: c1, search: {} }
+  mainCtx: { client: c1, description: "overridden", search: {} } # Should override mainCtx
+`
+	if err := os.WriteFile(filepath.Join(dropInDir, "extra.yaml"), []byte(dropInContent), 0644); err != nil {
+		t.Fatalf("failed to write drop-in config: %v", err)
+	}
+
+	// 3. Load config
+	cfg, err := LoadContextConfig("")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// 4. Verify merge
+	if _, ok := cfg.Contexts["mainCtx"]; !ok {
+		t.Errorf("expected mainCtx to be present")
+	} else {
+		if cfg.Contexts["mainCtx"].Description != "overridden" {
+			t.Errorf("expected mainCtx to be overridden, got desc: %s", cfg.Contexts["mainCtx"].Description)
+		}
+	}
+
+	if _, ok := cfg.Contexts["dropInCtx"]; !ok {
+		t.Errorf("expected dropInCtx to be present")
+	}
+}
+
+func TestLoadContextConfig_EnvVarMultiFile(t *testing.T) {
+	// Test loading multiple files via LOGVIEWER_CONFIG="file1:file2"
+	dir := t.TempDir()
+
+	file1 := writeTemp(t, dir, "f1.yaml", `contexts: { ctx1: { client: local, search: {} } }`)
+	file2 := writeTemp(t, dir, "f2.yaml", `contexts: { ctx2: { client: local, search: {} } }`)
+
+	envVal := fmt.Sprintf("%s%c%s", file1, os.PathListSeparator, file2)
+	os.Setenv(EnvConfigPath, envVal)
+	defer os.Unsetenv(EnvConfigPath)
+
+	cfg, err := LoadContextConfig("")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if _, ok := cfg.Contexts["ctx1"]; !ok {
+		t.Errorf("expected ctx1 from file1")
+	}
+	if _, ok := cfg.Contexts["ctx2"]; !ok {
+		t.Errorf("expected ctx2 from file2")
 	}
 }

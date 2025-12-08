@@ -186,14 +186,20 @@ func resolveSearch() (client.LogSearchResult, error) {
 			}
 		}
 
-		// If no contexts are specified via -i, and we are not in an interactive view,
-		// there's nothing to query.
+		// If no contexts are specified via -i, check if a current context is active from state
+		if len(contextIds) == 0 {
+			if cfg.CurrentContext != "" {
+				// Verify the active context still exists in the configuration
+				if _, ok := cfg.Contexts[cfg.CurrentContext]; ok {
+					contextIds = []string{cfg.CurrentContext}
+				}
+			}
+		}
+
+		// If still no contexts are specified, fail.
 		if len(contextIds) == 0 {
 			// This check is to prevent trying to query nothing when in non-interactive mode.
-			// The interactive view has its own logic for handling context selection.
-			// Note: This part of the logic might need adjustment depending on the exact desired CLI behavior
-			// when no contexts are provided.
-			return nil, errors.New("no contexts specified for query; use -i to select one or more contexts")
+			return nil, errors.New("no contexts specified for query; use -i to select one or more contexts or set a default with 'logviewer context use'")
 		}
 
 		// For single context, execute directly without MultiLogSearchResult wrapper
