@@ -40,22 +40,43 @@ func init() {
 	rootCmd.AddCommand(configureCmd)
 }
 
+// wizardData encapsulates all configuration data collected from the wizard
+type wizardData struct {
+	clientType string
+	endpoint   string
+	authType   string
+	token      string
+	username   string
+	password   string
+	sshAddr    string
+	sshUser    string
+	sshKey     string
+	region     string
+	kubeConfig string
+}
+
+// resolveConfigPath determines the config file path from flag, env var, or default
+func resolveConfigPath(cfgPath string) (string, error) {
+	if strings.TrimSpace(cfgPath) != "" {
+		return cfgPath, nil
+	}
+	if envPath := strings.TrimSpace(os.Getenv(config.EnvConfigPath)); envPath != "" {
+		return envPath, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+	return filepath.Join(home, config.DefaultConfigDir, config.DefaultConfigFile), nil
+}
+
 func runConfigWizard(cfgPath string) error {
 	var (
-		clientType string
 		clientName string
-		endpoint   string
-		authType   string
-		token      string
-		username   string
-		password   string
-		sshAddr    string
-		sshUser    string
-		sshKey     string
-		region     string
-		kubeConfig string
 		confirm    bool
 	)
+
+	wizData := &wizardData{}
 
 	// Welcome message
 	fmt.Println("🚀 Welcome to logviewer configuration wizard!")
@@ -70,13 +91,13 @@ func runConfigWizard(cfgPath string) error {
 				Options(
 					huh.NewOption("Splunk", "splunk"),
 					huh.NewOption("OpenSearch / Elasticsearch", "opensearch"),
-					huh.NewOption("Kubernetes", "k8s"),
-					huh.NewOption("Docker", "docker"),
-					huh.NewOption("SSH (Remote Command)", "ssh"),
+					huh.NewOption("Kubernetes (K3s/K8s)", "k8s"),
+					huh.NewOption("Docker (Local)", "docker"),
+					huh.NewOption("SSH (Remote Files)", "ssh"),
 					huh.NewOption("AWS CloudWatch", "cloudwatch"),
-					huh.NewOption("Local Command", "local"),
+					huh.NewOption("Local Files", "local"),
 				).
-				Value(&clientType),
+				Value(&wizData.clientType),
 
 			huh.NewInput().
 				Title("Name for this client").
@@ -100,25 +121,25 @@ func runConfigWizard(cfgPath string) error {
 	}
 
 	// 2. Dynamic fields based on selection
-	switch clientType {
+	switch wizData.clientType {
 	case "splunk":
-		if err := configureSplunk(&endpoint, &authType, &token, &username, &password); err != nil {
+		if err := configureSplunk(&wizData.endpoint, &wizData.authType, &wizData.token, &wizData.username, &wizData.password); err != nil {
 			return err
 		}
 	case "opensearch":
-		if err := configureOpenSearch(&endpoint, &username, &password); err != nil {
+		if err := configureOpenSearch(&wizData.endpoint, &wizData.username, &wizData.password); err != nil {
 			return err
 		}
 	case "ssh":
-		if err := configureSSH(&sshAddr, &sshUser, &sshKey); err != nil {
+		if err := configureSSH(&wizData.sshAddr, &wizData.sshUser, &wizData.sshKey); err != nil {
 			return err
 		}
 	case "cloudwatch":
-		if err := configureCloudWatch(&region, &endpoint); err != nil {
+		if err := configureCloudWatch(&wizData.region, &wizData.endpoint); err != nil {
 			return err
 		}
 	case "k8s":
-		if err := configureKubernetes(&kubeConfig); err != nil {
+		if err := configureKubernetes(&wizData.kubeConfig); err != nil {
 			return err
 		}
 	case "docker":
@@ -137,18 +158,17 @@ func runConfigWizard(cfgPath string) error {
 	}
 
 	// Build Client Options
-	opts := buildClientOptions(clientType, endpoint, authType, token, username, password,
-		sshAddr, sshUser, sshKey, region, kubeConfig)
+	opts := buildClientOptions(wizData)
 
 	// Add Client
 	cfg.Clients[clientName] = config.Client{
-		Type:    clientType,
+		Type:    wizData.clientType,
 		Options: opts,
 	}
 
 	// Add a Default Context based on client type
 	contextName := clientName + "-default"
-	searchConfig := buildDefaultSearch(clientType)
+	searchConfig := buildDefaultSearch(wizData.clientType)
 	cfg.Contexts[contextName] = config.SearchContext{
 		Client: clientName,
 		Search: searchConfig,
@@ -168,14 +188,9 @@ func runConfigWizard(cfgPath string) error {
 
 	// 5. Confirm and Save
 	// Determine target config path for confirmation message
-	var targetPath string
-	if strings.TrimSpace(cfgPath) != "" {
-		targetPath = cfgPath
-	} else if envPath := strings.TrimSpace(os.Getenv(config.EnvConfigPath)); envPath != "" {
-		targetPath = envPath
-	} else {
-		home, _ := os.UserHomeDir()
-		targetPath = filepath.Join(home, config.DefaultConfigDir, config.DefaultConfigFile)
+	targetPath, err := resolveConfigPath(cfgPath)
+	if err != nil {
+		return err
 	}
 
 	confirmForm := huh.NewForm(
@@ -198,18 +213,10 @@ func runConfigWizard(cfgPath string) error {
 		return nil
 	}
 
-	// Determine config path from flag, env var, or default
-	var configPath string
-	if strings.TrimSpace(cfgPath) != "" {
-		configPath = cfgPath
-	} else if envPath := strings.TrimSpace(os.Getenv(config.EnvConfigPath)); envPath != "" {
-		configPath = envPath
-	} else {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("failed to get home directory: %w", err)
-		}
-		configPath = filepath.Join(home, config.DefaultConfigDir, config.DefaultConfigFile)
+	// Resolve config path using helper function
+	configPath, err := resolveConfigPath(cfgPath)
+	if err != nil {
+		return err
 	}
 
 	// Create directory if it doesn't exist
@@ -234,6 +241,43 @@ func runConfigWizard(cfgPath string) error {
 	// Check if config already exists and merge if needed
 	existingCfg, err := config.LoadContextConfig(configPath)
 	if err == nil && existingCfg != nil {
+		// Check for duplicate client or context names
+		var conflicts []string
+		if _, exists := existingCfg.Clients[clientName]; exists {
+			conflicts = append(conflicts, fmt.Sprintf("client '%s'", clientName))
+		}
+		if _, exists := existingCfg.Contexts[contextName]; exists {
+			conflicts = append(conflicts, fmt.Sprintf("context '%s'", contextName))
+		}
+
+		if len(conflicts) > 0 {
+			fmt.Printf("\n⚠️  Warning: The following already exist in the configuration:\n")
+			for _, conflict := range conflicts {
+				fmt.Printf("   - %s\n", conflict)
+			}
+
+			var overwrite bool
+			overwriteForm := huh.NewForm(
+				huh.NewGroup(
+					huh.NewConfirm().
+						Title("Do you want to overwrite the existing configuration?").
+						Description("This will replace the existing entries with the new configuration").
+						Affirmative("Yes, overwrite").
+						Negative("No, cancel").
+						Value(&overwrite),
+				),
+			)
+
+			if err := overwriteForm.Run(); err != nil {
+				return err
+			}
+
+			if !overwrite {
+				fmt.Println("❌ Configuration not saved. Please run 'logviewer configure' again with a different name.")
+				return nil
+			}
+		}
+
 		// Merge with existing config
 		for k, v := range cfg.Clients {
 			existingCfg.Clients[k] = v
@@ -256,7 +300,7 @@ func runConfigWizard(cfgPath string) error {
 	fmt.Println("🎉 You're all set! Try it now:")
 	fmt.Printf("   logviewer query -i %s\n\n", contextName)
 
-	if clientType == "local" {
+	if wizData.clientType == "local" {
 		fmt.Println("💡 For local files, you'll need to specify a command in your context.")
 		fmt.Println("   Edit your config and add an 'options.cmd' field, for example:")
 		fmt.Println("   options:")
@@ -481,24 +525,25 @@ func configureKubernetes(kubeConfig *string) error {
 	return nil
 }
 
-func buildClientOptions(clientType, endpoint, authType, token, username, password,
-	sshAddr, sshUser, sshKey, region, kubeConfig string) ty.MI {
-
+func buildClientOptions(data *wizardData) ty.MI {
 	opts := ty.MI{}
 
-	switch clientType {
+	switch data.clientType {
 	case "splunk":
-		opts["url"] = endpoint
+		opts["url"] = data.endpoint
 		headers := ty.MS{}
 
-		if authType == "splunk" {
-			headers["Authorization"] = "Splunk " + token
-		} else if authType == "bearer-hash" {
+		if data.authType == "splunk" {
+			headers["Authorization"] = "Splunk " + data.token
+		} else if data.authType == "bearer-hash" {
 			// Use pre-computed hash directly
-			headers["Authorization"] = "Bearer " + token
+			headers["Authorization"] = "Bearer " + data.token
 		} else {
+			// Security Warning: MD5 is cryptographically weak and vulnerable to collisions.
+			// This is used here because it's required by the legacy Splunk API.
+			// If the API supports SHA-256 or other secure algorithms, prefer those instead.
 			// Calculate MD5 hash of username:password for Bearer auth
-			hash := md5.Sum([]byte(username + ":" + password))
+			hash := md5.Sum([]byte(data.username + ":" + data.password))
 			hashStr := hex.EncodeToString(hash[:])
 			headers["Authorization"] = "Bearer " + hashStr
 		}
@@ -508,30 +553,30 @@ func buildClientOptions(clientType, endpoint, authType, token, username, passwor
 		opts["usePollingFollow"] = false
 
 	case "opensearch":
-		opts["endpoint"] = endpoint
-		if username != "" && password != "" {
+		opts["endpoint"] = data.endpoint
+		if data.username != "" && data.password != "" {
 			opts["auth"] = ty.MI{
-				"username": username,
-				"password": password,
+				"username": data.username,
+				"password": data.password,
 			}
 		}
 
 	case "ssh":
-		opts["addr"] = sshAddr
-		opts["user"] = sshUser
-		if sshKey != "" {
-			opts["privateKey"] = sshKey
+		opts["addr"] = data.sshAddr
+		opts["user"] = data.sshUser
+		if data.sshKey != "" {
+			opts["privateKey"] = data.sshKey
 		}
 
 	case "cloudwatch":
-		opts["region"] = region
-		if endpoint != "" {
-			opts["endpoint"] = endpoint
+		opts["region"] = data.region
+		if data.endpoint != "" {
+			opts["endpoint"] = data.endpoint
 		}
 
 	case "k8s":
-		if kubeConfig != "" {
-			opts["kubeConfig"] = kubeConfig
+		if data.kubeConfig != "" {
+			opts["kubeConfig"] = data.kubeConfig
 		}
 
 	case "docker":
