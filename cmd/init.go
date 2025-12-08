@@ -5,6 +5,7 @@ import (
 
 	httpPkg "github.com/bascanada/logviewer/pkg/http"
 	"github.com/bascanada/logviewer/pkg/log"
+	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/client/config"
 	"github.com/bascanada/logviewer/pkg/log/impl/ssh"
 	"github.com/spf13/cobra"
@@ -87,6 +88,19 @@ func onCommandStart(cmd *cobra.Command, args []string) {
 	httpPkg.SetDebug(debugHttp)
 }
 
+// loadConfigForCompletion is a helper function that loads the configuration
+// for shell completion functions. It handles errors gracefully by returning
+// the appropriate shell completion directive.
+func loadConfigForCompletion(cmd *cobra.Command) (*config.ContextConfig, cobra.ShellCompDirective) {
+	cfgPath, _ := cmd.Flags().GetString("config")
+	cfg, err := config.LoadContextConfig(cfgPath)
+	if err != nil {
+		// Cobra will report the error to the user's shell.
+		return nil, cobra.ShellCompDirectiveError
+	}
+	return cfg, cobra.ShellCompDirectiveDefault
+}
+
 func init() {
 
 	// CONFIG
@@ -94,15 +108,9 @@ func init() {
 
 	// Register completion function for the --id flag
 	_ = queryCommand.RegisterFlagCompletionFunc("id", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		// Retrieve the value of --config if the user provided it on the command line
-		cfgPath, _ := cmd.Flags().GetString("config")
-
-		// Load the configuration using the existing logic
-		// This automatically handles the precedence: Flag -> Env Var -> Default File
-		cfg, err := config.LoadContextConfig(cfgPath)
-		if err != nil {
-			// If config fails to load, return no suggestions
-			return nil, cobra.ShellCompDirectiveError
+		cfg, directive := loadConfigForCompletion(cmd)
+		if cfg == nil {
+			return nil, directive
 		}
 
 		var suggestions []string
@@ -211,39 +219,30 @@ func init() {
 
 	// Register completion for --var flag
 	_ = queryCommand.RegisterFlagCompletionFunc("var", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		// Get config path and context IDs
-		cfgPath, _ := cmd.Flags().GetString("config")
+		cfg, directive := loadConfigForCompletion(cmd)
+		if cfg == nil {
+			return nil, directive
+		}
+
+		// Get context IDs to determine which variables to suggest
 		contextIDFlags, _ := cmd.Flags().GetStringArray("id")
-
-		// Load the configuration
-		cfg, err := config.LoadContextConfig(cfgPath)
-		if err != nil || len(contextIDFlags) == 0 {
+		if len(contextIDFlags) == 0 {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
 
-		// Get the first context to suggest variables from
+		// Get the first context ID
 		contextID := contextIDFlags[0]
-		searchContext, ok := cfg.Contexts[contextID]
-		if !ok {
+
+		// Get the fully resolved search context to access all variables, including inherited ones
+		resolvedContext, err := cfg.GetSearchContext(contextID, nil, client.LogSearch{}, nil)
+		if err != nil {
+			// If context resolution fails, we can't provide suggestions
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
 
-		// Merge inherited searches to get all variables
-		// Start with the context's own search
-		mergedSearch := searchContext.Search
-
-		// Apply all inherited searches in order
-		for _, inherit := range searchContext.SearchInherit {
-			inheritSearch, found := cfg.Searches[inherit]
-			if found {
-				// MergeInto merges the source into the target
-				mergedSearch.MergeInto(&inheritSearch)
-			}
-		}
-
-		// Collect variables from the merged search context
+		// Collect variables from the resolved search context
 		var suggestions []string
-		for varName, varDef := range mergedSearch.Variables {
+		for varName, varDef := range resolvedContext.Search.Variables {
 			description := varDef.Description
 			if description == "" && varDef.Default != nil {
 				description = fmt.Sprintf("default: %v", varDef.Default)
@@ -280,14 +279,9 @@ func init() {
 
 	// Register completion function for the --inherits flag
 	_ = queryCommand.RegisterFlagCompletionFunc("inherits", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		// Retrieve the value of --config if the user provided it on the command line
-		cfgPath, _ := cmd.Flags().GetString("config")
-
-		// Load the configuration using the existing logic
-		cfg, err := config.LoadContextConfig(cfgPath)
-		if err != nil {
-			// If config fails to load, return no suggestions
-			return nil, cobra.ShellCompDirectiveError
+		cfg, directive := loadConfigForCompletion(cmd)
+		if cfg == nil {
+			return nil, directive
 		}
 
 		var suggestions []string
