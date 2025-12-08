@@ -60,8 +60,8 @@ aurs:
     homepage: "https://github.com/bascanada/logviewer"
     description: "CLI log client for multiple sources (Splunk, K8s, Docker, etc)"
     maintainers:
-      - "Bascanada <info@bascanada.com>"
-    license: "GPL-3.0"
+      - "wquintal <williamquintal95@gmail.com>"
+    license: "GPL-3.0-or-later"
     
     git_url: "ssh://aur@aur.archlinux.org/logviewer-bin.git"
     
