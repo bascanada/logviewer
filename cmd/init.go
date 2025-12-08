@@ -1,8 +1,12 @@
 package cmd
 
 import (
+	"fmt"
+
 	httpPkg "github.com/bascanada/logviewer/pkg/http"
 	"github.com/bascanada/logviewer/pkg/log"
+	"github.com/bascanada/logviewer/pkg/log/client"
+	"github.com/bascanada/logviewer/pkg/log/client/config"
 	"github.com/bascanada/logviewer/pkg/log/impl/ssh"
 	"github.com/spf13/cobra"
 )
@@ -84,10 +88,42 @@ func onCommandStart(cmd *cobra.Command, args []string) {
 	httpPkg.SetDebug(debugHttp)
 }
 
+// loadConfigForCompletion is a helper function that loads the configuration
+// for shell completion functions. It handles errors gracefully by returning
+// the appropriate shell completion directive.
+func loadConfigForCompletion(cmd *cobra.Command) (*config.ContextConfig, cobra.ShellCompDirective) {
+	cfgPath, _ := cmd.Flags().GetString("config")
+	cfg, err := config.LoadContextConfig(cfgPath)
+	if err != nil {
+		// Cobra will report the error to the user's shell.
+		return nil, cobra.ShellCompDirectiveError
+	}
+	return cfg, cobra.ShellCompDirectiveDefault
+}
+
 func init() {
 
 	// CONFIG
 	queryCommand.PersistentFlags().StringArrayVarP(&contextIds, "id", "i", []string{}, "Context id to execute")
+
+	// Register completion function for the --id flag
+	_ = queryCommand.RegisterFlagCompletionFunc("id", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		cfg, directive := loadConfigForCompletion(cmd)
+		if cfg == nil {
+			return nil, directive
+		}
+
+		var suggestions []string
+		for id, ctx := range cfg.Contexts {
+			// Provide a description alongside the completion
+			// Format: "value\tdescription"
+			description := fmt.Sprintf("(%s)", ctx.Client)
+			suggestions = append(suggestions, fmt.Sprintf("%s\t%s", id, description))
+		}
+
+		// ShellCompDirectiveNoFileComp prevents the shell from suggesting local files
+		return suggestions, cobra.ShellCompDirectiveNoFileComp
+	})
 
 	// IMPL SPECIFIQUE
 
@@ -142,6 +178,23 @@ func init() {
 	queryCommand.PersistentFlags().StringVar(&to, "to", "", "Get entry lte datetime date <= to")
 	queryCommand.PersistentFlags().StringVar(&last, "last", "", "Get entry in the last duration")
 
+	// Register completion for --last flag
+	_ = queryCommand.RegisterFlagCompletionFunc("last", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{
+			"1m\t1 minute",
+			"5m\t5 minutes",
+			"15m\t15 minutes",
+			"30m\t30 minutes",
+			"1h\t1 hour",
+			"2h\t2 hours",
+			"6h\t6 hours",
+			"12h\t12 hours",
+			"24h\t24 hours",
+			"7d\t7 days",
+			"30d\t30 days",
+		}, cobra.ShellCompDirectiveNoFileComp
+	})
+
 	// SIZE
 	queryCommand.PersistentFlags().IntVar(&size, "size", 0, "Get entry max size")
 	queryCommand.PersistentFlags().StringVar(&pageToken, "page-token", "", "Token for fetching the next page of results")
@@ -151,7 +204,58 @@ func init() {
 	queryCommand.PersistentFlags().StringArrayVar(
 		&fieldsOps, "fields-condition", []string{}, "Field Ops for selection field=value (match, exists, wildcard, regex)",
 	)
+
+	// Register completion for --fields-condition flag
+	_ = queryCommand.RegisterFlagCompletionFunc("fields-condition", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{
+			"match\tExact match",
+			"exists\tField must exist",
+			"wildcard\tWildcard pattern",
+			"regex\tRegular expression",
+		}, cobra.ShellCompDirectiveNoFileComp
+	})
+
 	queryCommand.PersistentFlags().StringArrayVar(&vars, "var", []string{}, "Define a runtime variable for the search context (e.g., --var 'sessionId=abc-123')")
+
+	// Register completion for --var flag
+	_ = queryCommand.RegisterFlagCompletionFunc("var", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		cfg, directive := loadConfigForCompletion(cmd)
+		if cfg == nil {
+			return nil, directive
+		}
+
+		// Get context IDs to determine which variables to suggest
+		contextIDFlags, _ := cmd.Flags().GetStringArray("id")
+		if len(contextIDFlags) == 0 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+
+		// Get the first context ID
+		contextID := contextIDFlags[0]
+
+		// Get the fully resolved search context to access all variables, including inherited ones
+		resolvedContext, err := cfg.GetSearchContext(contextID, nil, client.LogSearch{}, nil)
+		if err != nil {
+			// If context resolution fails, we can't provide suggestions
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+
+		// Collect variables from the resolved search context
+		var suggestions []string
+		for varName, varDef := range resolvedContext.Search.Variables {
+			description := varDef.Description
+			if description == "" && varDef.Default != nil {
+				description = fmt.Sprintf("default: %v", varDef.Default)
+			}
+			if description != "" {
+				suggestions = append(suggestions, fmt.Sprintf("%s=\t%s", varName, description))
+			} else {
+				suggestions = append(suggestions, varName+"=")
+			}
+		}
+
+		return suggestions, cobra.ShellCompDirectiveNoSpace | cobra.ShellCompDirectiveNoFileComp
+	})
 	queryCommand.PersistentFlags().StringVar(
 		&groupRegex, "fields-group-regex", "",
 		"Regex to extract field from log text using named group, e.g. '.*(?P<Level>INFO|WARN|ERROR).*'")
@@ -169,9 +273,26 @@ func init() {
 		&template,
 		"format",
 		"", "Format for the log entry")
-	queryLogCommand.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output logs in JSON format (NDJSON)")
+	queryCommand.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output logs in JSON format (NDJSON)")
 
 	queryCommand.PersistentFlags().StringArrayVar(&inherits, "inherits", []string{}, "When using config , list of inherits to execute on top of the one configure for the search")
+
+	// Register completion function for the --inherits flag
+	_ = queryCommand.RegisterFlagCompletionFunc("inherits", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		cfg, directive := loadConfigForCompletion(cmd)
+		if cfg == nil {
+			return nil, directive
+		}
+
+		var suggestions []string
+		for searchID := range cfg.Searches {
+			// Provide search IDs for inheritance
+			suggestions = append(suggestions, searchID)
+		}
+
+		// ShellCompDirectiveNoFileComp prevents the shell from suggesting local files
+		return suggestions, cobra.ShellCompDirectiveNoFileComp
+	})
 
 	queryCommand.AddCommand(queryLogCommand)
 	queryCommand.AddCommand(queryFieldCommand)
