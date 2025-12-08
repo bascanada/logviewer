@@ -36,6 +36,11 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&logger.Level, "logging-level", "", "logging level to output INFO WARN ERROR DEBUG TRACE")
 	rootCmd.PersistentFlags().BoolVar(&logger.Stdout, "logging-stdout", false, "output appplication log in the stdout")
 
+	// Register completion for --logging-level flag
+	_ = rootCmd.RegisterFlagCompletionFunc("logging-level", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"TRACE", "DEBUG", "INFO", "WARN", "ERROR"}, cobra.ShellCompDirectiveNoFileComp
+	})
+
 	rootCmd.AddCommand(queryCommand)
 	rootCmd.AddCommand(versionCommand)
 	rootCmd.AddCommand(serverCmd)

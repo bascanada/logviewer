@@ -42,6 +42,7 @@ Way to use logviewer
 * **Flexible formatting** - Custom templates let you format output for humans or pipe to other tools
 * **Config-driven** - Save common queries as reusable contexts instead of maintaining complex shell scripts
 * **Multi-context search** - Query multiple environments (dev/staging/prod) simultaneously and get merged, time-sorted results
+* **Shell autocomplete** - Tab completion for context IDs, variables, time ranges, and more
 * **AI integration** - Use as an MCP server with Claude, Copilot, or Gemini for natural language log queries
 
 **Perfect for:**
@@ -383,6 +384,29 @@ logviewer -i app-dev -i app-staging -i app-prod query log -f level=ERROR
 * Compare logs across multiple environments (dev, staging, production)
 * Search multiple related microservices simultaneously
 * Correlate events across different log sources by timestamp
+
+#### Shell Autocomplete
+
+LogViewer provides intelligent shell completion based on your current selected configuration
+to help create requests.
+
+**Setup:**
+
+Generate and load the completion script for your shell:
+
+```bash
+# Bash
+source <(logviewer completion bash)
+
+# Zsh
+source <(logviewer completion zsh)
+
+# Fish
+logviewer completion fish | source
+
+# PowerShell
+logviewer completion powershell | Out-String | Invoke-Expression
+```
 
 #### Field Extraction
 
