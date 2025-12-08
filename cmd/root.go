@@ -22,7 +22,7 @@ var rootCmd = &cobra.Command{
 		// Check if config exists before showing generic help
 		home, err := os.UserHomeDir()
 		if err == nil {
-			configPath := filepath.Join(home, ".logviewer", "config.yaml")
+configPath := filepath.Join(home, config.DefaultConfigDir, config.DefaultConfigFile)
 			if _, err := os.Stat(configPath); os.IsNotExist(err) {
 				fmt.Println("Welcome to logviewer!")
 				fmt.Println("\nNo configuration found.")
