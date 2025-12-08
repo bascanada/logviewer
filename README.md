@@ -323,7 +323,7 @@ The wizard will indicate whether it's creating a new file or updating an existin
 After configuration, the wizard shows you the exact command to test your setup:
 
 ```bash
-✅ Configuration saved to /Users/you/.logviewer/config.yaml
+✅ Configuration saved to ~/.logviewer/config.yaml
 
 🎉 You're all set! Try it now:
    logviewer query -i production-splunk-default
