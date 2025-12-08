@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/bascanada/logviewer/pkg/log/client/config"
 	"github.com/spf13/cobra"
 )
 
