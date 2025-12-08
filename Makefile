@@ -1,4 +1,4 @@
-.PHONY: build build/all test test/coverage integration/start integration/stop integration/tests integration/logs integration/start/logs integration/stop/logs install uninstall
+.PHONY: build build/all release release/all test test/coverage integration/start integration/stop integration/tests integration/logs integration/start/logs integration/stop/logs install uninstall
 
 SHA=$(shell git rev-parse --short HEAD)
 # Determine latest tag (fallback to '0.0.0' when repository has no tags or git fails)
@@ -28,9 +28,26 @@ build/all:
 	@GOOS=darwin GOARCH=amd64 go build -ldflags "-X github.com/bascanada/logviewer/cmd.sha1ver=$(VERSION)" -o build/logviewer-darwin-amd64
 
 
+# Optimized / stripped release build (smaller binary, no DWARF/debug, trimmed paths)
+# Usage: make release [VERSION=...] [CGO_ENABLED=0] [GOOS=...] [GOARCH=...] [OUTPUT=...]
+OUTPUT ?= build/logviewer
+release:
+	@echo "building optimized release version $(VERSION) for $(or $(GOOS),current platform)/$(or $(GOARCH),current arch)"
+	@mkdir -p build
+	@CGO_ENABLED=${CGO_ENABLED-0} go build -trimpath -buildvcs=false \
+		-ldflags "-s -w -X github.com/bascanada/logviewer/cmd.sha1ver=$(VERSION)" \
+		-o $(OUTPUT)
+	@echo "binary size: $$(wc -c < $(OUTPUT)) bytes"
+	@echo "(add optional compression: upx --best $(OUTPUT))"
 
 
-
+# Optimized multi-platform build (stripped)
+release/all:
+	@echo "building optimized release version $(VERSION) for all platforms"
+	@$(MAKE) release GOOS=linux GOARCH=arm64 OUTPUT=build/logviewer-linux-arm64
+	@$(MAKE) release GOOS=linux GOARCH=amd64 OUTPUT=build/logviewer-linux-amd64
+	@$(MAKE) release GOOS=darwin GOARCH=arm64 OUTPUT=build/logviewer-darwin-arm64
+	@$(MAKE) release GOOS=darwin GOARCH=amd64 OUTPUT=build/logviewer-darwin-amd64
 
 
 # Install the built binary to a system location.
