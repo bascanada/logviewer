@@ -1,0 +1,136 @@
+clients:
+  # Splunk for Payment Service logs
+  sim-splunk:
+    type: splunk
+    options:
+      url: https://localhost:8089/services
+      headers:
+        authorization: "Basic YWRtaW46cGFzc3dvcmQ="
+      searchBody:
+        output_mode: json
+
+  # OpenSearch for Order Service logs
+  sim-opensearch:
+    type: opensearch
+    options:
+      endpoint: http://localhost:9200
+
+  # K8s for Frontend/Payment Processor pod logs
+  sim-k8s:
+    type: k8s
+    options:
+      kubeConfig: integration/k8s/k3s.yaml
+
+  # CloudWatch via LocalStack for DynamoDB logs (if needed)
+  sim-cloudwatch:
+    type: cloudwatch
+    options:
+      region: us-east-1
+      endpoint: http://localhost:4566
+
+searches:
+  # Extract structured fields from JSON logs
+  json-structured:
+    fieldExtraction:
+      json: true
+      jsonTimestampKey: "@timestamp"
+      jsonLevelKey: "level"
+      jsonMessageKey: "message"
+  
+  # Extract fields from K8s container logs
+  k8s-log-extraction:
+    fieldExtraction:
+      # Extract timestamp from K8s log prefix: 2025-12-08T21:00:07.649960977Z
+      timestampRegex: '^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)'
+      # Extract log level (INFO, ERROR, WARN, DEBUG)
+      groupRegex: '(?P<level>INFO|ERROR|WARN|DEBUG|FATAL)'
+      # Extract key=value pairs like trace_id=abc-123
+      kvRegex: '([a-zA-Z_]+)=([a-f0-9-]+)'
+  
+  # Pretty print for demo (simplified for K8s)
+  transaction-view:
+    printerOptions:
+      template: '[{{.Timestamp.Format "15:04:05"}}]{{if .Fields.level}} [{{.Fields.level}}]{{end}}{{if .Fields.app}} [{{.Fields.app}}]{{end}}{{if .Fields.pod}} [{{.Fields.pod}}]{{end}} {{.Message}}{{if .Fields.trace_id}} (trace: {{.Fields.trace_id}}){{end}}'
+
+contexts:
+  # Payment Service logs in Splunk
+  payment-service:
+    client: sim-splunk
+    searchInherit: ["json-structured", "transaction-view"]
+    search:
+      fields: {}
+      options:
+        index: main
+        search: 'sourcetype=json app="payment-service"'
+
+  # Order Service logs in OpenSearch
+  order-service:
+    client: sim-opensearch
+    searchInherit: ["json-structured", "transaction-view"]
+    search:
+      fields: {}
+      options:
+        index: app-logs
+        query: 'app:"order-service"'
+
+  # Frontend/API Gateway logs in OpenSearch
+  api-gateway:
+    client: sim-opensearch
+    searchInherit: ["json-structured", "transaction-view"]
+    search:
+      fields: {}
+      options:
+        index: app-logs
+        query: 'app:"api-gateway"'
+
+  # Payment Processor pod logs (Frontend nginx-style + database logs)
+  payment-processor-pod:
+    client: sim-k8s
+    searchInherit: []
+    search:
+      fields: {}
+      options:
+        namespace: default
+        pod: ${PAYMENT_POD}
+        container: log-generator
+        timestamp: true
+
+  # All Payment Processor pods (auto-discovery)
+  payment-processor-all:
+    client: sim-k8s
+    searchInherit: ["k8s-log-extraction", "transaction-view"]
+    search:
+      fields: {}
+      options:
+        namespace: default
+        labelSelector: "app=payment-processor"
+        timestamp: true
+
+  # Combined view - all Splunk logs (all services)
+  splunk-all:
+    client: sim-splunk
+    searchInherit: ["json-structured"]
+    search:
+      fields: {}
+      options:
+        index: main
+        search: 'sourcetype=json'
+
+  # Combined view - all OpenSearch logs
+  opensearch-all:
+    client: sim-opensearch
+    searchInherit: ["json-structured"]
+    search:
+      fields: {}
+      options:
+        index: app-logs
+
+  # CloudWatch logs (if using LocalStack for additional logging)
+  cloudwatch-orders:
+    client: sim-cloudwatch
+    searchInherit: []
+    search:
+      fields: {}
+      options:
+        logGroupName: /aws/lambda/orders
+        useInsights: false

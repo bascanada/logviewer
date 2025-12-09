@@ -439,8 +439,10 @@ var queryLogCommand = &cobra.Command{
 
 			// Helper to encode a slice of entries
 			printJSON := func(es []client.LogEntry) error {
-				for _, e := range es {
-					if err := enc.Encode(e); err != nil {
+				for i := range es {
+					// Extract JSON fields if enabled
+					client.ExtractJSONFromEntry(&es[i], searchResult.GetSearch())
+					if err := enc.Encode(es[i]); err != nil {
 						return err
 					}
 				}

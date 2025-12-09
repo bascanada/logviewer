@@ -45,7 +45,8 @@ func WrapIoWritter(ctx context.Context, result client.LogSearchResult, writer io
 		return false, err
 	}
 
-	if err := processEntries(writer, tmpl, messageRegex, entries); err != nil {
+	search := result.GetSearch()
+	if err := processEntries(writer, tmpl, messageRegex, entries, search); err != nil {
 		return false, err
 	}
 
@@ -56,7 +57,7 @@ func WrapIoWritter(ctx context.Context, result client.LogSearchResult, writer io
 			update()
 			for entries := range newEntriesChannel {
 				if len(entries) > 0 {
-					if err := processEntries(writer, tmpl, messageRegex, entries); err != nil {
+					if err := processEntries(writer, tmpl, messageRegex, entries, search); err != nil {
 						fmt.Fprintf(os.Stderr, "error printing log entries: %v\n", err)
 					}
 					update()
@@ -77,8 +78,11 @@ func WrapIoWritter(ctx context.Context, result client.LogSearchResult, writer io
 	return newEntriesChannel != nil, nil
 }
 
-func processEntries(writer io.Writer, tmpl *template.Template, messageRegex *regexp.Regexp, entries []client.LogEntry) error {
+func processEntries(writer io.Writer, tmpl *template.Template, messageRegex *regexp.Regexp, entries []client.LogEntry, search *client.LogSearch) error {
 	for i, entry := range entries {
+		// Extract JSON fields if enabled (idempotent - safe if already extracted in multi-context merge)
+		client.ExtractJSONFromEntry(&entries[i], search)
+
 		if messageRegex != nil {
 			matches := messageRegex.FindStringSubmatch(entry.Message)
 			if len(matches) > 1 {
