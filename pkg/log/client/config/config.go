@@ -125,7 +125,10 @@ func LoadContextConfig(explicitPath string) (*ContextConfig, error) {
 
 	// 3. Load Active State (Current Context)
 	state, err := LoadState()
-	if err == nil {
+	if err != nil {
+		// It's not a fatal error, but the user should know why their active context isn't working.
+		fmt.Fprintf(os.Stderr, "Warning: could not load active context state: %v\n", err)
+	} else {
 		mergedCfg.CurrentContext = state.CurrentContext
 	}
 

@@ -38,8 +38,8 @@ var useContextCmd = &cobra.Command{
 		contextID := args[0]
 
 		cfg, err := config.LoadContextConfig(configPath)
- 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		if err != nil {
+			fmt.Printf("Error loading config: %v\n", err)
 			os.Exit(1)
 		}
 
@@ -64,7 +64,7 @@ var listContextsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg, err := config.LoadContextConfig(configPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			fmt.Printf("Error: %v\n", err)
 			return
 		}
 

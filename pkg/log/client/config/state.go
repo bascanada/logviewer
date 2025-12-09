@@ -22,9 +22,9 @@ func getStatePath() (string, error) {
 
 func LoadState() (*State, error) {
 	path, err := getStatePath()
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return &State{}, err
+	}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
