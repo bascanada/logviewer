@@ -137,7 +137,7 @@ func (p *podNameInjector) GetEntries(ctx context.Context) ([]client.LogEntry, ch
 		if entries[i].Fields == nil {
 			entries[i].Fields = make(ty.MI)
 		}
-		entries[i].Fields["pod"] = p.podName
+		entries[i].Fields[FieldPod] = p.podName
 	}
 
 	// If there's a channel for streaming entries, wrap it
@@ -150,7 +150,7 @@ func (p *podNameInjector) GetEntries(ctx context.Context) ([]client.LogEntry, ch
 					if batch[i].Fields == nil {
 						batch[i].Fields = make(ty.MI)
 					}
-					batch[i].Fields["pod"] = p.podName
+					batch[i].Fields[FieldPod] = p.podName
 				}
 				wrappedCh <- batch
 			}
@@ -201,10 +201,24 @@ func (lc k8sLogClient) getLogsFromMultiplePods(
 
 	// If only one pod, optimize by returning a single result
 	if len(podList.Items) == 1 {
+		podName := podList.Items[0].Name
 		singlePodSearch := *search
-		singlePodSearch.Options[FieldPod] = podList.Items[0].Name
+		singlePodSearch.Options[FieldPod] = podName
 		delete(singlePodSearch.Options, FieldLabelSelector)
-		return lc.Get(ctx, &singlePodSearch)
+
+		result, err := lc.Get(ctx, &singlePodSearch)
+		if err != nil {
+			return nil, err
+		}
+
+		// Wrap the result to inject pod name, ensuring consistent output with the multi-pod case
+		if result != nil {
+			return &podNameInjector{
+				inner:   result,
+				podName: podName,
+			}, nil
+		}
+		return result, nil
 	}
 
 	// Create multi-result aggregator
@@ -221,13 +235,18 @@ func (lc k8sLogClient) getLogsFromMultiplePods(
 			defer wg.Done()
 
 			// Create a copy of the search for this specific pod
-			// Must deep copy Options map to avoid concurrent map writes
+			// Deep copy all map fields to prevent race conditions
 			podSearch := *search
-			podSearch.Options = make(ty.MI)
-			for k, v := range search.Options {
-				podSearch.Options[k] = v
-			}
+			podSearch.Options = ty.MergeM(make(ty.MI, len(search.Options)+1), search.Options)
 			podSearch.Options[FieldPod] = podName
+			podSearch.Fields = ty.MergeM(make(ty.MS, len(search.Fields)), search.Fields)
+			podSearch.FieldsCondition = ty.MergeM(make(ty.MS, len(search.FieldsCondition)), search.FieldsCondition)
+			if search.Variables != nil {
+				podSearch.Variables = make(map[string]client.VariableDefinition, len(search.Variables))
+				for k, v := range search.Variables {
+					podSearch.Variables[k] = v
+				}
+			}
 
 			// Remove labelSelector from options to avoid infinite recursion
 			delete(podSearch.Options, FieldLabelSelector)
