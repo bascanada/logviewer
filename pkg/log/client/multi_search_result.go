@@ -80,13 +80,18 @@ func (m *MultiLogSearchResult) GetEntries(ctx context.Context) ([]LogEntry, chan
 				return
 			}
 
-			// Populate ContextID for each entry
-			contextID, ok := r.GetSearch().Options["__context_id__"].(string)
+			// Get the search config for this individual result
+			resultSearch := r.GetSearch()
+
+			// Populate ContextID and apply JSON extraction for each entry
+			contextID, ok := resultSearch.Options["__context_id__"].(string)
 			if !ok {
 				contextID = "unknown"
 			}
 			for i := range entries {
 				entries[i].ContextID = contextID
+				// Apply JSON extraction based on this result's search config
+				ExtractJSONFromEntry(&entries[i], resultSearch)
 			}
 
 			mutex.Lock()

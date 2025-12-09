@@ -1,4 +1,4 @@
-.PHONY: build build/all release release/all test test/coverage integration/start integration/stop integration/tests integration/logs integration/start/logs integration/stop/logs install uninstall
+.PHONY: build build/all release release/all test test/coverage integration/start integration/stop integration/tests integration/logs integration/start/logs integration/stop/logs integration/deploy-simulation install uninstall
 
 SHA=$(shell git rev-parse --short HEAD)
 # Determine latest tag (fallback to '0.0.0' when repository has no tags or git fails)
@@ -152,6 +152,32 @@ integration/start/logs:
 integration/stop/logs:
 	@echo "Stopping log-generator..."
 	@cd integration && docker-compose -f docker-compose-log-generator.yml down -v
+
+integration/deploy-simulation:
+	@echo "Building simulator image..."
+	@docker build -t log-generator:latest integration/log-generator
+	
+	@echo "Importing image to k3s..."
+	@docker save log-generator:latest | docker exec -i k3s-server ctr images import -
+
+	@echo "Applying K8s manifests..."
+	@if [ -f integration/splunk/.hec_token ]; then \
+		export TOKEN=$$(cat integration/splunk/.hec_token) && \
+		export SPLUNK_IP=$$(docker inspect splunk --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}') && \
+		export OPENSEARCH_IP=$$(docker inspect opensearch --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}') && \
+		export LOCALSTACK_IP=$$(docker inspect localstack --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}') && \
+		sed -e "s/YOUR_HEC_TOKEN_HERE/$$TOKEN/g" \
+		    -e "s|https://splunk:8088|https://$$SPLUNK_IP:8088|g" \
+		    -e "s|http://opensearch:9200|http://$$OPENSEARCH_IP:9200|g" \
+		    -e "s|http://localstack:4566|http://$$LOCALSTACK_IP:4566|g" \
+		    integration/k8s/app.yaml | \
+		KUBECONFIG=$(K3S_KUBECONFIG) kubectl apply -f -; \
+	else \
+		echo "ERROR: Splunk HEC token not found. Run 'make integration/start' first."; \
+		exit 1; \
+	fi
+
+	@echo "Simulation deployed! Logs are flowing."
 
 
 # Log Generation and Uploading

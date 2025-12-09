@@ -3,7 +3,6 @@ package reader
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"regexp"
@@ -56,52 +55,13 @@ func (lr *ReaderLogResult) parseLine(line string) bool {
 		}), " ")
 	}
 
+	// Extract JSON fields using shared function
+	client.ExtractJSONFromEntry(&entry, lr.search)
+
+	// Update field set for discovery
 	if lr.search.FieldExtraction.Json.Value {
-		var jsonMap map[string]interface{}
-		jsonContent := entry.Message
-		if idx := strings.LastIndex(entry.Message, "{"); idx != -1 {
-			jsonContent = entry.Message[idx:]
-		}
-		decoder := json.NewDecoder(strings.NewReader(jsonContent))
-		if err := decoder.Decode(&jsonMap); err == nil {
-			msgKey := "message"
-			if lr.search.FieldExtraction.JsonMessageKey.Set {
-				msgKey = lr.search.FieldExtraction.JsonMessageKey.Value
-			}
-			levelKey := "level"
-			if lr.search.FieldExtraction.JsonLevelKey.Set {
-				levelKey = lr.search.FieldExtraction.JsonLevelKey.Value
-			}
-			tsKey := "timestamp"
-			if lr.search.FieldExtraction.JsonTimestampKey.Set {
-				tsKey = lr.search.FieldExtraction.JsonTimestampKey.Value
-			}
-
-			for k, v := range jsonMap {
-				if k == msgKey || k == levelKey || k == tsKey {
-					continue
-				}
-				entry.Fields[k] = v
-				lr.fields.Add(k, fmt.Sprintf("%v", v))
-			}
-
-			if v, ok := jsonMap[msgKey]; ok {
-				if s, ok := v.(string); ok {
-					entry.Message = s
-				}
-			}
-
-			if v, ok := jsonMap[levelKey]; ok {
-				if s, ok := v.(string); ok {
-					entry.Level = s
-				}
-			}
-
-			if v, ok := jsonMap[tsKey]; ok {
-				if parsed, err := parseTimestamp(v); err == nil && !parsed.IsZero() {
-					entry.Timestamp = parsed
-				}
-			}
+		for k, v := range entry.Fields {
+			lr.fields.Add(k, fmt.Sprintf("%v", v))
 		}
 	}
 
