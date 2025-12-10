@@ -126,47 +126,52 @@ func (lr *ReaderLogResult) parseBlock(block string) (*client.LogEntry, bool) {
 	return &entry, true
 }
 
+func (lr *ReaderLogResult) processLine(line string, pendingBlock *strings.Builder, onEntry func(client.LogEntry)) {
+	isNewEntry := true
+	if lr.regexDate != nil {
+		loc := lr.regexDate.FindStringIndex(line)
+		if loc == nil || loc[0] != 0 {
+			isNewEntry = false
+		}
+	}
+
+	if isNewEntry {
+		lr.flushBlock(pendingBlock, onEntry)
+		pendingBlock.WriteString(line)
+	} else {
+		if pendingBlock.Len() > 0 {
+			pendingBlock.WriteString("\n")
+		}
+		pendingBlock.WriteString(line)
+	}
+}
+
+func (lr *ReaderLogResult) flushBlock(pendingBlock *strings.Builder, onEntry func(client.LogEntry)) {
+	if pendingBlock.Len() > 0 {
+		if entry, ok := lr.parseBlock(pendingBlock.String()); ok {
+			onEntry(*entry)
+		}
+		pendingBlock.Reset()
+	}
+}
+
 func (lr *ReaderLogResult) loadEntries() bool {
 	lr.entries = make([]client.LogEntry, 0)
 	var pendingBlock strings.Builder
 
+	onEntry := func(entry client.LogEntry) {
+		lr.entries = append(lr.entries, entry)
+	}
+
 	for lr.scanner.Scan() {
-		line := lr.scanner.Text()
-
-		isNewEntry := true
-		if lr.regexDate != nil {
-			loc := lr.regexDate.FindStringIndex(line)
-			if loc == nil || loc[0] != 0 {
-				isNewEntry = false
-			}
-		}
-
-		if isNewEntry {
-			if pendingBlock.Len() > 0 {
-				if entry, ok := lr.parseBlock(pendingBlock.String()); ok {
-					lr.entries = append(lr.entries, *entry)
-				}
-				pendingBlock.Reset()
-			}
-			pendingBlock.WriteString(line)
-		} else {
-			if pendingBlock.Len() > 0 {
-				pendingBlock.WriteString("\n")
-			}
-			pendingBlock.WriteString(line)
-		}
+		lr.processLine(lr.scanner.Text(), &pendingBlock, onEntry)
 	}
-
-	if pendingBlock.Len() > 0 {
-		if entry, ok := lr.parseBlock(pendingBlock.String()); ok {
-			lr.entries = append(lr.entries, *entry)
-		}
-	}
+	lr.flushBlock(&pendingBlock, onEntry)
 
 	return len(lr.entries) > 0
 }
 
-func (lr ReaderLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
+func (lr *ReaderLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
 
 	if !lr.search.Follow {
 		lr.loadEntries()
@@ -180,6 +185,9 @@ func (lr ReaderLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, ch
 			defer lr.closer.Close()
 
 			var pendingBlock strings.Builder
+			onEntry := func(entry client.LogEntry) {
+				c <- []client.LogEntry{entry}
+			}
 
 			for {
 				select {
@@ -188,38 +196,10 @@ func (lr ReaderLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, ch
 				default:
 					{
 						if lr.scanner.Scan() {
-							line := lr.scanner.Text()
-
-							isNewEntry := true
-							if lr.regexDate != nil {
-								loc := lr.regexDate.FindStringIndex(line)
-								if loc == nil || loc[0] != 0 {
-									isNewEntry = false
-								}
-							}
-
-							if isNewEntry {
-								if pendingBlock.Len() > 0 {
-									if entry, ok := lr.parseBlock(pendingBlock.String()); ok {
-										c <- []client.LogEntry{*entry}
-									}
-									pendingBlock.Reset()
-								}
-								pendingBlock.WriteString(line)
-							} else {
-								if pendingBlock.Len() > 0 {
-									pendingBlock.WriteString("\n")
-								}
-								pendingBlock.WriteString(line)
-							}
+							lr.processLine(lr.scanner.Text(), &pendingBlock, onEntry)
 						} else {
 							// EOF or error
-							if pendingBlock.Len() > 0 {
-								if entry, ok := lr.parseBlock(pendingBlock.String()); ok {
-									c <- []client.LogEntry{*entry}
-								}
-								pendingBlock.Reset()
-							}
+							lr.flushBlock(&pendingBlock, onEntry)
 							return
 						}
 					}
