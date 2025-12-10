@@ -25,5 +25,13 @@
 2025-08-22 10:01:18.100  INFO 18748 --- [nio-8080-exec-6] com.example.controller.UserController    : GET /users/search?name=bob request received
 2025-08-22 10:01:18.102  INFO 18748 --- [nio-8080-exec-6] com.example.service.UserService          : Searching for users with name: bob
 2025-08-22 10:01:19.200  ERROR 18748 --- [nio-8080-exec-7] com.example.service.PaymentService       : Payment failed for order ID: 12345
+java.lang.RuntimeException: Payment processing failed
+	at com.example.service.PaymentService.process(PaymentService.java:42)
+	at com.example.controller.PaymentController.pay(PaymentController.java:25)
+	at jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.web.method.support.InvocableHandlerMethod.doInvoke(InvocableHandlerMethod.java:205)
 2025-08-22 10:01:20.500  INFO 18748 --- [   scheduling-1] com.example.tasks.ScheduledTasks         : Running scheduled database cleanup task.
 2025-08-22 10:01:20.505  INFO 18748 --- [   scheduling-1] com.example.service.CleanupService       : Deleting 5 old records.

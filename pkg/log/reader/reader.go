@@ -39,15 +39,25 @@ func (lr ReaderLogResult) GetSearch() *client.LogSearch {
 	return lr.search
 }
 
-func (lr *ReaderLogResult) parseLine(line string) bool {
+func (lr *ReaderLogResult) parseBlock(block string) (*client.LogEntry, bool) {
+	// Split into first line and rest
+	var firstLine string
+	var rest string
+	if idx := strings.Index(block, "\n"); idx != -1 {
+		firstLine = block[:idx]
+		rest = block[idx+1:]
+	} else {
+		firstLine = block
+	}
+
 	entry := client.LogEntry{
-		Message: line,
+		Message: firstLine,
 		Fields:  make(ty.MI),
 	}
 
 	// check if we have a date at the beginning and parse / remove it
 	if lr.regexDate != nil {
-		entry.Message = strings.TrimLeft(lr.regexDate.ReplaceAllStringFunc(line, func(v string) string {
+		entry.Message = strings.TrimLeft(lr.regexDate.ReplaceAllStringFunc(firstLine, func(v string) string {
 			if parsed, err := parseTimestamp(v); err == nil {
 				entry.Timestamp = parsed
 			}
@@ -66,7 +76,7 @@ func (lr *ReaderLogResult) parseLine(line string) bool {
 	}
 
 	if lr.namedGroupRegexExtraction != nil {
-		match := lr.namedGroupRegexExtraction.FindStringSubmatch(line)
+		match := lr.namedGroupRegexExtraction.FindStringSubmatch(firstLine)
 		if len(match) > 0 {
 			for i, name := range lr.namedGroupRegexExtraction.SubexpNames() {
 				if i != 0 && name != "" {
@@ -79,7 +89,7 @@ func (lr *ReaderLogResult) parseLine(line string) bool {
 	}
 
 	if lr.kvRegexExtraction != nil {
-		matches := lr.kvRegexExtraction.FindAllStringSubmatch(line, -1)
+		matches := lr.kvRegexExtraction.FindAllStringSubmatch(firstLine, -1)
 		for _, match := range matches {
 			if len(match) >= 3 {
 				trimmedKey := strings.TrimSpace(match[1])
@@ -94,10 +104,10 @@ func (lr *ReaderLogResult) parseLine(line string) bool {
 		for k, v := range lr.search.Fields {
 			if vv, ok := entry.Fields[k]; ok {
 				if v != vv {
-					return false
+					return nil, false
 				}
 			} else {
-				return false
+				return nil, false
 			}
 		}
 	}
@@ -108,17 +118,51 @@ func (lr *ReaderLogResult) parseLine(line string) bool {
 	} else if level := entry.Fields.GetString("Level"); level != "" {
 		entry.Level = level
 	}
-	lr.entries = append(lr.entries, entry)
-	return true
+
+	if rest != "" {
+		entry.Message = entry.Message + "\n" + rest
+	}
+
+	return &entry, true
 }
 
 func (lr *ReaderLogResult) loadEntries() bool {
 	lr.entries = make([]client.LogEntry, 0)
+	var pendingBlock strings.Builder
 
 	for lr.scanner.Scan() {
 		line := lr.scanner.Text()
-		lr.parseLine(line)
+
+		isNewEntry := true
+		if lr.regexDate != nil {
+			loc := lr.regexDate.FindStringIndex(line)
+			if loc == nil || loc[0] != 0 {
+				isNewEntry = false
+			}
+		}
+
+		if isNewEntry {
+			if pendingBlock.Len() > 0 {
+				if entry, ok := lr.parseBlock(pendingBlock.String()); ok {
+					lr.entries = append(lr.entries, *entry)
+				}
+				pendingBlock.Reset()
+			}
+			pendingBlock.WriteString(line)
+		} else {
+			if pendingBlock.Len() > 0 {
+				pendingBlock.WriteString("\n")
+			}
+			pendingBlock.WriteString(line)
+		}
 	}
+
+	if pendingBlock.Len() > 0 {
+		if entry, ok := lr.parseBlock(pendingBlock.String()); ok {
+			lr.entries = append(lr.entries, *entry)
+		}
+	}
+
 	return len(lr.entries) > 0
 }
 
@@ -135,6 +179,8 @@ func (lr ReaderLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, ch
 			defer close(c)
 			defer lr.closer.Close()
 
+			var pendingBlock strings.Builder
+
 			for {
 				select {
 				case <-ctx.Done():
@@ -142,9 +188,39 @@ func (lr ReaderLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, ch
 				default:
 					{
 						if lr.scanner.Scan() {
-							if lr.parseLine(lr.scanner.Text()) {
-								c <- []client.LogEntry{lr.entries[len(lr.entries)-1]}
+							line := lr.scanner.Text()
+
+							isNewEntry := true
+							if lr.regexDate != nil {
+								loc := lr.regexDate.FindStringIndex(line)
+								if loc == nil || loc[0] != 0 {
+									isNewEntry = false
+								}
 							}
+
+							if isNewEntry {
+								if pendingBlock.Len() > 0 {
+									if entry, ok := lr.parseBlock(pendingBlock.String()); ok {
+										c <- []client.LogEntry{*entry}
+									}
+									pendingBlock.Reset()
+								}
+								pendingBlock.WriteString(line)
+							} else {
+								if pendingBlock.Len() > 0 {
+									pendingBlock.WriteString("\n")
+								}
+								pendingBlock.WriteString(line)
+							}
+						} else {
+							// EOF or error
+							if pendingBlock.Len() > 0 {
+								if entry, ok := lr.parseBlock(pendingBlock.String()); ok {
+									c <- []client.LogEntry{*entry}
+								}
+								pendingBlock.Reset()
+							}
+							return
 						}
 					}
 				}

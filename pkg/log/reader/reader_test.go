@@ -23,8 +23,7 @@ func TestTimestampExtraction(t *testing.T) {
 	}
 
 	expectedTime, _ := time.Parse(ty.Format, "2024-06-24T15:27:29.669455265Z")
-	isParsed := logResult.parseLine("\x01\x00\x00\x00\x00\x00\x00\x802024-06-24T15:27:29.669455265Z /docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration")
-	entry := logResult.entries[0]
+	entry, isParsed := logResult.parseBlock("\x01\x00\x00\x00\x00\x00\x00\x802024-06-24T15:27:29.669455265Z /docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration")
 
 	assert.Equal(t, true, isParsed)
 	assert.Equal(t, "\x01\x00\x00\x00\x00\x00\x00\x80 /docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration", entry.Message)
@@ -37,7 +36,7 @@ func TestReaderLogResult_GetPaginationInfo(t *testing.T) {
 	assert.Nil(t, result.GetPaginationInfo())
 }
 
-func TestReaderLogResult_parseLine(t *testing.T) {
+func TestReaderLogResult_parseBlock(t *testing.T) {
 	type fields struct {
 		search                    *client.LogSearch
 		kvRegexExtraction         *regexp.Regexp
@@ -117,12 +116,13 @@ func TestReaderLogResult_parseLine(t *testing.T) {
 				entries:                   []client.LogEntry{},
 				fields:                    ty.UniSet[string]{},
 			}
-			if got := lr.parseLine(tt.args.line); got != tt.want {
-				t.Errorf("ReaderLogResult.parseLine() = %v, want %v", got, tt.want)
+			entry, got := lr.parseBlock(tt.args.line)
+			if got != tt.want {
+				t.Errorf("ReaderLogResult.parseBlock() = %v, want %v", got, tt.want)
 			}
 			if tt.wantEntry != nil {
-				assert.Equal(t, tt.wantEntry.Message, lr.entries[0].Message)
-				assert.Equal(t, tt.wantEntry.Fields, lr.entries[0].Fields)
+				assert.Equal(t, tt.wantEntry.Message, entry.Message)
+				assert.Equal(t, tt.wantEntry.Fields, entry.Fields)
 			}
 		})
 	}
