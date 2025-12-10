@@ -379,6 +379,62 @@ contexts:
 ... inherit the search pretty-print to add templating and field extraction
 ```
 
+#### Multiple config files & Context selection (new)
+
+LogViewer supports loading configuration from multiple files and the concept of a "current" (active) context which can be selected via the CLI. The logic and behavior are:
+
+* Precedence (highest to lowest):
+  1. Explicit path provided via the CLI flag `-c, --config /path/to/config`.
+  2. The environment variable `LOGVIEWER_CONFIG` if set (supports a colon-separated list on macOS/Linux, semicolon on Windows).
+  3. Default discovery: `$HOME/.logviewer/config.yaml` plus any files matching `$HOME/.logviewer/configs/*.yaml`.
+
+* How multiple files are handled:
+  * If multiple files are provided (via env var or the default drop-in dir), they are loaded in order and merged into a single configuration.
+  * Merging behavior: `clients`, `searches`, and `contexts` are map-like and are combined; if duplicate keys exist across files, the last file wins for that key.
+  * Example: If `config.yaml` defines a `payment-service` context and `configs/personal.yaml` defines `payment-service` too, the version from `personal.yaml` will override the earlier one.
+
+* `LOGVIEWER_CONFIG` accepts multiple paths separated by `:` (macOS/Linux) or `;` (Windows). Example:
+  ```bash
+  # Merge a main config and an environment specific config
+  export LOGVIEWER_CONFIG="$PWD/integration/config.yaml:$PWD/integration/config.extra.yaml"
+  logviewer context list
+  ```
+
+* Default context & state file:
+  * Use `logviewer context use <context-id>` to set the active (default) context for your environment. The choice is saved to `$HOME/.logviewer/state.yaml`.
+  * If you run `logviewer` commands without `-i` (context IDs) and no explicit `-c` or `LOGVIEWER_CONFIG` is set, LogViewer will use the saved `current-context` from `state.yaml` if present.
+
+* Error handling and caveats:
+  * If the env var list contains a path that does not exist, LogViewer returns an error when loading the config (explicit env var is treated as user intent).
+  * When using default discovery (no `-c` and no env var), LogViewer will not error for missing `~/.logviewer/config.yaml` if none exists — it will just fall back to the interactive help and prompt namespace.
+  * `logviewer` validates required client options (e.g., `url` for Splunk, `endpoint` for OpenSearch) and will return a helpful message for misconfigurations.
+
+##### Examples: Default discovery and `HOME` override (useful for testing)
+
+Create temporary home with a `~/.logviewer` layout and a drop-in config to validate default discovery:
+
+```bash
+TMPHOME="$(mktemp -d)"
+mkdir -p "$TMPHOME/.logviewer/configs"
+cp integration/config.yaml "$TMPHOME/.logviewer/config.yaml"
+cp integration/config.extra.yaml "$TMPHOME/.logviewer/configs/extra-payment.yaml"
+
+# Run without -c or env var and rely on default discovery
+HOME="$TMPHOME" logviewer context list
+HOME="$TMPHOME" logviewer query log -i extra-payment --last 10m --size 10
+```
+
+##### Precedence example
+
+Even when `LOGVIEWER_CONFIG` is set, an explicit `-c` will override it:
+
+```bash
+export LOGVIEWER_CONFIG="$PWD/integration/config.extra.yaml"
+logviewer context list -c "$PWD/integration/config.yaml"
+```
+
+See the `integration/` directory for example configs and sample usage with the transaction simulator. If you're testing this behavior in integration environment, use `logviewer context list` and `logviewer context use` to verify which contexts are present and which one is active.
+
 #### Context Variables
 
 You can define variables in your search contexts to make them more dynamic and reusable. Variables are defined in the `variables` section of a `search` block.

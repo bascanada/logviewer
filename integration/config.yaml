@@ -50,7 +50,7 @@ searches:
   # Pretty print for demo (simplified for K8s)
   transaction-view:
     printerOptions:
-      template: '[{{.Timestamp.Format "15:04:05"}}]{{if .Fields.level}} [{{.Fields.level}}]{{end}}{{if .Fields.app}} [{{.Fields.app}}]{{end}}{{if .Fields.pod}} [{{.Fields.pod}}]{{end}} {{.Message}}{{if .Fields.trace_id}} (trace: {{.Fields.trace_id}}){{end}}'
+      template: '[{{.Timestamp.Format "15:04:05"}}]{{if .Field "level"}} [{{.Field "level"}}]{{end}}{{if .Field "app"}} [{{.Field "app"}}]{{end}}{{if .Field "pod"}} [{{.Field "pod"}}]{{end}} {{if .Field "message"}}{{.Field "message"}}{{else}}{{.Message}}{{end}}{{if .Field "trace_id"}} (trace: {{.Field "trace_id"}}){{end}}'
 
 contexts:
   # Payment Service logs in Splunk
@@ -109,7 +109,7 @@ contexts:
   # Combined view - all Splunk logs (all services)
   splunk-all:
     client: sim-splunk
-    searchInherit: ["json-structured"]
+    searchInherit: ["json-structured", "transaction-view"]
     search:
       fields: {}
       options:
@@ -119,7 +119,7 @@ contexts:
   # Combined view - all OpenSearch logs
   opensearch-all:
     client: sim-opensearch
-    searchInherit: ["json-structured"]
+    searchInherit: ["json-structured", "transaction-view"]
     search:
       fields: {}
       options:

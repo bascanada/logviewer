@@ -69,7 +69,7 @@ type LogClient interface {
 // configuration. This is used by both the reader and printer to avoid code duplication.
 // This function is idempotent - it's safe to call multiple times on the same entry.
 func ExtractJSONFromEntry(entry *LogEntry, search *LogSearch) {
-	if !search.FieldExtraction.Json.Value {
+	if !search.FieldExtraction.Json.Set || !search.FieldExtraction.Json.Value {
 		return
 	}
 

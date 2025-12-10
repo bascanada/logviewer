@@ -1,0 +1,9 @@
+contexts:
+  extra-payment:
+    client: sim-splunk
+    searchInherit: ["json-structured","transaction-view"]
+    search:
+      fields: {}
+      options:
+        index: main
+        search: 'sourcetype=json app="payment-service" level=ERROR'

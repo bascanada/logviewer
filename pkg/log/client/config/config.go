@@ -37,27 +37,122 @@ const (
 	DefaultConfigFile = "config.yaml"
 )
 
-func LoadContextConfig(configPath string) (*ContextConfig, error) {
-	// If no path provided, first check LOGVIEWER_CONFIG env var, then default $HOME/.logviewer/config.yaml
-	if strings.TrimSpace(configPath) == "" {
-		if envPath := strings.TrimSpace(os.Getenv(EnvConfigPath)); envPath != "" {
-			configPath = envPath
-		} else if home, err := os.UserHomeDir(); err == nil {
-			defaultPath := filepath.Join(home, DefaultConfigDir, DefaultConfigFile)
-			if _, err := os.Stat(defaultPath); err == nil {
-				configPath = defaultPath
+// LoadContextConfig loads configuration from one or multiple files and merges them.
+// Prioritizes:
+// 1. explicitPath if provided.
+// 2. LOGVIEWER_CONFIG env var (can be colon-separated list).
+// 3. Defaults: ~/.logviewer/config.yaml AND ~/.logviewer/configs/*.yaml.
+func LoadContextConfig(explicitPath string) (*ContextConfig, error) {
+	// 1. Determine list of files to load
+	var files []string
+
+	if strings.TrimSpace(explicitPath) != "" {
+		files = []string{explicitPath}
+	} else if env := strings.TrimSpace(os.Getenv(EnvConfigPath)); env != "" {
+		// Support "file1.yaml:file2.yaml"
+		files = strings.Split(env, string(os.PathListSeparator))
+	} else {
+		// Default: Load ~/.logviewer/config.yaml AND ~/.logviewer/configs/*.yaml
+		home, err := os.UserHomeDir()
+		if err == nil {
+			defaultDir := filepath.Join(home, DefaultConfigDir)
+
+			// Main config
+			main := filepath.Join(defaultDir, DefaultConfigFile)
+			if _, err := os.Stat(main); err == nil {
+				files = append(files, main)
+			}
+
+			// Drop-in directory for organization (e.g. personal.yaml, work.yaml)
+			dropInDir := filepath.Join(defaultDir, "configs")
+			if entries, err := os.ReadDir(dropInDir); err == nil {
+				for _, e := range entries {
+					if !e.IsDir() && (strings.HasSuffix(e.Name(), ".yaml") || strings.HasSuffix(e.Name(), ".yml")) {
+						files = append(files, filepath.Join(dropInDir, e.Name()))
+					}
+				}
 			}
 		}
 	}
 
-	if strings.TrimSpace(configPath) == "" {
-		return nil, fmt.Errorf("config file not found at path: %s", configPath)
+	if len(files) == 0 && explicitPath != "" {
+		return nil, fmt.Errorf("config file not found at path: %s", explicitPath)
 	}
 
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("config file not found at path: %s", configPath)
+	// 2. Merge all configs
+	mergedCfg := &ContextConfig{
+		Clients:  make(Clients),
+		Searches: make(Searches),
+		Contexts: make(Contexts),
 	}
 
+	filesLoaded := 0
+	for _, path := range files {
+		// Check if file exists, if not and it was explicitly asked for or in env var, we might want to error.
+		// For auto-discovery, we checked existence before adding.
+		// However, for env var split, we might have non-existent files.
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			// If explicitly requested (via arg or env), error out.
+			if explicitPath != "" || os.Getenv(EnvConfigPath) != "" {
+				return nil, fmt.Errorf("config file not found at path: %s", path)
+			}
+			continue
+		}
+
+		partial, err := loadSingleFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("error loading %s: %w", path, err)
+		}
+
+		// Merge Maps (Last file wins on collision)
+		for k, v := range partial.Clients {
+			mergedCfg.Clients[k] = v
+		}
+		for k, v := range partial.Searches {
+			mergedCfg.Searches[k] = v
+		}
+		for k, v := range partial.Contexts {
+			mergedCfg.Contexts[k] = v
+		}
+		filesLoaded++
+	}
+
+	if filesLoaded == 0 && (explicitPath != "" || os.Getenv(EnvConfigPath) != "") {
+		// If user pointed to something and we loaded nothing, that's an error.
+		// Re-using the error generation from original logic slightly.
+		return nil, fmt.Errorf("config file not found")
+	}
+
+	// 3. Load Active State (Current Context)
+	state, err := LoadState()
+	if err != nil {
+		// It's not a fatal error, but the user should know why their active context isn't working.
+		fmt.Fprintf(os.Stderr, "Warning: could not load active context state: %v\n", err)
+	} else {
+		mergedCfg.CurrentContext = state.CurrentContext
+	}
+
+	if len(mergedCfg.Contexts) == 0 && filesLoaded > 0 {
+		// If we loaded files but found no contexts, that's an error
+		return nil, ErrNoContexts
+	}
+
+	// Ensure the clients map exists and provide a default "local" client
+	if mergedCfg.Clients == nil {
+		mergedCfg.Clients = Clients{}
+	}
+	if _, ok := mergedCfg.Clients["local"]; !ok {
+		mergedCfg.Clients["local"] = Client{Type: "local", Options: ty.MI{}}
+	}
+
+	if err := validateClients(mergedCfg); err != nil {
+		return nil, err
+	}
+
+	return mergedCfg, nil
+}
+
+func loadSingleFile(configPath string) (*ContextConfig, error) {
 	// Read file contents and support JSON or YAML formats
 	data, err := os.ReadFile(configPath)
 	if err != nil {
@@ -85,23 +180,6 @@ func LoadContextConfig(configPath string) (*ContextConfig, error) {
 		}
 		return nil, fmt.Errorf("%w: unsupported or invalid config format for file: %s", ErrConfigParse, configPath)
 	}
-
-	if len(config.Contexts) == 0 {
-		return nil, fmt.Errorf("%w: %s", ErrNoContexts, configPath)
-	}
-
-	// Ensure the clients map exists and provide a default "local" client
-	if config.Clients == nil {
-		config.Clients = Clients{}
-	}
-	if _, ok := config.Clients["local"]; !ok {
-		config.Clients["local"] = Client{Type: "local", Options: ty.MI{}}
-	}
-
-	if err := validateClients(&config); err != nil {
-		return nil, err
-	}
-
 	return &config, nil
 }
 
@@ -147,6 +225,7 @@ type Client struct {
 }
 
 type SearchContext struct {
+	Description   string           `json:"description,omitempty" yaml:"description,omitempty"`
 	Client        string           `json:"client" yaml:"client"`
 	SearchInherit []string         `json:"searchInherit" yaml:"searchInherit"`
 	Search        client.LogSearch `json:"search" yaml:"search"`
@@ -159,9 +238,10 @@ type Searches map[string]client.LogSearch
 type Contexts map[string]SearchContext
 
 type ContextConfig struct {
-	Clients  `json:"clients" yaml:"clients"`
-	Searches `json:"searches" yaml:"searches"`
-	Contexts `json:"contexts" yaml:"contexts"`
+	Clients        `json:"clients" yaml:"clients"`
+	Searches       `json:"searches" yaml:"searches"`
+	Contexts       `json:"contexts" yaml:"contexts"`
+	CurrentContext string `json:"-" yaml:"-"`
 }
 
 func (cc ContextConfig) GetSearchContext(contextId string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (SearchContext, error) {
