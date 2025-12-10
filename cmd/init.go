@@ -18,11 +18,12 @@ var (
 	index              string
 
 	// k8s options
-	k8sNamespace string
-	k8sPod       string
-	k8sContainer string
-	k8sPrevious  bool
-	k8sTimestamp bool
+	k8sNamespace     string
+	k8sPod           string
+	k8sLabelSelector string
+	k8sContainer     string
+	k8sPrevious      bool
+	k8sTimestamp     bool
 
 	// splunk
 	endpointSplunk string
@@ -134,6 +135,7 @@ func init() {
 	// K8S
 	queryCommand.PersistentFlags().StringVar(&k8sNamespace, "k8s-namespace", "", "K8s namespace")
 	queryCommand.PersistentFlags().StringVar(&k8sPod, "k8s-pod", "", "K8s pod")
+	queryCommand.PersistentFlags().StringVar(&k8sLabelSelector, "k8s-label-selector", "", "K8s label selector (e.g., app=payment-processor)")
 	queryCommand.PersistentFlags().StringVar(&k8sContainer, "k8s-container", "", "K8s container")
 	queryCommand.PersistentFlags().BoolVar(&k8sPrevious, "k8s-previous", false, "K8s log of previous container")
 	queryCommand.PersistentFlags().BoolVar(&k8sTimestamp, "k8s-timestamp", false, "K8s include RFC3339 timestamp")

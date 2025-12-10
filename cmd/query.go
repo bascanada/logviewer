@@ -119,6 +119,10 @@ func resolveSearch() (client.LogSearchResult, error) {
 		searchRequest.Options[k8s.FieldPod] = k8sPod
 	}
 
+	if k8sLabelSelector != "" {
+		searchRequest.Options[k8s.FieldLabelSelector] = k8sLabelSelector
+	}
+
 	if k8sPrevious {
 		searchRequest.Options[k8s.FieldPrevious] = k8sPrevious
 	}
@@ -205,6 +209,8 @@ func resolveSearch() (client.LogSearchResult, error) {
 		// For single context, execute directly without MultiLogSearchResult wrapper
 		if len(contextIds) == 1 {
 			ctx := context.Background()
+			// Set context ID even for single context (needed for multi-pod k8s queries, etc.)
+			searchRequest.Options["__context_id__"] = contextIds[0]
 			return searchFactory.GetSearchResult(ctx, contextIds[0], inherits, searchRequest, runtimeVars)
 		}
 
@@ -439,8 +445,10 @@ var queryLogCommand = &cobra.Command{
 
 			// Helper to encode a slice of entries
 			printJSON := func(es []client.LogEntry) error {
-				for _, e := range es {
-					if err := enc.Encode(e); err != nil {
+				for i := range es {
+					// Extract JSON fields if enabled
+					client.ExtractJSONFromEntry(&es[i], searchResult.GetSearch())
+					if err := enc.Encode(es[i]); err != nil {
 						return err
 					}
 				}
