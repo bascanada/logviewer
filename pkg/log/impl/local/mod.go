@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"runtime"
 	"text/template"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
@@ -14,7 +15,8 @@ import (
 )
 
 const (
-	OptionsCmd = "cmd"
+	OptionsCmd   = "cmd"
+	OptionsShell = "shell"
 )
 
 type localLogClient struct{}
@@ -39,7 +41,7 @@ func getCommand(search *client.LogSearch) (string, error) {
 }
 
 func (lc localLogClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
-	cmd, err := getCommand(search)
+	cmdContent, err := getCommand(search)
 	if err != nil {
 		if err.Error() == "cmd is missing for localLogClient" {
 			panic(err)
@@ -47,7 +49,27 @@ func (lc localLogClient) Get(ctx context.Context, search *client.LogSearch) (cli
 		return nil, err
 	}
 
-	ecmd := exec.CommandContext(ctx, "sh", "-c", cmd)
+	var shellName string
+	var shellArgs []string
+
+	if customShell, ok := search.Options.GetListOfStringsOk(OptionsShell); ok && len(customShell) > 0 {
+		shellName = customShell[0]
+		if len(customShell) > 1 {
+			shellArgs = customShell[1:]
+		}
+	} else {
+		if runtime.GOOS == "windows" {
+			shellName = "powershell"
+			shellArgs = []string{"-Command"}
+		} else {
+			shellName = "sh"
+			shellArgs = []string{"-c"}
+		}
+	}
+
+	finalArgs := append(shellArgs, cmdContent)
+
+	ecmd := exec.CommandContext(ctx, shellName, finalArgs...)
 
 	stdout, err := ecmd.StdoutPipe()
 	if err != nil {

@@ -2,6 +2,7 @@ package factory
 
 import (
 	"errors"
+	"runtime"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/client/config"
@@ -119,8 +120,11 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
 				host := v.Options.GetString("host")
 				if host == "" {
-					// Fallback to default local docker socket
-					host = "unix:///var/run/docker.sock"
+					if runtime.GOOS == "windows" {
+						host = "npipe:////./pipe/docker_engine"
+					} else {
+						host = "unix:///var/run/docker.sock"
+					}
 				}
 				vv, err := docker.GetLogClient(host)
 				return &vv, err
