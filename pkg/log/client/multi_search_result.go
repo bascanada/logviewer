@@ -30,9 +30,6 @@ var _ LogSearchResult = (*MultiLogSearchResult)(nil)
 // It validates that the search request doesn't contain unsupported features for multi-context queries.
 func NewMultiLogSearchResult(search *LogSearch) (*MultiLogSearchResult, error) {
 	// Validate that unsupported features are not used
-	if len(search.Fields) > 0 {
-		return nil, errors.New("field queries are not supported with multiple contexts; use a single context instead")
-	}
 	if search.PageToken.Set && search.PageToken.Valid {
 		return nil, errors.New("pagination is not supported with multiple contexts; use a single context instead")
 	}

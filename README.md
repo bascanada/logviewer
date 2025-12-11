@@ -54,6 +54,7 @@ Way to use logviewer
 ## How to use (CLI)
 
 ![demo](https://raw.githubusercontent.com/bascanada/logviewer/main/demo.gif)
+![transactionnal](https://raw.githubusercontent.com/bascanada/logviewer/main/transaction_debug.gif)
 
 LogViewer works with or without a config file. Start simple and add complexity as needed.
 
