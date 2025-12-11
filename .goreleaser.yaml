@@ -10,6 +10,7 @@ builds:
     goos:
       - linux
       - darwin
+      - windows
     goarch:
       - amd64
       - arm64
@@ -48,12 +49,16 @@ brews:
       owner: bascanada
       name: homebrew-tap
       token: "{{ .Env.TAP_GITHUB_TOKEN }}"
-    
-    name: logviewer
+
+scoops:
+  - repository:
+      owner: bascanada
+      name: scoop-bucket
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+
     homepage: "https://github.com/bascanada/logviewer"
     description: "CLI log client for multiple sources (Splunk, K8s, Docker, etc)"
-    install: |
-      bin.install "logviewer"
+    license: "GPL-3.0-or-later"
 
 aurs:
   - name: logviewer-bin

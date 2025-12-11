@@ -48,6 +48,8 @@ release/all:
 	@$(MAKE) release GOOS=linux GOARCH=amd64 OUTPUT=build/logviewer-linux-amd64
 	@$(MAKE) release GOOS=darwin GOARCH=arm64 OUTPUT=build/logviewer-darwin-arm64
 	@$(MAKE) release GOOS=darwin GOARCH=amd64 OUTPUT=build/logviewer-darwin-amd64
+	@$(MAKE) release GOOS=windows GOARCH=amd64 OUTPUT=build/logviewer-windows-amd64.exe
+	@$(MAKE) release GOOS=windows GOARCH=arm64 OUTPUT=build/logviewer-windows-arm64.exe
 
 
 # Install the built binary to a system location.
