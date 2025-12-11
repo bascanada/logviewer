@@ -17,6 +17,11 @@ import (
 const (
 	OptionsCmd   = "cmd"
 	OptionsShell = "shell"
+
+	defaultShellWindows    = "powershell"
+	defaultShellArgWindows = "-Command"
+	defaultShellUnix       = "sh"
+	defaultShellArgUnix    = "-c"
 )
 
 type localLogClient struct{}
@@ -54,16 +59,14 @@ func (lc localLogClient) Get(ctx context.Context, search *client.LogSearch) (cli
 
 	if customShell, ok := search.Options.GetListOfStringsOk(OptionsShell); ok && len(customShell) > 0 {
 		shellName = customShell[0]
-		if len(customShell) > 1 {
-			shellArgs = customShell[1:]
-		}
+		shellArgs = customShell[1:]
 	} else {
 		if runtime.GOOS == "windows" {
-			shellName = "powershell"
-			shellArgs = []string{"-Command"}
+			shellName = defaultShellWindows
+			shellArgs = []string{defaultShellArgWindows}
 		} else {
-			shellName = "sh"
-			shellArgs = []string{"-c"}
+			shellName = defaultShellUnix
+			shellArgs = []string{defaultShellArgUnix}
 		}
 	}
 

@@ -17,6 +17,11 @@ import (
 	"github.com/bascanada/logviewer/pkg/ty"
 )
 
+const (
+	defaultDockerHostWindows = "npipe:////./pipe/docker_engine"
+	defaultDockerHostUnix    = "unix:///var/run/docker.sock"
+)
+
 type LogClientFactory interface {
 	Get(name string) (*client.LogClient, error)
 }
@@ -121,9 +126,9 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 				host := v.Options.GetString("host")
 				if host == "" {
 					if runtime.GOOS == "windows" {
-						host = "npipe:////./pipe/docker_engine"
+						host = defaultDockerHostWindows
 					} else {
-						host = "unix:///var/run/docker.sock"
+						host = defaultDockerHostUnix
 					}
 				}
 				vv, err := docker.GetLogClient(host)
