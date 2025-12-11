@@ -55,6 +55,15 @@ contexts:
       fields: {}
       options:
         cmd: 'tail -n {{or .Size.Value 200}} integration/logs/app.log'
+
+  local-test-2:
+    client: local
+    searchInherit: ["demo-file-regex"]
+    search:
+      fields: {}
+      options:
+        cmd: 'tail -n {{or .Size.Value 200}} integration/logs/app.log'
+
   splunk-app-logs:
     client: local-splunk
     searchInherit: []

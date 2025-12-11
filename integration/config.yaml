@@ -45,7 +45,7 @@ searches:
       # Extract log level (INFO, ERROR, WARN, DEBUG)
       groupRegex: '(?P<level>INFO|ERROR|WARN|DEBUG|FATAL)'
       # Extract key=value pairs like trace_id=abc-123
-      kvRegex: '([a-zA-Z_]+)=([a-f0-9-]+)'
+      kvRegex: '([a-zA-Z_]+)=([^\s]+)'
   
   # Pretty print for demo (simplified for K8s)
   transaction-view:
@@ -53,9 +53,9 @@ searches:
       template: '[{{.Timestamp.Format "15:04:05"}}]{{if .Field "level"}} [{{.Field "level"}}]{{end}}{{if .Field "app"}} [{{.Field "app"}}]{{end}}{{if .Field "pod"}} [{{.Field "pod"}}]{{end}} {{if .Field "message"}}{{.Field "message"}}{{else}}{{.Message}}{{end}}{{if .Field "trace_id"}} (trace: {{.Field "trace_id"}}){{end}}'
 
 contexts:
-  # Payment Service logs in Splunk
   payment-service:
     client: sim-splunk
+    description: "Payment Service logs from Splunk"
     searchInherit: ["json-structured", "transaction-view"]
     search:
       fields: {}
@@ -63,9 +63,9 @@ contexts:
         index: main
         search: 'sourcetype=json app="payment-service"'
 
-  # Order Service logs in OpenSearch
   order-service:
     client: sim-opensearch
+    description: "Order Service logs from OpenSearch"
     searchInherit: ["json-structured", "transaction-view"]
     search:
       fields: {}
@@ -73,9 +73,9 @@ contexts:
         index: app-logs
         query: 'app:"order-service"'
 
-  # Frontend/API Gateway logs in OpenSearch
   api-gateway:
     client: sim-opensearch
+    description: "API Gateway logs from OpenSearch"
     searchInherit: ["json-structured", "transaction-view"]
     search:
       fields: {}
@@ -83,9 +83,9 @@ contexts:
         index: app-logs
         query: 'app:"api-gateway"'
 
-  # Payment Processor pod logs (Frontend nginx-style + database logs)
   payment-processor-pod:
     client: sim-k8s
+    description: "Payment Processor pod logs from Kubernetes"
     searchInherit: []
     search:
       fields: {}
@@ -98,6 +98,7 @@ contexts:
   # All Payment Processor pods (auto-discovery)
   payment-processor-all:
     client: sim-k8s
+    description: "All Payment Processor pods logs from Kubernetes"
     searchInherit: ["k8s-log-extraction", "transaction-view"]
     search:
       fields: {}
@@ -109,6 +110,7 @@ contexts:
   # Combined view - all Splunk logs (all services)
   splunk-all:
     client: sim-splunk
+    description: "All Splunk logs"
     searchInherit: ["json-structured", "transaction-view"]
     search:
       fields: {}
@@ -119,6 +121,7 @@ contexts:
   # Combined view - all OpenSearch logs
   opensearch-all:
     client: sim-opensearch
+    description: "All OpenSearch logs"
     searchInherit: ["json-structured", "transaction-view"]
     search:
       fields: {}
@@ -128,6 +131,7 @@ contexts:
   # CloudWatch logs (if using LocalStack for additional logging)
   cloudwatch-orders:
     client: sim-cloudwatch
+    description: "CloudWatch logs for Orders"
     searchInherit: []
     search:
       fields: {}
