@@ -771,6 +771,48 @@ The `cmd` option for local and ssh clients now functions as a Go template, allow
 
 This allows flags like `--size 50` or `--from "2023-10-27T10:00:00Z"` to dynamically alter the command.
 
+**Shell Configuration (Local Client):**
+
+By default, the local client automatically selects the appropriate shell based on your operating system:
+* **Windows**: Uses `powershell -Command`
+* **Linux/macOS**: Uses `sh -c`
+
+You can override this behavior using the `shell` option in your configuration. This is useful for running legacy CMD commands on Windows or using Git Bash.
+
+**Examples:**
+
+* **Default (Windows)**: Uses PowerShell automatically.
+  ```yaml
+  contexts:
+    windows-logs:
+      client: local
+      search:
+        options:
+          cmd: 'Get-WinEvent -LogName System -MaxEvents 10 | Select-Object -ExpandProperty Message'
+  ```
+
+* **Legacy CMD (Windows)**: Force use of `cmd.exe`.
+  ```yaml
+  contexts:
+    windows-legacy:
+      client: local
+      search:
+        options:
+          shell: ["cmd", "/C"]
+          cmd: 'dir C:\Windows\Logs /O-D'
+  ```
+
+* **Git Bash (Windows)**: Use Linux tools on Windows.
+  ```yaml
+  contexts:
+    windows-git-bash:
+      client: local
+      search:
+        options:
+          shell: ["C:\\Program Files\\Git\\bin\\bash.exe", "-c"]
+          cmd: 'ls -la /c/Windows/Logs | head -n 10'
+  ```
+
 Example:
 
 ```yaml

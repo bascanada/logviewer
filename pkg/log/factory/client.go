@@ -2,6 +2,7 @@ package factory
 
 import (
 	"errors"
+	"runtime"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/client/config"
@@ -14,6 +15,11 @@ import (
 	splunk "github.com/bascanada/logviewer/pkg/log/impl/splunk/logclient"
 	"github.com/bascanada/logviewer/pkg/log/impl/ssh"
 	"github.com/bascanada/logviewer/pkg/ty"
+)
+
+const (
+	defaultDockerHostWindows = "npipe:////./pipe/docker_engine"
+	defaultDockerHostUnix    = "unix:///var/run/docker.sock"
 )
 
 type LogClientFactory interface {
@@ -119,8 +125,11 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
 				host := v.Options.GetString("host")
 				if host == "" {
-					// Fallback to default local docker socket
-					host = "unix:///var/run/docker.sock"
+					if runtime.GOOS == "windows" {
+						host = defaultDockerHostWindows
+					} else {
+						host = defaultDockerHostUnix
+					}
 				}
 				vv, err := docker.GetLogClient(host)
 				return &vv, err
