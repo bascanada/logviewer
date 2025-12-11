@@ -237,6 +237,13 @@ brew tap bascanada/tap
 brew install logviewer
 ```
 
+### Scoop (Windows)
+
+```powershell
+scoop bucket add bascanada https://github.com/bascanada/scoop-bucket
+scoop install logviewer
+```
+
 ### AUR (Arch Linux)
 
 [Link to AUR Bin release](https://aur.archlinux.org/packages/logviewer-bin)
