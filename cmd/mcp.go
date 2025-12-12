@@ -38,9 +38,10 @@ package cmd
 // 10. Metrics & Instrumentation:
 //     - Emit internal metrics (query latency, error rate, cache hit ratio) and
 //       optionally expose via a "diagnostics" tool.
-// 11. Pagination / Cursoring:
-//     - Extend query_logs to return a cursor token for fetching next pages when
-//       size limit is reached.
+// 11. Pagination / Cursoring: ✅ COMPLETED
+//     - query_logs now supports pageToken parameter and returns nextPageToken in
+//       meta when more results are available. Agent can fetch subsequent pages by
+//       passing the token in the next request.
 // 12. Enhanced Similarity Suggestions:
 //     - Replace simple Levenshtein with weighted trigram similarity and include
 //       last-used context prioritization.
@@ -348,8 +349,9 @@ Parameters:
 Behavior improvements:
 	- If contextId is invalid, the response includes suggestions (no need to pre-call list_contexts).
 	- If results are empty, meta.hints will recommend next actions (e.g. broaden last, call get_fields).
+	- If more results are available, meta.nextPageToken will be included for pagination.
 
-Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints? } }
+Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?, nextPageToken? } }
 `),
 		mcp.WithString("contextId", mcp.Required(), mcp.Description("Context identifier to query.")),
 		mcp.WithString("last", mcp.Description(`Relative time window like 15m, 2h, 1d.`)),
