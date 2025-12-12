@@ -4,6 +4,8 @@
   <img src="https://raw.githubusercontent.com/bascanada/logviewer/main/logo.svg" alt="logviewer logo" width="120" style="height:auto;" />
 
   <span>***this application is in early development , i'm still testing things out , if you like give me feedback***</span>
+
+  
 </p>
 
 ## Description
