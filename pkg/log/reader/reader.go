@@ -66,10 +66,15 @@ func (lr *ReaderLogResult) parseBlock(block string) (*client.LogEntry, bool) {
 			if parsed, err := parseTimestamp(matched); err == nil {
 				entry.Timestamp = parsed
 			}
+			// Preserve any prefix bytes that appear before the timestamp
+			// (e.g., PTY markers). Keep the remainder after the timestamp
+			// as-is so control characters are not lost.
+			prefix := firstLine[:loc[0]]
 			if loc[1] < len(firstLine) {
-				entry.Message = strings.TrimSpace(firstLine[loc[1]:])
+				rest := firstLine[loc[1]:]
+				entry.Message = prefix + rest
 			} else {
-				entry.Message = ""
+				entry.Message = prefix
 			}
 		} else {
 			entry.Message = strings.TrimSpace(firstLine)
