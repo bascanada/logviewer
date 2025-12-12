@@ -37,13 +37,8 @@ const (
 	DefaultConfigFile = "config.yaml"
 )
 
-// LoadContextConfig loads configuration from one or multiple files and merges them.
-// Prioritizes:
-// 1. explicitPath if provided.
-// 2. LOGVIEWER_CONFIG env var (can be colon-separated list).
-// 3. Defaults: ~/.logviewer/config.yaml AND ~/.logviewer/configs/*.yaml.
-func LoadContextConfig(explicitPath string) (*ContextConfig, error) {
-	// 1. Determine list of files to load
+// ResolveConfigPaths determines which configuration files to load based on precedence rules.
+func ResolveConfigPaths(explicitPath string) ([]string, error) {
 	var files []string
 
 	if strings.TrimSpace(explicitPath) != "" {
@@ -77,6 +72,20 @@ func LoadContextConfig(explicitPath string) (*ContextConfig, error) {
 
 	if len(files) == 0 && explicitPath != "" {
 		return nil, fmt.Errorf("config file not found at path: %s", explicitPath)
+	}
+	return files, nil
+}
+
+// LoadContextConfig loads configuration from one or multiple files and merges them.
+// Prioritizes:
+// 1. explicitPath if provided.
+// 2. LOGVIEWER_CONFIG env var (can be colon-separated list).
+// 3. Defaults: ~/.logviewer/config.yaml AND ~/.logviewer/configs/*.yaml.
+func LoadContextConfig(explicitPath string) (*ContextConfig, error) {
+	// 1. Determine list of files to load
+	files, err := ResolveConfigPaths(explicitPath)
+	if err != nil {
+		return nil, err
 	}
 
 	// 2. Merge all configs

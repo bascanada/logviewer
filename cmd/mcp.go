@@ -38,9 +38,10 @@ package cmd
 // 10. Metrics & Instrumentation:
 //     - Emit internal metrics (query latency, error rate, cache hit ratio) and
 //       optionally expose via a "diagnostics" tool.
-// 11. Pagination / Cursoring:
-//     - Extend query_logs to return a cursor token for fetching next pages when
-//       size limit is reached.
+// 11. Pagination / Cursoring: ✅ COMPLETED
+//     - query_logs now supports pageToken parameter and returns nextPageToken in
+//       meta when more results are available. Agent can fetch subsequent pages by
+//       passing the token in the next request.
 // 12. Enhanced Similarity Suggestions:
 //     - Replace simple Levenshtein with weighted trigram similarity and include
 //       last-used context prioritization.
@@ -76,12 +77,14 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/client/config"
 	"github.com/bascanada/logviewer/pkg/log/factory"
 	"github.com/bascanada/logviewer/pkg/ty"
+	"github.com/fsnotify/fsnotify"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
@@ -94,21 +97,20 @@ var mcpCmd = &cobra.Command{
 	Short: "Starts a MCP server",
 	Long:  `Starts a MCP server, exposing the logviewer's core functionalities as a tool.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		cfg, err := config.LoadContextConfig(configPath)
+		// Centralized config handling (matching query command):
+		// - If an explicit configPath is given, use it.
+		// - If no configPath, attempt to load the default config.
+		cfgPath := configPath
+
+		// Pre-validate config loading to provide consistent error messages
+		_, files, err := loadConfig(cfgPath)
 		if err != nil {
-			switch {
-			case errors.Is(err, config.ErrConfigParse):
-				log.Fatalf("invalid configuration format: %v", err)
-			case errors.Is(err, config.ErrNoClients):
-				log.Fatalf("configuration missing 'clients' section: %v", err)
-			case errors.Is(err, config.ErrNoContexts):
-				log.Fatalf("configuration missing 'contexts' section: %v", err)
-			default:
-				log.Fatalf("failed to load context config: %v", err)
-			}
+			log.Fatal(err)
 		}
 
-		bundle, err := BuildMCPServer(cfg)
+		log.Printf("Starting MCP server with config: %v\n", files)
+
+		bundle, err := BuildMCPServer(cfgPath)
 		if err != nil {
 			log.Fatalf("failed to build MCP server: %v", err)
 		}
@@ -119,6 +121,161 @@ var mcpCmd = &cobra.Command{
 	},
 }
 
+// ConfigManager handles thread-safe configuration reloading.
+type ConfigManager struct {
+	mu            sync.RWMutex
+	configPath    string
+	loadedFiles   []string
+	currentCfg    *config.ContextConfig
+	searchFactory factory.SearchFactory
+	watcher       *fsnotify.Watcher
+	debounceTimer *time.Timer
+	closeChan     chan struct{}
+}
+
+func NewConfigManager(path string) (*ConfigManager, error) {
+	cm := &ConfigManager{
+		configPath: path,
+		closeChan:  make(chan struct{}),
+	}
+
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create watcher: %w", err)
+	}
+	cm.watcher = watcher
+
+	if err := cm.Reload(); err != nil {
+		watcher.Close()
+		return nil, err
+	}
+
+	go cm.watch()
+
+	return cm, nil
+}
+
+// NewConfigManagerForTest creates a ConfigManager from an in-memory config (for testing).
+// Does not set up file watching.
+func NewConfigManagerForTest(cfg *config.ContextConfig) (*ConfigManager, error) {
+	clientFactory, err := factory.GetLogClientFactory(cfg.Clients)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build client factory: %w", err)
+	}
+
+	searchFactory, err := factory.GetLogSearchFactory(clientFactory, *cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build search factory: %w", err)
+	}
+
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create watcher: %w", err)
+	}
+
+	return &ConfigManager{
+		currentCfg:    cfg,
+		searchFactory: searchFactory,
+		watcher:       watcher,
+	}, nil
+}
+
+func (cm *ConfigManager) watch() {
+	const debounceDelay = 100 * time.Millisecond
+
+	for {
+		select {
+		case event, ok := <-cm.watcher.Events:
+			if !ok {
+				return
+			}
+			if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) || event.Has(fsnotify.Remove) {
+				log.Printf("Config file changed: %s", event.Name)
+				// Debounce: reset timer on each event to avoid redundant reloads
+				if cm.debounceTimer != nil {
+					cm.debounceTimer.Stop()
+				}
+				cm.debounceTimer = time.AfterFunc(debounceDelay, func() {
+					if err := cm.Reload(); err != nil {
+						log.Printf("Error reloading config: %v", err)
+					}
+				})
+			}
+		case err, ok := <-cm.watcher.Errors:
+			if !ok {
+				return
+			}
+			log.Printf("Watcher error: %v", err)
+		case <-cm.closeChan:
+			return
+		}
+	}
+}
+
+func (cm *ConfigManager) Reload() error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if cm.configPath != "" {
+		log.Printf("Reloading configuration from: %s", cm.configPath)
+	} else {
+		log.Printf("Reloading configuration from default locations")
+	}
+
+	// 1. Reload file from disk
+	newCfg, files, err := loadConfig(cm.configPath)
+	if err != nil {
+		return err
+	}
+
+	// 2. Rebuild factories
+	clientFactory, err := factory.GetLogClientFactory(newCfg.Clients)
+	if err != nil {
+		return fmt.Errorf("failed to build client factory: %w", err)
+	}
+
+	searchFactory, err := factory.GetLogSearchFactory(clientFactory, *newCfg)
+	if err != nil {
+		return fmt.Errorf("failed to build search factory: %w", err)
+	}
+
+	// 3. Update state
+	cm.currentCfg = newCfg
+	cm.searchFactory = searchFactory
+
+	// 4. Update watcher
+	// First, remove old files from watcher to prevent resource leaks
+	for _, f := range cm.loadedFiles {
+		// It's safe to ignore errors here, as the file might have been deleted.
+		_ = cm.watcher.Remove(f)
+	}
+	// Then, add new files to watcher
+	for _, f := range files {
+		if err := cm.watcher.Add(f); err != nil {
+			log.Printf("Failed to watch file %s: %v", f, err)
+		}
+	}
+	cm.loadedFiles = files
+
+	return nil
+}
+
+// Get returns a thread-safe snapshot of the current configuration and search factory.
+func (cm *ConfigManager) Get() (*config.ContextConfig, factory.SearchFactory) {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.currentCfg, cm.searchFactory
+}
+
+// Close gracefully shuts down the ConfigManager, stopping the watcher and cleaning up resources.
+func (cm *ConfigManager) Close() error {
+	close(cm.closeChan)
+	if cm.debounceTimer != nil {
+		cm.debounceTimer.Stop()
+	}
+	return cm.watcher.Close()
+}
+
 // BuildMCPServer creates an MCP server instance with all tools/resources/prompts registered.
 // Exposed for testing so we can spin up the server without invoking cobra.Run path.
 type MCPServerBundle struct {
@@ -126,18 +283,18 @@ type MCPServerBundle struct {
 	ToolHandlers map[string]func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error)
 }
 
-func BuildMCPServer(cfg *config.ContextConfig) (*MCPServerBundle, error) {
-	// Build shared factories once so every tool handler can reuse them.
-	clientFactory, err := factory.GetLogClientFactory(cfg.Clients)
+func BuildMCPServer(configPath string) (*MCPServerBundle, error) {
+	// Initialize config manager
+	cm, err := NewConfigManager(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create client factory: %w", err)
+		return nil, err
 	}
+	return buildMCPServerWithManager(cm)
+}
 
-	searchFactory, err := factory.GetLogSearchFactory(clientFactory, *cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create search factory: %w", err)
-	}
-
+// buildMCPServerWithManager creates the MCP server with a provided ConfigManager.
+// Internal function for testing.
+func buildMCPServerWithManager(cm *ConfigManager) (*MCPServerBundle, error) {
 	s := server.NewMCPServer(
 		"logviewer",
 		"1.0.0",
@@ -146,6 +303,19 @@ func BuildMCPServer(cfg *config.ContextConfig) (*MCPServerBundle, error) {
 	)
 
 	handlers := map[string]func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error){}
+
+	// --- Tool: reload_config ---
+	reloadTool := mcp.NewTool("reload_config",
+		mcp.WithDescription("Reload the configuration file from disk. Use this if you have modified the config.yaml file."),
+	)
+	reloadHandler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if err := cm.Reload(); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Reload failed: %v", err)), nil
+		}
+		return mcp.NewToolResultText("Configuration successfully reloaded."), nil
+	}
+	s.AddTool(reloadTool, reloadHandler)
+	handlers["reload_config"] = reloadHandler
 
 	listContextsTool := mcp.NewTool("list_contexts",
 		mcp.WithDescription(`List all configured log contexts.
@@ -158,6 +328,7 @@ Note: You don't have to call this before every query. You can attempt query_logs
 `),
 	)
 	listHandler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		cfg, _ := cm.Get()
 		contextIDs := make([]string, 0, len(cfg.Contexts))
 		for id := range cfg.Contexts {
 			contextIDs = append(contextIDs, id)
@@ -188,6 +359,7 @@ You may skip this and directly call query_logs. If a query returns no results, c
 		mcp.WithString("last", mcp.Description("Optional relative time window for field discovery (e.g. 30m, 2h). Defaults to 15m.")),
 	)
 	getFieldsHandler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		_, searchFactory := cm.Get()
 
 		// Extract required parameter contextId
 		contextId, err := request.RequireString("contextId")
@@ -229,22 +401,30 @@ Usage: query_logs contextId=<context> [last=15m] [size=100] [fields={"level":"ER
 Parameters:
 	contextId (string, required): Context identifier.
 	last (string, optional): Relative duration window (e.g. 15m, 2h, 1d).
+	start_time (string, optional): Absolute start time (RFC3339).
+	end_time (string, optional): Absolute end time (RFC3339).
+	pageToken (string, optional): Token for pagination to fetch older logs (returned in previous response meta).
 	size (number, optional): Max number of log entries.
 	fields (object, optional): Exact-match key/value filters.
 
 Behavior improvements:
 	- If contextId is invalid, the response includes suggestions (no need to pre-call list_contexts).
 	- If results are empty, meta.hints will recommend next actions (e.g. broaden last, call get_fields).
+	- If more results are available, meta.nextPageToken will be included for pagination.
 
-Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints? } }
+Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?, nextPageToken? } }
 `),
 		mcp.WithString("contextId", mcp.Required(), mcp.Description("Context identifier to query.")),
 		mcp.WithString("last", mcp.Description(`Relative time window like 15m, 2h, 1d.`)),
+		mcp.WithString("start_time", mcp.Description("Absolute start time (RFC3339).")),
+		mcp.WithString("end_time", mcp.Description("Absolute end time (RFC3339).")),
+		mcp.WithString("pageToken", mcp.Description("Token for pagination to fetch older logs (returned in previous response meta).")),
 		mcp.WithObject("fields", mcp.Description("Exact match key/value filters (JSON object).")),
 		mcp.WithNumber("size", mcp.Description("Maximum number of log entries to return.")),
 		mcp.WithObject("variables", mcp.Description("Runtime variables for the context (JSON object).")),
 	)
 	queryLogsHandler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		cfg, searchFactory := cm.Get()
 		start := time.Now()
 		contextId, err := request.RequireString("contextId")
 		if err != nil || contextId == "" {
@@ -254,6 +434,15 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 		searchRequest := client.LogSearch{}
 		if last, err := request.RequireString("last"); err == nil && last != "" {
 			searchRequest.Range.Last.S(last)
+		}
+		if startTime, err := request.RequireString("start_time"); err == nil && startTime != "" {
+			searchRequest.Range.Gte.S(startTime)
+		}
+		if endTime, err := request.RequireString("end_time"); err == nil && endTime != "" {
+			searchRequest.Range.Lte.S(endTime)
+		}
+		if token, err := request.RequireString("pageToken"); err == nil && token != "" {
+			searchRequest.PageToken.S(token)
 		}
 		if size, err := request.RequireFloat("size"); err == nil && int(size) > 0 {
 			searchRequest.Size.S(int(size))
@@ -343,6 +532,9 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 			"contextId":   contextId,
 			"queryTime":   time.Since(start).String(),
 		}
+		if pagination := searchResult.GetPaginationInfo(); pagination != nil && pagination.NextPageToken != "" {
+			meta["nextPageToken"] = pagination.NextPageToken
+		}
 		if len(entries) == 0 {
 			meta["hints"] = []string{
 				"No results: consider broadening 'last' (e.g. last=2h)",
@@ -364,6 +556,7 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 		mcp.WithString("contextId", mcp.Required(), mcp.Description("The context ID to inspect.")),
 	)
 	getContextDetailsHandler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		cfg, searchFactory := cm.Get()
 		contextId, err := request.RequireString("contextId")
 		if err != nil {
 			return mcp.NewToolResultError("contextId is required"), nil
@@ -410,6 +603,7 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 		mcp.WithMIMEType("application/json"),
 	)
 	s.AddResource(contextsResource, func(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+		cfg, _ := cm.Get()
 		ids := make([]string, 0, len(cfg.Contexts))
 		for id := range cfg.Contexts {
 			ids = append(ids, id)
@@ -430,6 +624,7 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 		mcp.WithArgument("contextId", mcp.ArgumentDescription("Optional starting context.")),
 	)
 	s.AddPrompt(investigationPrompt, func(ctx context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+		cfg, _ := cm.Get()
 		obj := request.Params.Arguments["objective"]
 		ctxId := request.Params.Arguments["contextId"]
 		if ctxId == "" {
