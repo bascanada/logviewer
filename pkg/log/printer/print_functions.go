@@ -80,6 +80,12 @@ func GetField(fields ty.MI, key string) interface{} {
 	return ""
 }
 
+// Trim removes leading and trailing whitespace from a string.
+// Usage in template: {{Trim .Message}} or {{.Message | Trim}}
+func Trim(s string) string {
+	return strings.TrimSpace(s)
+}
+
 func GetTemplateFunctionsMap() template.FuncMap {
 	return template.FuncMap{
 		"Format":     FormatDate,
@@ -87,5 +93,6 @@ func GetTemplateFunctionsMap() template.FuncMap {
 		"ExpandJson": ExpandJson,
 		"Field":      GetField,
 		"KV":         KV,
+		"Trim":       Trim,
 	}
 }
