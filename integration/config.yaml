@@ -137,4 +137,3 @@ contexts:
       fields: {}
       options:
         logGroupName: /aws/lambda/orders
-        useInsights: false

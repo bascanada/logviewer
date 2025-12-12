@@ -73,7 +73,7 @@ contexts:
 
   ssh-app-log:
     client: local-ssh
-    searchInherit: []
+    searchInherit: ["demo-file-regex"]
     search:
       fields: {}
       options:
@@ -117,3 +117,15 @@ contexts:
       options:
         logGroupName: my-app-logs
         useInsights: false
+
+  # SSH test context that disables PTY to force raw output (useful for network devices)
+  ssh-no-pty-test:
+    client: local-ssh
+    description: "SSH test with disablePTY=true to get raw output (no pagination)"
+    searchInherit: ["demo-file-regex"]
+    search:
+      fields: {}
+      options:
+        cmd: "cat app.log"
+        disablePTY: true
+

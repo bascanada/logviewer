@@ -844,6 +844,7 @@ httpmethod
 --ssh-addr string                SSH address and port, localhost:22
 --ssh-identifiy string           SSH private key , by default $HOME/.ssh/id_rsa
 --ssh-user string                SSH user
+--ssh-disable-pty                Disable requesting a PTY on SSH connections (useful for network devices)
 ```
 
 ```yaml
@@ -854,6 +855,7 @@ clients:
       user: testuser
       addr: 127.0.0.1:2222
       privateKey: integration/ssh/id_rsa
+      disablePTY: false
 contexts:
   ssh-app-log:
     client: local-ssh

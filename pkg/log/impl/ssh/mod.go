@@ -26,10 +26,12 @@ type SSHLogClientOptions struct {
 	Addr string `json:"addr"`
 
 	PrivateKey string `json:"privateKey"`
+	DisablePTY bool   `json:"disablePTY"`
 }
 
 type sshLogClient struct {
-	conn *sshc.Client
+	conn    *sshc.Client
+	options SSHLogClientOptions
 }
 
 func getCommand(search *client.LogSearch) (string, error) {
@@ -71,9 +73,18 @@ func (lc sshLogClient) Get(ctx context.Context, search *client.LogSearch) (clien
 		sshc.TTY_OP_OSPEED: 14400, // output speed = 14.4kbaud
 	}
 
-	err = session.RequestPty("xterm", 80, 40, modes)
-	if err != nil {
-		return nil, err
+	// Determine whether to disable PTY, with search options overriding client options.
+	disablePTY := lc.options.DisablePTY
+	if searchDisable, ok := search.Options.GetBoolOk("disablePTY"); ok {
+		disablePTY = searchDisable
+	}
+
+	// Only request a PTY if it's not disabled.
+	if !disablePTY {
+		err = session.RequestPty("xterm", 80, 40, modes)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	_, err = session.StdinPipe()
@@ -155,5 +166,5 @@ func GetLogClient(options SSHLogClientOptions) (client.LogClient, error) {
 		return nil, err
 	}
 
-	return sshLogClient{conn}, nil
+	return sshLogClient{conn: conn, options: options}, nil
 }
