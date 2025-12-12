@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/docker/cli/cli/connhelper"
 	"github.com/docker/docker/api/types/container"
@@ -138,7 +139,6 @@ func GetLogClient(host string) (logclient.LogClient, error) {
 	opts := []client.Opt{
 		client.FromEnv,
 		client.WithHost(host),
-		client.WithAPIVersionNegotiation(),
 	}
 
 	// Try to get a connection helper (e.g., for ssh://)
@@ -153,10 +153,30 @@ func GetLogClient(host string) (logclient.LogClient, error) {
 		opts = append(opts, client.WithDialContext(helper.Dialer))
 	}
 
+	// Always add API version negotiation last, after all connection options are set
+	opts = append(opts, client.WithAPIVersionNegotiation())
+
 	apiClient, err := client.NewClientWithOpts(opts...)
 	if err != nil {
 		// Il est préférable de retourner l'erreur plutôt que de panic
 		return nil, err
+	}
+
+	// Attempt to negotiate API version by pinging the server
+	// This helps ensure compatibility, especially with older Docker daemons
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if _, err := apiClient.Ping(ctx); err != nil {
+		// For SSH connections, provide helpful diagnostic information
+		if helper != nil {
+			return nil, fmt.Errorf("failed to connect to docker daemon via SSH: %w\n\nTroubleshooting:\n"+
+				"1. Ensure Docker is installed on the remote host (version 18.09 or later required for SSH)\n"+
+				"2. Verify SSH connection works: ssh %s docker version\n"+
+				"3. Check that your user has permission to access Docker on the remote host\n"+
+				"4. If using docker context, verify it's configured: docker context ls", err, host)
+		}
+		return nil, fmt.Errorf("failed to connect to docker daemon: %w", err)
 	}
 
 	return DockerLogClient{
