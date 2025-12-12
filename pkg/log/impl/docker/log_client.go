@@ -158,7 +158,7 @@ func GetLogClient(host string) (logclient.LogClient, error) {
 
 	apiClient, err := client.NewClientWithOpts(opts...)
 	if err != nil {
-		// Il est préférable de retourner l'erreur plutôt que de panic
+		// It is preferable to return the error rather than to panic
 		return nil, err
 	}
 
