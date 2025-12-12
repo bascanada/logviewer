@@ -26,7 +26,7 @@ type DockerLogClient struct {
 
 func (lc DockerLogClient) Get(ctx context.Context, search *logclient.LogSearch) (logclient.LogSearchResult, error) {
 
-	if search.FieldExtraction.TimestampRegex.Set == false {
+	if !search.FieldExtraction.TimestampRegex.Set {
 		search.FieldExtraction.TimestampRegex.S(regexDockerTimestamp)
 	}
 
@@ -114,6 +114,9 @@ func (lc DockerLogClient) Get(ctx context.Context, search *logclient.LogSearch) 
 		go func() {
 			// StdCopy demultiplexes the stream, writing stdout and stderr to the same destination
 			_, err := stdcopy.StdCopy(pw, pw, out)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error demultiplexing docker log stream: %v\n", err)
+			}
 			pw.CloseWithError(err)
 			out.Close()
 		}()
