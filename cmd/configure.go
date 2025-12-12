@@ -42,17 +42,18 @@ func init() {
 
 // wizardData encapsulates all configuration data collected from the wizard
 type wizardData struct {
-	clientType string
-	endpoint   string
-	authType   string
-	token      string
-	username   string
-	password   string
-	sshAddr    string
-	sshUser    string
-	sshKey     string
-	region     string
-	kubeConfig string
+	clientType    string
+	endpoint      string
+	authType      string
+	token         string
+	username      string
+	password      string
+	sshAddr       string
+	sshUser       string
+	sshKey        string
+	sshDisablePTY bool
+	region        string
+	kubeConfig    string
 }
 
 // resolveConfigPath determines the config file path from flag, env var, or default
@@ -131,7 +132,7 @@ func runConfigWizard(cfgPath string) error {
 			return err
 		}
 	case "ssh":
-		if err := configureSSH(&wizData.sshAddr, &wizData.sshUser, &wizData.sshKey); err != nil {
+		if err := configureSSH(&wizData.sshAddr, &wizData.sshUser, &wizData.sshKey, &wizData.sshDisablePTY); err != nil {
 			return err
 		}
 	case "cloudwatch":
@@ -433,8 +434,9 @@ func configureOpenSearch(endpoint, username, password *string) error {
 	return nil
 }
 
-func configureSSH(addr, user, key *string) error {
-	return huh.NewForm(
+func configureSSH(addr, user, key *string, disablePTY *bool) error {
+	// Main inputs
+	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
 				Title("SSH Address").
@@ -450,7 +452,23 @@ func configureSSH(addr, user, key *string) error {
 				Placeholder("~/.ssh/id_rsa").
 				Value(key),
 		),
-	).Run()
+	)
+
+	if err := form.Run(); err != nil {
+		return err
+	}
+
+	// Optional: ask whether to disable requesting a PTY (useful for network devices)
+	confirmForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Is this a network device requiring raw output (disable PTY)?").
+				Description("If yes, logviewer will avoid requesting a PTY which prevents remote pagination like --More--").
+				Value(disablePTY),
+		),
+	)
+
+	return confirmForm.Run()
 }
 
 func configureCloudWatch(region, endpoint *string) error {
@@ -566,6 +584,13 @@ func buildClientOptions(data *wizardData) ty.MI {
 		opts["user"] = data.sshUser
 		if data.sshKey != "" {
 			opts["privateKey"] = data.sshKey
+		}
+
+		// If the wizard user indicated this is a network device, propagate
+		// the disablePTY option into the client configuration so searches
+		// created from this client will default to not requesting a PTY.
+		if data.sshDisablePTY {
+			opts["disablePTY"] = true
 		}
 
 	case "cloudwatch":

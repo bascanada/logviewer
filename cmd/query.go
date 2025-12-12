@@ -134,6 +134,13 @@ func resolveSearch() (client.LogSearchResult, error) {
 		searchRequest.Options[local.OptionsCmd] = cmd
 	}
 
+	// Propagate SSH DisablePTY flag into per-search options so the SSH client
+	// behaviour can be controlled from the CLI. This mirrors the config option
+	// "disablePTY" available in search contexts.
+	if sshOptions.DisablePTY {
+		searchRequest.Options["disablePTY"] = true
+	}
+
 	if template != "" {
 		searchRequest.PrinterOptions.Template.S(template)
 	}
