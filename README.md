@@ -5,7 +5,7 @@
 
   <span>***this application is in early development , i'm still testing things out , if you like give me feedback***</span>
 
-  
+
 </p>
 
 ## Description
@@ -26,6 +26,7 @@ Log source currently supported are:
 * Splunk
 * AWS CloudWatch
 * Docker
+* (Open an issue if you think we could add another one)
 
 Way to use logviewer
 
