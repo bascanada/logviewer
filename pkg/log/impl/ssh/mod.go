@@ -26,6 +26,7 @@ type SSHLogClientOptions struct {
 	Addr string `json:"addr"`
 
 	PrivateKey string `json:"privateKey"`
+	DisablePTY bool   `json:"disablePTY"`
 }
 
 type sshLogClient struct {
@@ -71,9 +72,14 @@ func (lc sshLogClient) Get(ctx context.Context, search *client.LogSearch) (clien
 		sshc.TTY_OP_OSPEED: 14400, // output speed = 14.4kbaud
 	}
 
-	err = session.RequestPty("xterm", 80, 40, modes)
-	if err != nil {
-		return nil, err
+	// Only request a PTY when the search options do not explicitly disable it.
+	// Some network devices enable pagination when a PTY is requested, so
+	// allow callers to skip PTY negotiation via `options.disablePTY=true`.
+	if !search.Options.GetBool("disablePTY") {
+		err = session.RequestPty("xterm", 80, 40, modes)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	_, err = session.StdinPipe()

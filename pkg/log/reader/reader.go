@@ -55,14 +55,25 @@ func (lr *ReaderLogResult) parseBlock(block string) (*client.LogEntry, bool) {
 		Fields:  make(ty.MI),
 	}
 
-	// check if we have a date at the beginning and parse / remove it
+	// check if we have a date (anywhere in the line) and parse / remove it.
+	// When logs are produced via SSH they can include extra prefixes
+	// (e.g. PTY markers) before the timestamp. Find the timestamp match,
+	// parse it and then remove everything up to the end of the match so the
+	// resulting message doesn't keep the prefix.
 	if lr.regexDate != nil {
-		entry.Message = strings.TrimLeft(lr.regexDate.ReplaceAllStringFunc(firstLine, func(v string) string {
-			if parsed, err := parseTimestamp(v); err == nil {
+		if loc := lr.regexDate.FindStringIndex(firstLine); loc != nil {
+			matched := firstLine[loc[0]:loc[1]]
+			if parsed, err := parseTimestamp(matched); err == nil {
 				entry.Timestamp = parsed
 			}
-			return ""
-		}), " ")
+			if loc[1] < len(firstLine) {
+				entry.Message = strings.TrimSpace(firstLine[loc[1]:])
+			} else {
+				entry.Message = ""
+			}
+		} else {
+			entry.Message = strings.TrimSpace(firstLine)
+		}
 	}
 
 	// Extract JSON fields using shared function
@@ -127,12 +138,14 @@ func (lr *ReaderLogResult) parseBlock(block string) (*client.LogEntry, bool) {
 }
 
 func (lr *ReaderLogResult) processLine(line string, pendingBlock *strings.Builder, onEntry func(client.LogEntry)) {
+	// Consider a line as a new entry when no timestamp regex is configured,
+	// or when the configured timestamp regex matches anywhere in the line.
+	// Some log producers (or PTY vs non-PTY SSH outputs) prefix lines with
+	// extra markers before the timestamp, so requiring the timestamp to be
+	// at index 0 is too strict and breaks multiline detection.
 	isNewEntry := true
 	if lr.regexDate != nil {
-		loc := lr.regexDate.FindStringIndex(line)
-		if loc == nil || loc[0] != 0 {
-			isNewEntry = false
-		}
+		isNewEntry = lr.regexDate.MatchString(line)
 	}
 
 	if isNewEntry {
@@ -246,7 +259,15 @@ func GetLogResult(
 	var regexDateExtraction *regexp.Regexp
 	if search.FieldExtraction.TimestampRegex.Value != "" {
 		var err error
-		regexDateExtraction, err = regexp.Compile(search.FieldExtraction.TimestampRegex.Value)
+		// Allow timestamp regexes anchored at start (^) to still match when
+		// lines contain prefixes (e.g., SSH/PTY markers). To be forgiving for
+		// common user patterns, compile an unanchored version for detection
+		// and extraction by removing a leading '^' if present.
+		pattern := search.FieldExtraction.TimestampRegex.Value
+		if strings.HasPrefix(pattern, "^") {
+			pattern = strings.TrimPrefix(pattern, "^")
+		}
+		regexDateExtraction, err = regexp.Compile(pattern)
 		if err != nil {
 			return nil, err
 		}
