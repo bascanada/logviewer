@@ -150,6 +150,31 @@ func NewConfigManager(path string) (*ConfigManager, error) {
 	return cm, nil
 }
 
+// NewConfigManagerForTest creates a ConfigManager from an in-memory config (for testing).
+// Does not set up file watching.
+func NewConfigManagerForTest(cfg *config.ContextConfig) (*ConfigManager, error) {
+	clientFactory, err := factory.GetLogClientFactory(cfg.Clients)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build client factory: %w", err)
+	}
+
+	searchFactory, err := factory.GetLogSearchFactory(clientFactory, *cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build search factory: %w", err)
+	}
+
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create watcher: %w", err)
+	}
+
+	return &ConfigManager{
+		currentCfg:    cfg,
+		searchFactory: searchFactory,
+		watcher:       watcher,
+	}, nil
+}
+
 func (cm *ConfigManager) watch() {
 	for {
 		select {
@@ -233,7 +258,12 @@ func BuildMCPServer(configPath string) (*MCPServerBundle, error) {
 	if err != nil {
 		return nil, err
 	}
+	return buildMCPServerWithManager(cm)
+}
 
+// buildMCPServerWithManager creates the MCP server with a provided ConfigManager.
+// Internal function for testing.
+func buildMCPServerWithManager(cm *ConfigManager) (*MCPServerBundle, error) {
 	s := server.NewMCPServer(
 		"logviewer",
 		"1.0.0",

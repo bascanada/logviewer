@@ -16,7 +16,11 @@ func TestMCP_ListContexts(t *testing.T) {
 	cfg.Clients["dummy"] = config.Client{Type: "local", Options: ty.MI{}}
 	cfg.Contexts["alpha"] = config.SearchContext{Client: "dummy", Search: client.LogSearch{}}
 
-	bundle, err := BuildMCPServer(cfg)
+	cm, err := NewConfigManagerForTest(cfg)
+	if err != nil {
+		t.Fatalf("config manager error: %v", err)
+	}
+	bundle, err := buildMCPServerWithManager(cm)
 	if err != nil {
 		t.Fatalf("build error: %v", err)
 	}
