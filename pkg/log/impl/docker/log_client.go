@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/docker/cli/cli/connhelper"
@@ -19,6 +20,7 @@ import (
 )
 
 const regexDockerTimestamp = "(([0-9]*)-([0-9]*)-([0-9]*)T([0-9]*):([0-9]*):([0-9]*).([0-9]*)Z)"
+const dockerPingTimeout = 10 * time.Second
 
 type DockerLogClient struct {
 	apiClient *client.Client
@@ -164,17 +166,21 @@ func GetLogClient(host string) (logclient.LogClient, error) {
 
 	// Attempt to negotiate API version by pinging the server
 	// This helps ensure compatibility, especially with older Docker daemons
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), dockerPingTimeout)
 	defer cancel()
 
 	if _, err := apiClient.Ping(ctx); err != nil {
 		// For SSH connections, provide helpful diagnostic information
 		if helper != nil {
+			sshHost := host
+			if strings.HasPrefix(sshHost, "ssh://") {
+				sshHost = strings.TrimPrefix(sshHost, "ssh://")
+			}
 			return nil, fmt.Errorf("failed to connect to docker daemon via SSH: %w\n\nTroubleshooting:\n"+
 				"1. Ensure Docker is installed on the remote host (version 18.09 or later required for SSH)\n"+
 				"2. Verify SSH connection works: ssh %s docker version\n"+
 				"3. Check that your user has permission to access Docker on the remote host\n"+
-				"4. If using docker context, verify it's configured: docker context ls", err, host)
+				"4. If using docker context, verify it's configured: docker context ls", err, sshHost)
 		}
 		return nil, fmt.Errorf("failed to connect to docker daemon: %w", err)
 	}
