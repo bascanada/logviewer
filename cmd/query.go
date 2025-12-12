@@ -11,7 +11,6 @@ import (
 	"sync"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
-	"github.com/bascanada/logviewer/pkg/log/client/config"
 	"github.com/bascanada/logviewer/pkg/log/factory"
 	"github.com/bascanada/logviewer/pkg/log/impl/cloudwatch"
 	"github.com/bascanada/logviewer/pkg/log/impl/docker"
@@ -146,29 +145,9 @@ func resolveSearch() (client.LogSearchResult, error) {
 	// - If no configPath but context ids (-i) are provided, attempt to load the default config.
 	// - If no configPath and no -i, do not load any config and continue with non-config flow.
 	if configPath != "" || len(contextIds) > 0 {
-		var cfg *config.ContextConfig
-		var err error
-		if configPath != "" {
-			cfg, err = config.LoadContextConfig(configPath)
-		} else {
-			cfg, err = config.LoadContextConfig("")
-		}
-
+		cfg, _, err := loadConfig(configPath)
 		if err != nil {
-			// Handle all config loading errors uniformly.
-			errorMsg := "failed to load context config"
-			switch {
-			case errors.Is(err, config.ErrConfigParse):
-				errorMsg = "invalid configuration file format"
-			case errors.Is(err, config.ErrNoClients):
-				errorMsg = "configuration missing 'clients' section"
-			case errors.Is(err, config.ErrNoContexts):
-				errorMsg = "configuration missing 'contexts' section"
-			}
-			if configPath != "" {
-				return nil, fmt.Errorf("%s %s: %w", errorMsg, configPath, err)
-			}
-			return nil, fmt.Errorf("%s: %w", errorMsg, err)
+			return nil, err
 		}
 
 		clientFactory, err := factory.GetLogClientFactory(cfg.Clients)

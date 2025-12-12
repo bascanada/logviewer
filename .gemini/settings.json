@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "serverName": {
+      "command": "./build/logviewer",
+      "args": ["mcp", "-c", "./config.yaml"],
+      "cwd": "./",
+      "timeout": 30000,
+      "trust": true
+    }
+  }
+}
