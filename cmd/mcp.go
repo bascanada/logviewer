@@ -129,10 +129,15 @@ type ConfigManager struct {
 	currentCfg    *config.ContextConfig
 	searchFactory factory.SearchFactory
 	watcher       *fsnotify.Watcher
+	debounceTimer *time.Timer
+	closeChan     chan struct{}
 }
 
 func NewConfigManager(path string) (*ConfigManager, error) {
-	cm := &ConfigManager{configPath: path}
+	cm := &ConfigManager{
+		configPath: path,
+		closeChan:  make(chan struct{}),
+	}
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -176,6 +181,8 @@ func NewConfigManagerForTest(cfg *config.ContextConfig) (*ConfigManager, error) 
 }
 
 func (cm *ConfigManager) watch() {
+	const debounceDelay = 100 * time.Millisecond
+
 	for {
 		select {
 		case event, ok := <-cm.watcher.Events:
@@ -184,16 +191,23 @@ func (cm *ConfigManager) watch() {
 			}
 			if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) || event.Has(fsnotify.Remove) {
 				log.Printf("Config file changed: %s", event.Name)
-				// Debounce could be added here if needed
-				if err := cm.Reload(); err != nil {
-					log.Printf("Error reloading config: %v", err)
+				// Debounce: reset timer on each event to avoid redundant reloads
+				if cm.debounceTimer != nil {
+					cm.debounceTimer.Stop()
 				}
+				cm.debounceTimer = time.AfterFunc(debounceDelay, func() {
+					if err := cm.Reload(); err != nil {
+						log.Printf("Error reloading config: %v", err)
+					}
+				})
 			}
 		case err, ok := <-cm.watcher.Errors:
 			if !ok {
 				return
 			}
 			log.Printf("Watcher error: %v", err)
+		case <-cm.closeChan:
+			return
 		}
 	}
 }
@@ -202,7 +216,11 @@ func (cm *ConfigManager) Reload() error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	log.Printf("Reloading configuration from: %s", cm.configPath)
+	if cm.configPath != "" {
+		log.Printf("Reloading configuration from: %s", cm.configPath)
+	} else {
+		log.Printf("Reloading configuration from default locations")
+	}
 
 	// 1. Reload file from disk
 	newCfg, files, err := loadConfig(cm.configPath)
@@ -224,16 +242,20 @@ func (cm *ConfigManager) Reload() error {
 	// 3. Update state
 	cm.currentCfg = newCfg
 	cm.searchFactory = searchFactory
-	cm.loadedFiles = files
 
 	// 4. Update watcher
+	// First, remove old files from watcher to prevent resource leaks
+	for _, f := range cm.loadedFiles {
+		// It's safe to ignore errors here, as the file might have been deleted.
+		_ = cm.watcher.Remove(f)
+	}
+	// Then, add new files to watcher
 	for _, f := range files {
-		// Add returns error if file is already watched? No, usually it's fine.
-		// But we should check error just in case.
 		if err := cm.watcher.Add(f); err != nil {
 			log.Printf("Failed to watch file %s: %v", f, err)
 		}
 	}
+	cm.loadedFiles = files
 
 	return nil
 }
@@ -243,6 +265,15 @@ func (cm *ConfigManager) Get() (*config.ContextConfig, factory.SearchFactory) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	return cm.currentCfg, cm.searchFactory
+}
+
+// Close gracefully shuts down the ConfigManager, stopping the watcher and cleaning up resources.
+func (cm *ConfigManager) Close() error {
+	close(cm.closeChan)
+	if cm.debounceTimer != nil {
+		cm.debounceTimer.Stop()
+	}
+	return cm.watcher.Close()
 }
 
 // BuildMCPServer creates an MCP server instance with all tools/resources/prompts registered.

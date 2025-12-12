@@ -26,11 +26,7 @@ func loadConfig(path string) (*config.ContextConfig, []string, error) {
 	// but LoadContextConfig doesn't take a list of files.
 	// So we will trust that LoadContextConfig(path) does the same thing as ResolveConfigPaths(path).
 
-	if path != "" {
-		cfg, err = config.LoadContextConfig(path)
-	} else {
-		cfg, err = config.LoadContextConfig("")
-	}
+	cfg, err = config.LoadContextConfig(path)
 
 	if err != nil {
 		errorMsg := "failed to load context config"
