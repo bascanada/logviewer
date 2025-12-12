@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/docker/cli/cli/connhelper"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 
 	logclient "github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/reader"
@@ -24,7 +26,7 @@ type DockerLogClient struct {
 
 func (lc DockerLogClient) Get(ctx context.Context, search *logclient.LogSearch) (logclient.LogSearchResult, error) {
 
-	if search.FieldExtraction.TimestampRegex.Set == false {
+	if !search.FieldExtraction.TimestampRegex.Set {
 		search.FieldExtraction.TimestampRegex.S(regexDockerTimestamp)
 	}
 
@@ -84,9 +86,12 @@ func (lc DockerLogClient) Get(ctx context.Context, search *logclient.LogSearch) 
 
 	follow := search.Follow
 
+	showStdout := search.Options.GetOr("showStdout", true).(bool)
+	showStderr := search.Options.GetOr("showStderr", true).(bool)
+
 	options := container.LogsOptions{
-		ShowStdout: search.Options.GetOr("showStdout", true).(bool),
-		ShowStderr: search.Options.GetOr("showStderr", true).(bool),
+		ShowStdout: showStdout,
+		ShowStderr: showStderr,
 		Timestamps: search.Options.GetOr("timestamps", true).(bool),
 		Details:    search.Options.GetOr("details", false).(bool),
 		Since:      since,
@@ -99,9 +104,33 @@ func (lc DockerLogClient) Get(ctx context.Context, search *logclient.LogSearch) 
 		return nil, err
 	}
 
-	scanner := bufio.NewScanner(out)
+	// Docker uses a multiplexed stream format when both stdout and stderr are requested.
+	// We need to demultiplex it using stdcopy.StdCopy to get clean log output.
+	var logReader io.Reader
+	var closer io.Closer
+	if showStdout && showStderr {
+		// Both streams - need to demultiplex
+		pr, pw := io.Pipe()
+		go func() {
+			// StdCopy demultiplexes the stream, writing stdout and stderr to the same destination
+			_, err := stdcopy.StdCopy(pw, pw, out)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error demultiplexing docker log stream: %v\n", err)
+			}
+			pw.CloseWithError(err)
+			out.Close()
+		}()
+		logReader = pr
+		closer = pr
+	} else {
+		// Single stream - no demultiplexing needed
+		logReader = out
+		closer = out
+	}
 
-	return reader.GetLogResult(search, scanner, out)
+	scanner := bufio.NewScanner(logReader)
+
+	return reader.GetLogResult(search, scanner, closer)
 }
 
 func GetLogClient(host string) (logclient.LogClient, error) {
