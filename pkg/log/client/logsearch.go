@@ -38,10 +38,13 @@ type PrinterOptions struct {
 }
 
 type LogSearch struct {
-	// Current filterring fields
+	// Current filterring fields (legacy - use Filter for complex queries)
 	Fields ty.MS `json:"fields,omitempty" yaml:"fields,omitempty"`
-	// Extra rules for filtering fields
+	// Extra rules for filtering fields (legacy - use Filter for complex queries)
 	FieldsCondition ty.MS `json:"fieldsCondition,omitempty" yaml:"fieldsCondition,omitempty"`
+
+	// Filter is the new AST-based filter supporting nested logic (AND/OR/NOT)
+	Filter *Filter `json:"filter,omitempty" yaml:"filter,omitempty"`
 
 	// Range of the log query to do , depends of the system for full availability
 	Range SearchRange `json:"range,omitempty" yaml:"range,omitempty"`
@@ -71,6 +74,46 @@ type LogSearch struct {
 	Follow bool `json:"follow,omitempty" yaml:"follow,omitempty"`
 }
 
+// GetEffectiveFilter returns a unified filter tree that combines legacy Fields/FieldsCondition
+// with the new Filter field. This allows backward compatibility while supporting new AST filters.
+func (s *LogSearch) GetEffectiveFilter() *Filter {
+	var allFilters []Filter
+
+	// 1. Convert Legacy Fields to Filter Nodes
+	for field, value := range s.Fields {
+		op := "equals"
+		if condition, ok := s.FieldsCondition[field]; ok && condition != "" {
+			op = condition
+		}
+
+		allFilters = append(allFilters, Filter{
+			Field: field,
+			Op:    op,
+			Value: value,
+		})
+	}
+
+	// 2. Add the Explicit New Filter (if it exists)
+	if s.Filter != nil {
+		allFilters = append(allFilters, *s.Filter)
+	}
+
+	if len(allFilters) == 0 {
+		return nil
+	}
+
+	// If there is only one condition, return it directly
+	if len(allFilters) == 1 {
+		return &allFilters[0]
+	}
+
+	// Otherwise, wrap everything in an implicit root "AND"
+	return &Filter{
+		Logic:   LogicAnd,
+		Filters: allFilters,
+	}
+}
+
 func (lr *LogSearch) MergeInto(logSeach *LogSearch) error {
 
 	if lr.Fields == nil {
@@ -93,6 +136,18 @@ func (lr *LogSearch) MergeInto(logSeach *LogSearch) error {
 	lr.Fields = ty.MergeM(lr.Fields, logSeach.Fields)
 	lr.FieldsCondition = ty.MergeM(lr.FieldsCondition, logSeach.FieldsCondition)
 	lr.Options = ty.MergeM(lr.Options, logSeach.Options)
+
+	// Merge Filter: AND them together if both exist
+	if logSeach.Filter != nil {
+		if lr.Filter != nil {
+			lr.Filter = &Filter{
+				Logic:   LogicAnd,
+				Filters: []Filter{*lr.Filter, *logSeach.Filter},
+			}
+		} else {
+			lr.Filter = logSeach.Filter
+		}
+	}
 
 	lr.Size.Merge(&logSeach.Size)
 	lr.Refresh.Duration.Merge(&logSeach.Refresh.Duration)

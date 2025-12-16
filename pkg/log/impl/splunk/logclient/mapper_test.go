@@ -181,4 +181,162 @@ func TestSearchRequest(t *testing.T) {
 		assert.Equal(t, "-1min", requestBodyFields["earliest_time"])
 		assert.Equal(t, "now", requestBodyFields["latest_time"])
 	})
+
+	// Tests for new recursive Filter AST
+	t.Run("recursive filter - simple AND", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Logic: client.LogicAnd,
+				Filters: []client.Filter{
+					{Field: "app", Value: "myapp"},
+					{Field: "env", Value: "prod"},
+				},
+			},
+			Options: ty.MI{"index": "nonprod"},
+		}
+		logSearch.Range.Gte.S("24h@h")
+		logSearch.Range.Lte.S("now")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Contains(t, requestBodyFields["search"], `app="myapp"`)
+		assert.Contains(t, requestBodyFields["search"], `env="prod"`)
+	})
+
+	t.Run("recursive filter - simple OR", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Logic: client.LogicOr,
+				Filters: []client.Filter{
+					{Field: "level", Value: "ERROR"},
+					{Field: "level", Value: "WARN"},
+				},
+			},
+			Options: ty.MI{"index": "nonprod"},
+		}
+		logSearch.Range.Gte.S("24h@h")
+		logSearch.Range.Lte.S("now")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Contains(t, requestBodyFields["search"], `level="ERROR" OR level="WARN"`)
+	})
+
+	t.Run("recursive filter - NOT", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Logic: client.LogicNot,
+				Filters: []client.Filter{
+					{Field: "level", Value: "DEBUG"},
+				},
+			},
+			Options: ty.MI{"index": "nonprod"},
+		}
+		logSearch.Range.Gte.S("24h@h")
+		logSearch.Range.Lte.S("now")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Contains(t, requestBodyFields["search"], `NOT (level="DEBUG")`)
+	})
+
+	t.Run("recursive filter - nested (A OR B) AND C", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Logic: client.LogicAnd,
+				Filters: []client.Filter{
+					{
+						Logic: client.LogicOr,
+						Filters: []client.Filter{
+							{Field: "level", Value: "ERROR"},
+							{Field: "level", Value: "WARN"},
+						},
+					},
+					{Field: "app", Value: "myapp"},
+				},
+			},
+			Options: ty.MI{"index": "nonprod"},
+		}
+		logSearch.Range.Gte.S("24h@h")
+		logSearch.Range.Lte.S("now")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Contains(t, requestBodyFields["search"], `(level="ERROR" OR level="WARN")`)
+		assert.Contains(t, requestBodyFields["search"], `app="myapp"`)
+	})
+
+	t.Run("recursive filter - regex in filter", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Logic: client.LogicAnd,
+				Filters: []client.Filter{
+					{Field: "app", Value: "myapp"},
+					{Field: "message", Op: operator.Regex, Value: "(error|fail)"},
+				},
+			},
+			Options: ty.MI{"index": "nonprod"},
+		}
+		logSearch.Range.Gte.S("24h@h")
+		logSearch.Range.Lte.S("now")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Contains(t, requestBodyFields["search"], `app="myapp"`)
+		assert.Contains(t, requestBodyFields["search"], `| regex message="(error|fail)"`)
+	})
+
+	t.Run("recursive filter - combined with legacy fields", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Fields: ty.MS{"env": "production"},
+			Filter: &client.Filter{
+				Logic: client.LogicOr,
+				Filters: []client.Filter{
+					{Field: "level", Value: "ERROR"},
+					{Field: "level", Value: "WARN"},
+				},
+			},
+			Options: ty.MI{"index": "nonprod"},
+		}
+		logSearch.Range.Gte.S("24h@h")
+		logSearch.Range.Lte.S("now")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Contains(t, requestBodyFields["search"], `env="production"`)
+		assert.Contains(t, requestBodyFields["search"], `level="ERROR" OR level="WARN"`)
+	})
+
+	t.Run("recursive filter - wildcard operator", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Field: "app",
+				Op:    operator.Wildcard,
+				Value: "wq.services",
+			},
+			Options: ty.MI{"index": "nonprod"},
+		}
+		logSearch.Range.Gte.S("24h@h")
+		logSearch.Range.Lte.S("now")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Contains(t, requestBodyFields["search"], `app="wq.services*"`)
+	})
+
+	t.Run("recursive filter - exists operator", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Field: "trace_id",
+				Op:    operator.Exists,
+			},
+			Options: ty.MI{"index": "nonprod"},
+		}
+		logSearch.Range.Gte.S("24h@h")
+		logSearch.Range.Lte.S("now")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Contains(t, requestBodyFields["search"], `trace_id=*`)
+	})
 }

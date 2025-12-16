@@ -6,6 +6,7 @@ import (
 
 	"github.com/bascanada/logviewer/pkg/http"
 	"github.com/bascanada/logviewer/pkg/log/client"
+	"github.com/bascanada/logviewer/pkg/log/client/operator"
 	"github.com/bascanada/logviewer/pkg/log/impl/elk"
 	"github.com/bascanada/logviewer/pkg/ty"
 )
@@ -35,6 +36,115 @@ func (kc kibanaClient) Get(ctx context.Context, search *client.LogSearch) (clien
 	}
 
 	return elk.GetSearchResult(&kc, search, searchResponse.RawResponse.Hits), nil
+}
+
+// buildKibanaCondition builds a single Kibana query condition from a filter leaf.
+func buildKibanaCondition(f *client.Filter) ty.MI {
+	if f.Field == "" {
+		return nil
+	}
+
+	op := f.Op
+	if op == "" {
+		op = operator.Match
+	}
+
+	// Handle special "_" sentinel for full-text search
+	field := f.Field
+	if field == "_" {
+		field = "_all"
+	}
+
+	switch op {
+	case operator.Regex:
+		return ty.MI{
+			"regexp": ty.MI{
+				field: f.Value,
+			},
+		}
+	case operator.Wildcard:
+		return ty.MI{
+			"wildcard": ty.MI{
+				field: f.Value,
+			},
+		}
+	case operator.Exists:
+		return ty.MI{
+			"exists": ty.MI{
+				"field": field,
+			},
+		}
+	case operator.Equals:
+		return ty.MI{
+			"term": ty.MI{
+				field: f.Value,
+			},
+		}
+	default: // match - use match_phrase for Kibana (default behavior)
+		return ty.MI{
+			"match_phrase": ty.MI{
+				field: f.Value,
+			},
+		}
+	}
+}
+
+// buildKibanaQuery recursively builds a Kibana bool query from a Filter AST.
+func buildKibanaQuery(f *client.Filter) ty.MI {
+	if f == nil {
+		return nil
+	}
+
+	// Handle Leaf (Condition)
+	if f.Field != "" {
+		return buildKibanaCondition(f)
+	}
+
+	// Handle Branch (Group)
+	if f.Logic == "" || len(f.Filters) == 0 {
+		return nil
+	}
+
+	var clauses []ty.MI
+	for _, child := range f.Filters {
+		clause := buildKibanaQuery(&child)
+		if clause != nil {
+			clauses = append(clauses, clause)
+		}
+	}
+
+	if len(clauses) == 0 {
+		return nil
+	}
+
+	// If only one clause and AND, return it directly
+	if len(clauses) == 1 && f.Logic == client.LogicAnd {
+		return clauses[0]
+	}
+
+	switch f.Logic {
+	case client.LogicAnd:
+		return ty.MI{
+			"bool": ty.MI{
+				"must": clauses,
+			},
+		}
+	case client.LogicOr:
+		return ty.MI{
+			"bool": ty.MI{
+				"should":               clauses,
+				"minimum_should_match": 1,
+			},
+		}
+	case client.LogicNot:
+		return ty.MI{
+			"bool": ty.MI{
+				"must_not": clauses,
+			},
+		}
+	}
+
+	return nil
 }
 
 func getSearchRequest(search *client.LogSearch) (SearchRequest, error) {
@@ -73,28 +183,21 @@ func getSearchRequest(search *client.LogSearch) (SearchRequest, error) {
 		"excludes": []interface{}{},
 	}
 
-	conditions := make([]ty.MI, len(search.Fields)+2)
-	conditions[0] = ty.MI{
-		"match_all": ty.MI{},
+	// Build conditions from the effective filter
+	conditions := []ty.MI{
+		{"match_all": ty.MI{}},
 	}
 
-	i := 1
-
-	for k, v := range search.Fields {
-		op, b := search.FieldsCondition[k]
-		if !b || op == "" {
-			op = "match_phrase"
+	effectiveFilter := search.GetEffectiveFilter()
+	if effectiveFilter != nil {
+		filterQuery := buildKibanaQuery(effectiveFilter)
+		if filterQuery != nil {
+			conditions = append(conditions, filterQuery)
 		}
-		conditions[i] = ty.MI{
-			op: ty.MI{
-				k: v,
-			},
-		}
-
-		i += 1
 	}
 
-	conditions[len(conditions)-1] = elk.GetDateRangeConditon(gte, lte)
+	// Add timestamp range
+	conditions = append(conditions, elk.GetDateRangeConditon(gte, lte))
 
 	request.Params.Body.Query = ty.MI{
 		"bool": ty.MI{

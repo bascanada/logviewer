@@ -116,23 +116,22 @@ func (lr *ReaderLogResult) parseBlock(block string) (*client.LogEntry, bool) {
 		}
 	}
 
-	if lr.namedGroupRegexExtraction != nil || lr.kvRegexExtraction != nil || lr.search.FieldExtraction.Json.Value {
-		for k, v := range lr.search.Fields {
-			if vv, ok := entry.Fields[k]; ok {
-				if v != vv {
-					return nil, false
-				}
-			} else {
-				return nil, false
-			}
-		}
-	}
-
 	// Try both lowercase and uppercase versions for Level field
+	// (must happen before filter check so entry.Level is populated)
 	if level := entry.Fields.GetString("level"); level != "" {
 		entry.Level = level
 	} else if level := entry.Fields.GetString("Level"); level != "" {
 		entry.Level = level
+	}
+
+	// Apply filter using the new recursive filter system
+	if lr.namedGroupRegexExtraction != nil || lr.kvRegexExtraction != nil || lr.search.FieldExtraction.Json.Value {
+		effectiveFilter := lr.search.GetEffectiveFilter()
+		if effectiveFilter != nil {
+			if !effectiveFilter.Match(entry) {
+				return nil, false
+			}
+		}
 	}
 
 	if rest != "" {
