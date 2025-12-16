@@ -7,3 +7,194 @@ contexts:
       options:
         index: main
         search: 'sourcetype=json app="payment-service" level=ERROR'
+
+  # ============================================
+  # Recursive Filter Test Contexts
+  # ============================================
+
+  # Test 1: Splunk - Simple OR filter (ERROR OR WARN logs)
+  splunk-errors-or-warns:
+    client: sim-splunk
+    description: "Splunk: ERROR or WARN level logs (tests OR filter)"
+    searchInherit: ["json-structured", "transaction-view"]
+    search:
+      options:
+        index: main
+      filter:
+        logic: OR
+        filters:
+          - field: level
+            value: ERROR
+          - field: level
+            value: WARN
+
+  # Test 2: Splunk - Nested filter: (ERROR OR WARN) AND app=log-generator
+  splunk-critical:
+    client: sim-splunk
+    description: "Splunk: Critical logs (tests nested AND/OR)"
+    searchInherit: ["json-structured", "transaction-view"]
+    search:
+      options:
+        index: main
+      filter:
+        logic: AND
+        filters:
+          - logic: OR
+            filters:
+              - field: level
+                value: ERROR
+              - field: level
+                value: WARN
+          - field: app
+            value: log-generator
+
+  # Test 3: Splunk - NOT filter (exclude DEBUG logs)
+  splunk-no-debug:
+    client: sim-splunk
+    description: "Splunk: All logs except DEBUG (tests NOT filter)"
+    searchInherit: ["json-structured", "transaction-view"]
+    search:
+      options:
+        index: main
+      filter:
+        logic: NOT
+        filters:
+          - field: level
+            value: DEBUG
+
+  # Test 4: OpenSearch - OR filter for ERROR or WARN
+  opensearch-errors-or-warns:
+    client: sim-opensearch
+    description: "OpenSearch: ERROR or WARN level logs"
+    searchInherit: ["json-structured", "transaction-view"]
+    search:
+      options:
+        index: app-logs
+      filter:
+        logic: OR
+        filters:
+          - field: level
+            op: match
+            value: ERROR
+          - field: level
+            op: match
+            value: WARN
+
+  # Test 5: OpenSearch - Complex nested: (level=ERROR) OR (level=WARN)
+  opensearch-complex:
+    client: sim-opensearch
+    description: "OpenSearch: Complex nested filter - ERROR or WARN logs"
+    searchInherit: ["json-structured", "transaction-view"]
+    search:
+      options:
+        index: app-logs
+      filter:
+        logic: AND
+        filters:
+          - field: app
+            op: match
+            value: log-generator
+          - logic: OR
+            filters:
+              - field: level
+                op: match
+                value: ERROR
+              - field: level
+                op: match
+                value: WARN
+
+  # Test 6: OpenSearch - Regex filter with OR
+  opensearch-regex-errors:
+    client: sim-opensearch
+    description: "OpenSearch: Regex match for error patterns"
+    searchInherit: ["json-structured", "transaction-view"]
+    search:
+      options:
+        index: app-logs
+      filter:
+        logic: OR
+        filters:
+          - field: message
+            op: regex
+            value: ".*[Ee]rror.*"
+          - field: message
+            op: regex
+            value: ".*[Ff]ail.*"
+
+  # Test 7: K8s - Client-side filtering with OR (tests reader.go Match)
+  k8s-errors-or-warns:
+    client: sim-k8s
+    description: "K8s: ERROR or WARN logs (tests client-side OR filter)"
+    searchInherit: ["k8s-log-extraction", "transaction-view"]
+    search:
+      options:
+        namespace: default
+        labelSelector: "app=payment-processor"
+        timestamp: true
+      filter:
+        logic: OR
+        filters:
+          - field: level
+            value: ERROR
+          - field: level
+            value: WARN
+
+  # Test 8: K8s - NOT DEBUG (client-side NOT filter)
+  k8s-no-debug:
+    client: sim-k8s
+    description: "K8s: All logs except DEBUG (tests client-side NOT filter)"
+    searchInherit: ["k8s-log-extraction", "transaction-view"]
+    search:
+      options:
+        namespace: default
+        labelSelector: "app=payment-processor"
+        timestamp: true
+      filter:
+        logic: NOT
+        filters:
+          - field: level
+            value: DEBUG
+
+  # Test 9: Combined legacy fields + new filter
+  splunk-legacy-plus-filter:
+    client: sim-splunk
+    description: "Splunk: Legacy fields + new OR filter combined"
+    searchInherit: ["json-structured", "transaction-view"]
+    search:
+      fields:
+        app: log-generator
+      options:
+        index: main
+      filter:
+        logic: OR
+        filters:
+          - field: level
+            value: ERROR
+          - field: level
+            value: WARN
+
+  # Test 10: Wildcard operator test
+  # Note: OpenSearch wildcard on text fields requires .keyword suffix
+  opensearch-wildcard:
+    client: sim-opensearch
+    description: "OpenSearch: Wildcard app name filter"
+    searchInherit: ["json-structured", "transaction-view"]
+    search:
+      options:
+        index: app-logs
+      filter:
+        field: app.keyword
+        op: wildcard
+        value: "log-*"
+
+  # Test 11: Exists operator test
+  splunk-has-trace:
+    client: sim-splunk
+    description: "Splunk: Only logs with trace_id field"
+    searchInherit: ["json-structured", "transaction-view"]
+    search:
+      options:
+        index: main
+      filter:
+        field: trace_id
+        op: exists
