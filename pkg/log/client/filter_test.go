@@ -105,9 +105,9 @@ func TestFilterValidate(t *testing.T) {
 		assert.Error(t, f.Validate())
 	})
 
-	t.Run("invalid - neither field nor logic set", func(t *testing.T) {
+	t.Run("empty filter is valid (matches all)", func(t *testing.T) {
 		f := &Filter{}
-		assert.Error(t, f.Validate())
+		assert.NoError(t, f.Validate())
 	})
 
 	t.Run("invalid - leaf with nested filters", func(t *testing.T) {

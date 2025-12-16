@@ -3,6 +3,7 @@ package opensearch
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
@@ -93,13 +94,13 @@ func TestGetSearchRequest_RecursiveFilter(t *testing.T) {
 		queryStr := string(b)
 
 		// Should contain bool must with the conditions
-		if !contains(queryStr, "must") {
+		if !strings.Contains(queryStr, "must") {
 			t.Errorf("expected query to contain 'must', got: %s", queryStr)
 		}
-		if !contains(queryStr, "myapp") {
+		if !strings.Contains(queryStr, "myapp") {
 			t.Errorf("expected query to contain 'myapp', got: %s", queryStr)
 		}
-		if !contains(queryStr, "prod") {
+		if !strings.Contains(queryStr, "prod") {
 			t.Errorf("expected query to contain 'prod', got: %s", queryStr)
 		}
 	})
@@ -126,10 +127,10 @@ func TestGetSearchRequest_RecursiveFilter(t *testing.T) {
 		queryStr := string(b)
 
 		// Should contain bool should with minimum_should_match
-		if !contains(queryStr, "should") {
+		if !strings.Contains(queryStr, "should") {
 			t.Errorf("expected query to contain 'should', got: %s", queryStr)
 		}
-		if !contains(queryStr, "minimum_should_match") {
+		if !strings.Contains(queryStr, "minimum_should_match") {
 			t.Errorf("expected query to contain 'minimum_should_match', got: %s", queryStr)
 		}
 	})
@@ -155,7 +156,7 @@ func TestGetSearchRequest_RecursiveFilter(t *testing.T) {
 		queryStr := string(b)
 
 		// Should contain bool must_not
-		if !contains(queryStr, "must_not") {
+		if !strings.Contains(queryStr, "must_not") {
 			t.Errorf("expected query to contain 'must_not', got: %s", queryStr)
 		}
 	})
@@ -188,10 +189,10 @@ func TestGetSearchRequest_RecursiveFilter(t *testing.T) {
 		queryStr := string(b)
 
 		// Should contain nested structure
-		if !contains(queryStr, "should") {
+		if !strings.Contains(queryStr, "should") {
 			t.Errorf("expected query to contain 'should' for OR, got: %s", queryStr)
 		}
-		if !contains(queryStr, "myapp") {
+		if !strings.Contains(queryStr, "myapp") {
 			t.Errorf("expected query to contain 'myapp', got: %s", queryStr)
 		}
 	})
@@ -221,24 +222,11 @@ func TestGetSearchRequest_RecursiveFilter(t *testing.T) {
 		queryStr := string(b)
 
 		// Should contain both legacy and new filter conditions
-		if !contains(queryStr, "production") {
+		if !strings.Contains(queryStr, "production") {
 			t.Errorf("expected query to contain 'production', got: %s", queryStr)
 		}
-		if !contains(queryStr, "should") {
+		if !strings.Contains(queryStr, "should") {
 			t.Errorf("expected query to contain 'should', got: %s", queryStr)
 		}
 	})
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

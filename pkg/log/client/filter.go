@@ -45,9 +45,9 @@ func (f *Filter) Validate() error {
 		return fmt.Errorf("filter cannot have both 'field' and 'logic' set")
 	}
 
-	// A filter must be at least one of leaf or branch
+	// Empty filter (neither leaf nor branch) is valid and means "match all"
 	if !isLeaf && !isBranch {
-		return fmt.Errorf("filter must have either 'field' (leaf) or 'logic' (branch) set")
+		return nil
 	}
 
 	// Validate leaf node
