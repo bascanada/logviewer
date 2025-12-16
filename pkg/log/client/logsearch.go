@@ -81,7 +81,7 @@ func (s *LogSearch) GetEffectiveFilter() *Filter {
 
 	// 1. Convert Legacy Fields to Filter Nodes
 	for field, value := range s.Fields {
-		op := "equals"
+op := operator.Equals
 		if condition, ok := s.FieldsCondition[field]; ok && condition != "" {
 			op = condition
 		}
