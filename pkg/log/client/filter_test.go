@@ -359,7 +359,7 @@ func TestFilterMatch(t *testing.T) {
 		assert.True(t, f.Match(entry))
 	})
 
-t.Run("empty OR group matches", func(t *testing.T) {
+	t.Run("empty OR group matches", func(t *testing.T) {
 		f := &Filter{
 			Logic:   LogicOr,
 			Filters: []Filter{},

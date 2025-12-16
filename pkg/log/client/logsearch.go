@@ -1,6 +1,9 @@
 package client
 
-import "github.com/bascanada/logviewer/pkg/ty"
+import (
+	"github.com/bascanada/logviewer/pkg/log/client/operator"
+	"github.com/bascanada/logviewer/pkg/ty"
+)
 
 // VariableDefinition describes a dynamic parameter for a search context.
 // This provides metadata to UIs and LLMs about what inputs are expected.
