@@ -137,3 +137,72 @@ contexts:
       fields: {}
       options:
         logGroupName: /aws/lambda/orders
+
+  # Native Query examples for testing
+  splunk-native-query:
+    client: sim-splunk
+    description: "Splunk with native SPL query - basic search"
+    searchInherit: ["json-structured", "transaction-view"]
+    search:
+      nativeQuery: 'index=main sourcetype=httpevent'
+      range:
+        last: 24h
+
+  splunk-native-stats:
+    client: sim-splunk
+    description: "Splunk with transforming command (stats) - uses /results endpoint"
+    searchInherit: []
+    search:
+      nativeQuery: 'index=main sourcetype=httpevent | stats count by level, app'
+      range:
+        last: 24h
+
+  splunk-native-timechart:
+    client: sim-splunk
+    description: "Splunk timechart - uses /results endpoint"
+    searchInherit: []
+    search:
+      nativeQuery: 'index=main sourcetype=httpevent | timechart span=1h count by level'
+      range:
+        last: 24h
+
+  splunk-native-with-filter:
+    client: sim-splunk
+    description: "Splunk native query with additional filters"
+    searchInherit: ["json-structured", "transaction-view"]
+    search:
+      nativeQuery: 'index=main sourcetype=httpevent'
+      filter:
+        logic: OR
+        filters:
+          - field: level
+            value: ERROR
+          - field: level
+            value: WARN
+      range:
+        last: 24h
+
+  opensearch-native-query:
+    client: sim-opensearch
+    description: "OpenSearch with native Lucene query"
+    searchInherit: ["json-structured", "transaction-view"]
+    search:
+      nativeQuery: 'level:ERROR OR level:WARN'
+      options:
+        index: app-logs
+      range:
+        last: 1h
+
+  opensearch-native-with-filter:
+    client: sim-opensearch
+    description: "OpenSearch native query with additional filters"
+    searchInherit: ["json-structured", "transaction-view"]
+    search:
+      nativeQuery: 'message:*error* OR message:*fail*'
+      filter:
+        field: app
+        value: order-service
+      options:
+        index: app-logs
+      range:
+        last: 1h

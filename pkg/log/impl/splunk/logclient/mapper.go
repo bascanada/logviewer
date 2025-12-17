@@ -2,12 +2,42 @@ package logclient
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/client/operator"
 	"github.com/bascanada/logviewer/pkg/ty"
 )
+
+// transformingCommands lists Splunk commands that transform events into results.
+// These commands require fetching from /results endpoint instead of /events.
+var transformingCommands = []string{
+	"stats", "chart", "timechart", "top", "rare",
+	"transaction", "cluster", "kmeans",
+	"eventstats", "streamstats",
+	"bucket", "bin",
+	"predict", "trendline",
+	"geostats", "sichart", "sitimechart",
+	"mstats", "tstats",
+	"table", "fields",
+}
+
+// transformingCommandPattern matches pipe followed by a transforming command.
+// Uses word boundary to avoid matching partial words (e.g., "topaz" shouldn't match "top").
+var transformingCommandPattern *regexp.Regexp
+
+func init() {
+	// Build pattern: | followed by optional whitespace, then one of the commands as a word
+	pattern := `\|\s*(` + strings.Join(transformingCommands, "|") + `)(?:\s|$)`
+	transformingCommandPattern = regexp.MustCompile("(?i)" + pattern)
+}
+
+// ContainsTransformingCommand checks if a Splunk query contains transforming commands
+// that require results to be fetched from the /results endpoint instead of /events.
+func ContainsTransformingCommand(query string) bool {
+	return transformingCommandPattern.MatchString(query)
+}
 
 func escapeSplunkValue(value string) string {
 	return strings.ReplaceAll(value, "\"", "\\\"")
@@ -106,6 +136,17 @@ func buildSplunkQuery(f *client.Filter) (query string, regexConditions []string)
 	return result, allRegex
 }
 
+// trimTrailingPipe removes trailing whitespace and pipe characters from a query string.
+// This prevents invalid queries like "index=main | | search ..." when appending filters.
+func trimTrailingPipe(query string) string {
+	query = strings.TrimRight(query, " \t\n\r")
+	for strings.HasSuffix(query, "|") {
+		query = strings.TrimSuffix(query, "|")
+		query = strings.TrimRight(query, " \t\n\r")
+	}
+	return query
+}
+
 func getSearchRequest(logSearch *client.LogSearch) (ty.MS, error) {
 	ms := ty.MS{
 		"earliest_time": logSearch.Range.Gte.Value,
@@ -122,32 +163,57 @@ func getSearchRequest(logSearch *client.LogSearch) (ty.MS, error) {
 	}
 
 	var query strings.Builder
+	hasNativeQuery := logSearch.NativeQuery.Set && logSearch.NativeQuery.Value != ""
 
-	// Add index if specified
-	if index, ok := logSearch.Options.GetStringOk("index"); ok {
-		query.WriteString(fmt.Sprintf("index=%s", index))
+	// 1. Start with Native Query if provided (trimmed of trailing pipes)
+	if hasNativeQuery {
+		query.WriteString(trimTrailingPipe(logSearch.NativeQuery.Value))
 	}
 
-	// Get the effective filter (combines legacy Fields with new Filter)
+	// 2. Add index if specified - but ONLY if no native query is provided.
+	// When using nativeQuery, the user has full control over the index in their query.
+	if !hasNativeQuery {
+		if index, ok := logSearch.Options.GetStringOk("index"); ok {
+			query.WriteString(fmt.Sprintf("index=%s", index))
+		}
+	}
+
+	// 3. Get the effective filter (combines legacy Fields with new Filter)
 	effectiveFilter := logSearch.GetEffectiveFilter()
 
-	if effectiveFilter != nil {
-		filterQuery, regexConditions := buildSplunkQuery(effectiveFilter)
+	// Collect all additional search conditions to append as a single | search command
+	var searchConditions []string
+	var regexConditions []string
 
+	if effectiveFilter != nil {
+		filterQuery, regexConds := buildSplunkQuery(effectiveFilter)
 		if filterQuery != "" {
-			if query.Len() > 0 {
+			searchConditions = append(searchConditions, filterQuery)
+		}
+		regexConditions = regexConds
+	}
+
+	// Append all search conditions as a single | search command (if we have a native query)
+	// or space-joined (if building from scratch)
+	if len(searchConditions) > 0 {
+		combinedConditions := strings.Join(searchConditions, " ")
+		if query.Len() > 0 {
+			if hasNativeQuery {
+				// Use single pipe search for all conditions
+				query.WriteString(" | search ")
+			} else {
 				query.WriteString(" ")
 			}
-			query.WriteString(filterQuery)
 		}
+		query.WriteString(combinedConditions)
+	}
 
-		// Add regex conditions as pipe commands
-		for _, regex := range regexConditions {
-			if query.Len() > 0 {
-				query.WriteString(" | ")
-			}
-			query.WriteString(regex)
+	// Add regex conditions as separate pipe commands (they cannot be combined)
+	for _, regex := range regexConditions {
+		if query.Len() > 0 {
+			query.WriteString(" | ")
 		}
+		query.WriteString(regex)
 	}
 
 	// Add fields selection if specified

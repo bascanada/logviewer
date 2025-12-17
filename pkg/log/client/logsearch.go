@@ -41,6 +41,10 @@ type PrinterOptions struct {
 }
 
 type LogSearch struct {
+	// NativeQuery allows passing a raw query string in the backend's native syntax
+	// (e.g., Splunk SPL, OpenSearch DSL). Filters are appended to refine results.
+	NativeQuery ty.Opt[string] `json:"nativeQuery,omitempty" yaml:"nativeQuery,omitempty"`
+
 	// Current filterring fields (legacy - use Filter for complex queries)
 	Fields ty.MS `json:"fields,omitempty" yaml:"fields,omitempty"`
 	// Extra rules for filtering fields (legacy - use Filter for complex queries)
@@ -168,6 +172,7 @@ func (lr *LogSearch) MergeInto(logSeach *LogSearch) error {
 	lr.Range.Lte.Merge(&logSeach.Range.Lte)
 	lr.Range.Last.Merge(&logSeach.Range.Last)
 	lr.PageToken.Merge(&logSeach.PageToken)
+	lr.NativeQuery.Merge(&logSeach.NativeQuery)
 
 	return nil
 }

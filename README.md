@@ -625,6 +625,12 @@ LogViewer templates use Go's `text/template` engine with additional helper funct
   {{.Timestamp.Format "Jan _2 15:04:05"}}     # Dec  5 10:30:45
   ```
 
+* **`{{FormatTimestamp .Timestamp "layout"}}`** - Format timestamp with N/A fallback
+  ```yaml
+  # Returns "N/A" for unknown/missing timestamps (e.g., stats results)
+  {{FormatTimestamp .Timestamp "15:04:05"}}  # 10:30:45 or "N/A"
+  ```
+
 * **`{{.Field "name"}}`** - Access fields case-insensitively
   ```yaml
   {{.Field "level"}}   # Access level field (lowercase or uppercase)
@@ -892,6 +898,35 @@ contexts:
         index: app-logs
 ```
 
+##### Native Query
+
+OpenSearch supports native Lucene query syntax via the `nativeQuery` field. This allows you to write queries using OpenSearch's native DSL while still benefiting from LogViewer's unified interface and additional filters.
+
+```yaml
+contexts:
+  opensearch-native:
+    client: local-opensearch
+    search:
+      nativeQuery: 'level:ERROR OR level:WARN'
+      options:
+        index: app-logs
+      range:
+        last: 1h
+
+  # Native query with additional filters
+  opensearch-native-filtered:
+    client: local-opensearch
+    search:
+      nativeQuery: 'message:*error* OR message:*fail*'
+      filter:
+        field: app
+        value: order-service
+      options:
+        index: app-logs
+```
+
+Native queries are combined with any additional filters you specify, allowing you to use Lucene syntax for complex text searches while applying structured field filters on top.
+
 #### Splunk
 
 ```bash
@@ -922,6 +957,70 @@ contexts:
 
 In Splunk, some fields are not indexed by default and you need to use the `| fields + <field>` syntax to include them in your search.
 You can use the `fields` option in your `search.options` to add a list of fields to be added to the search query.
+
+##### Native Query
+
+Splunk supports native SPL (Search Processing Language) queries via the `nativeQuery` field. This allows you to write full SPL queries while still using LogViewer's unified interface.
+
+```yaml
+contexts:
+  # Basic native SPL query
+  splunk-native:
+    client: local-splunk
+    search:
+      nativeQuery: 'index=main sourcetype=httpevent'
+      range:
+        last: 24h
+
+  # Native query with additional filters appended
+  splunk-native-filtered:
+    client: local-splunk
+    search:
+      nativeQuery: 'index=main sourcetype=httpevent'
+      filter:
+        logic: OR
+        filters:
+          - field: level
+            value: ERROR
+          - field: level
+            value: WARN
+      range:
+        last: 24h
+```
+
+When using `nativeQuery`, any additional filters are appended using SPL's `| search` syntax as a single command, allowing you to combine native SPL with LogViewer's filter system.
+
+**Important behavior:**
+- When `nativeQuery` is set, `options.index` is **ignored** since you have full control over the index in your native query
+- Trailing pipes in `nativeQuery` are automatically trimmed to prevent invalid queries
+- All filters are combined into a single `| search` command for efficiency
+
+##### Transforming Commands
+
+LogViewer supports Splunk transforming commands (stats, chart, timechart, etc.) which produce aggregated results instead of raw events. These commands are automatically detected and results are fetched from Splunk's `/results` endpoint instead of `/events`.
+
+```yaml
+contexts:
+  # Stats aggregation
+  splunk-stats:
+    client: local-splunk
+    search:
+      nativeQuery: 'index=main sourcetype=httpevent | stats count by level, app'
+      range:
+        last: 24h
+
+  # Time-based chart
+  splunk-timechart:
+    client: local-splunk
+    search:
+      nativeQuery: 'index=main sourcetype=httpevent | timechart span=1h count by level'
+      range:
+        last: 24h
+```
+
+Supported transforming commands include: `stats`, `chart`, `timechart`, `top`, `rare`, `transaction`, `eventstats`, `streamstats`, `bucket`, `bin`, `predict`, `trendline`, `geostats`, `mstats`, `tstats`, `table`, and `fields`.
+
+Results from transforming commands are displayed as formatted key-value pairs (e.g., `app=payment-service  count=42  level=ERROR`).
 
 #### AWS CloudWatch
 
@@ -973,6 +1072,7 @@ The MCP server exposes the following tools to the AI:
 * **`query_logs`**: The core tool. Fetches logs with powerful filtering:
   * Time windows (`last=15m`, `last=24h`)
   * Field filtering (`fields={"level": "ERROR", "service": "payment"}`)
+  * Native queries (`nativeQuery` for raw SPL or Lucene syntax)
   * Pagination and sizing
 * **`get_fields`**: Introspects logs to find searchable fields (e.g., "Is there a `requestId` field I can filter on?").
 * **`get_context_details`**: Inspects configuration and required variables for specific contexts.
