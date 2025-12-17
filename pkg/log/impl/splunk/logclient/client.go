@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	httpPkg "github.com/bascanada/logviewer/pkg/http"
@@ -171,78 +172,105 @@ func (s SplunkLogSearchClient) GetFieldValues(ctx context.Context, search *clien
 	// Get the base query
 	baseQuery := searchRequest["search"]
 
-	// Build the aggregation query to get distinct values
-	// If no fields specified, we can't use this optimization - fall back to regular search
+	// If no fields specified, fall back to regular search
 	if len(fields) == 0 {
-		// Fall back to getting all fields from a regular search
 		return s.getFieldValuesFromSearch(ctx, search)
 	}
 
-	result := make(map[string][]string)
+	// Determine the max number of distinct values to return per field
+	// Use search.Size if specified, otherwise default to 100
+	maxValues := 100
+	if search.Size.Set && search.Size.Value > 0 {
+		maxValues = search.Size.Value
+	}
 
-	// For each field, run a separate query to get distinct values
-	// Using `| stats count by <field>` to get distinct values with counts
+	// Build a single efficient query using stats values() for all fields at once
+	// Use limit=N to control how many distinct values are returned per field
+	// Example: <baseQuery> | stats limit=100 values(field1) as field1, values(field2) as field2
+	var valuesClauses []string
 	for _, field := range fields {
-		query := baseQuery + fmt.Sprintf(" | stats count by %s | fields - count | head 100", field)
+		valuesClauses = append(valuesClauses, fmt.Sprintf("values(%s) as %s", field, field))
+	}
+	query := baseQuery + fmt.Sprintf(" | stats limit=%d ", maxValues) + strings.Join(valuesClauses, ", ")
 
-		searchJobResponse, err := s.client.CreateSearchJob(query, searchRequest["earliest_time"], searchRequest["latest_time"], false, s.options.Headers, s.options.SearchBody)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create search job for field %s: %w", field, err)
-		}
+	searchJobResponse, err := s.client.CreateSearchJob(query, searchRequest["earliest_time"], searchRequest["latest_time"], false, s.options.Headers, s.options.SearchBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create search job: %w", err)
+	}
 
-		// Wait for job to complete
-		pollInterval := time.Duration(1) * time.Second
-		maxRetries := maxRetryDoneJob
-		if s.options.PollIntervalSeconds > 0 {
-			pollInterval = time.Duration(s.options.PollIntervalSeconds) * time.Second
-		}
-		if s.options.MaxRetries > 0 {
-			maxRetries = s.options.MaxRetries
-		}
+	// Wait for job to complete
+	pollInterval := time.Duration(1) * time.Second
+	maxRetries := maxRetryDoneJob
+	if s.options.PollIntervalSeconds > 0 {
+		pollInterval = time.Duration(s.options.PollIntervalSeconds) * time.Second
+	}
+	if s.options.MaxRetries > 0 {
+		maxRetries = s.options.MaxRetries
+	}
 
-		isDone := false
-		for tryCount := 0; tryCount < maxRetries; tryCount++ {
-			select {
-			case <-ctx.Done():
-				s.client.CancelSearchJob(searchJobResponse.Sid)
-				return nil, ctx.Err()
-			case <-time.After(pollInterval):
-			}
-
-			status, err := s.client.GetSearchStatus(searchJobResponse.Sid)
-			if err != nil {
-				s.client.CancelSearchJob(searchJobResponse.Sid)
-				return nil, err
-			}
-
-			if len(status.Entry) > 0 {
-				isDone = status.Entry[0].Content.IsDone
-			}
-			if isDone {
-				break
-			}
-		}
-
-		if !isDone {
+	isDone := false
+	for tryCount := 0; tryCount < maxRetries; tryCount++ {
+		select {
+		case <-ctx.Done():
 			s.client.CancelSearchJob(searchJobResponse.Sid)
-			return nil, fmt.Errorf("timeout waiting for splunk job for field %s", field)
+			return nil, ctx.Err()
+		case <-time.After(pollInterval):
 		}
 
-		// Get results from /results endpoint since we're using stats
-		results, err := s.client.GetSearchResult(searchJobResponse.Sid, 0, 100, true)
-		s.client.CancelSearchJob(searchJobResponse.Sid)
+		status, err := s.client.GetSearchStatus(searchJobResponse.Sid)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get results for field %s: %w", field, err)
+			s.client.CancelSearchJob(searchJobResponse.Sid)
+			return nil, err
 		}
 
-		// Extract distinct values from results
-		var values []string
-		for _, r := range results.Results {
-			if v, ok := r[field]; ok {
-				values = append(values, fmt.Sprintf("%v", v))
+		if len(status.Entry) > 0 {
+			isDone = status.Entry[0].Content.IsDone
+		}
+		if isDone {
+			break
+		}
+	}
+
+	if !isDone {
+		s.client.CancelSearchJob(searchJobResponse.Sid)
+		return nil, fmt.Errorf("timeout waiting for splunk job")
+	}
+
+	// Get results from /results endpoint since we're using stats
+	results, err := s.client.GetSearchResult(searchJobResponse.Sid, 0, 1, true)
+	s.client.CancelSearchJob(searchJobResponse.Sid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get results: %w", err)
+	}
+
+	// Extract distinct values from the single result row
+	// The stats values() command returns a multivalue field (array) for each field
+	result := make(map[string][]string)
+	for _, field := range fields {
+		result[field] = []string{} // Initialize with empty slice
+	}
+
+	if len(results.Results) > 0 {
+		row := results.Results[0]
+		for _, field := range fields {
+			if v, ok := row[field]; ok {
+				// Handle multivalue field - can be a single value or an array
+				switch val := v.(type) {
+				case []interface{}:
+					for _, item := range val {
+						result[field] = append(result[field], fmt.Sprintf("%v", item))
+					}
+				case string:
+					if val != "" {
+						result[field] = []string{val}
+					}
+				default:
+					if val != nil {
+						result[field] = []string{fmt.Sprintf("%v", val)}
+					}
+				}
 			}
 		}
-		result[field] = values
 	}
 
 	return result, nil

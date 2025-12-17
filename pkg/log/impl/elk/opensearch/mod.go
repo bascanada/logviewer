@@ -115,6 +115,13 @@ func (kc openSearchClient) GetFieldValues(ctx context.Context, search *client.Lo
 		},
 	}
 
+	// Determine the max number of distinct values to return per field
+	// Use search.Size if specified, otherwise default to 100
+	maxValues := 100
+	if search.Size.Set && search.Size.Value > 0 {
+		maxValues = search.Size.Value
+	}
+
 	// Build aggregations for each field
 	aggs := ty.MI{}
 	for _, field := range fields {
@@ -127,7 +134,7 @@ func (kc openSearchClient) GetFieldValues(ctx context.Context, search *client.Lo
 		aggs[field+"_values"] = ty.MI{
 			"terms": ty.MI{
 				"field": fieldName,
-				"size":  100,
+				"size":  maxValues,
 			},
 		}
 	}

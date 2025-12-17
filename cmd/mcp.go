@@ -485,27 +485,8 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 		// Pre-flight check for required variables
 		mergedContext, err := searchFactory.GetSearchContext(ctx, contextId, []string{}, searchRequest, runtimeVars)
 		if err != nil {
-			// Handle context not found error separately
 			if errors.Is(err, config.ErrContextNotFound) {
-				all := make([]string, 0, len(cfg.Contexts))
-				for id := range cfg.Contexts {
-					all = append(all, id)
-				}
-				sort.Strings(all)
-				suggestions := suggestSimilar(contextId, all, 3)
-				payload := map[string]any{
-					"code":              "CONTEXT_NOT_FOUND",
-					"error":             err.Error(),
-					"invalidContext":    contextId,
-					"availableContexts": all,
-					"suggestions":       suggestions,
-					"hint":              "Use a suggested contextId or call list_contexts for enumeration.",
-				}
-				b, mErr := json.Marshal(payload)
-				if mErr != nil {
-					return mcp.NewToolResultError(fmt.Sprintf("failed to marshal error payload: %v", mErr)), nil
-				}
-				return mcp.NewToolResultText(string(b)), nil
+				return handleContextNotFound(contextId, cfg, err), nil
 			}
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get search context: %v", err)), nil
 		}
@@ -652,25 +633,7 @@ Example response:
 		_, err = searchFactory.GetSearchContext(ctx, contextId, []string{}, searchRequest, nil)
 		if err != nil {
 			if errors.Is(err, config.ErrContextNotFound) {
-				all := make([]string, 0, len(cfg.Contexts))
-				for id := range cfg.Contexts {
-					all = append(all, id)
-				}
-				sort.Strings(all)
-				suggestions := suggestSimilar(contextId, all, 3)
-				payload := map[string]any{
-					"code":              "CONTEXT_NOT_FOUND",
-					"error":             err.Error(),
-					"invalidContext":    contextId,
-					"availableContexts": all,
-					"suggestions":       suggestions,
-					"hint":              "Use a suggested contextId or call list_contexts for enumeration.",
-				}
-				b, mErr := json.Marshal(payload)
-				if mErr != nil {
-					return mcp.NewToolResultError(fmt.Sprintf("failed to marshal error payload: %v", mErr)), nil
-				}
-				return mcp.NewToolResultText(string(b)), nil
+				return handleContextNotFound(contextId, cfg, err), nil
 			}
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get search context: %v", err)), nil
 		}
@@ -702,25 +665,7 @@ Example response:
 		searchContext, err := searchFactory.GetSearchContext(ctx, contextId, []string{}, client.LogSearch{}, nil)
 		if err != nil {
 			if errors.Is(err, config.ErrContextNotFound) {
-				all := make([]string, 0, len(cfg.Contexts))
-				for id := range cfg.Contexts {
-					all = append(all, id)
-				}
-				sort.Strings(all)
-				suggestions := suggestSimilar(contextId, all, 3)
-				payload := map[string]any{
-					"code":              "CONTEXT_NOT_FOUND",
-					"error":             err.Error(),
-					"invalidContext":    contextId,
-					"availableContexts": all,
-					"suggestions":       suggestions,
-					"hint":              "Use a suggested contextId or call list_contexts for enumeration.",
-				}
-				b, mErr := json.Marshal(payload)
-				if mErr != nil {
-					return mcp.NewToolResultError(fmt.Sprintf("failed to marshal error payload: %v", mErr)), nil
-				}
-				return mcp.NewToolResultText(string(b)), nil
+				return handleContextNotFound(contextId, cfg, err), nil
 			}
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get context details: %v", err)), nil
 		}
@@ -792,6 +737,30 @@ Return a short plan then perform tool calls.
 func init() {
 	mcpCmd.Flags().IntVar(&mcpPort, "port", 8081, "Port for the MCP server")
 	rootCmd.AddCommand(mcpCmd)
+}
+
+// handleContextNotFound creates a standardized MCP response for context not found errors.
+// It includes suggestions for similar context names to help users correct typos.
+func handleContextNotFound(contextId string, cfg *config.ContextConfig, err error) *mcp.CallToolResult {
+	all := make([]string, 0, len(cfg.Contexts))
+	for id := range cfg.Contexts {
+		all = append(all, id)
+	}
+	sort.Strings(all)
+	suggestions := suggestSimilar(contextId, all, 3)
+	payload := map[string]any{
+		"code":              "CONTEXT_NOT_FOUND",
+		"error":             err.Error(),
+		"invalidContext":    contextId,
+		"availableContexts": all,
+		"suggestions":       suggestions,
+		"hint":              "Use a suggested contextId or call list_contexts for enumeration.",
+	}
+	b, mErr := json.Marshal(payload)
+	if mErr != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to marshal error payload: %v", mErr))
+	}
+	return mcp.NewToolResultText(string(b))
 }
 
 // suggestSimilar returns up to max suggestions ranked by simple edit distance (Levenshtein) and substring match boost.
