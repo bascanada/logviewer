@@ -136,6 +136,17 @@ func buildSplunkQuery(f *client.Filter) (query string, regexConditions []string)
 	return result, allRegex
 }
 
+// trimTrailingPipe removes trailing whitespace and pipe characters from a query string.
+// This prevents invalid queries like "index=main | | search ..." when appending filters.
+func trimTrailingPipe(query string) string {
+	query = strings.TrimRight(query, " \t\n\r")
+	for strings.HasSuffix(query, "|") {
+		query = strings.TrimSuffix(query, "|")
+		query = strings.TrimRight(query, " \t\n\r")
+	}
+	return query
+}
+
 func getSearchRequest(logSearch *client.LogSearch) (ty.MS, error) {
 	ms := ty.MS{
 		"earliest_time": logSearch.Range.Gte.Value,
@@ -154,16 +165,15 @@ func getSearchRequest(logSearch *client.LogSearch) (ty.MS, error) {
 	var query strings.Builder
 	hasNativeQuery := logSearch.NativeQuery.Set && logSearch.NativeQuery.Value != ""
 
-	// 1. Start with Native Query if provided
+	// 1. Start with Native Query if provided (trimmed of trailing pipes)
 	if hasNativeQuery {
-		query.WriteString(logSearch.NativeQuery.Value)
+		query.WriteString(trimTrailingPipe(logSearch.NativeQuery.Value))
 	}
 
-	// 2. Add index if specified (append as pipe filter if native query exists)
-	if index, ok := logSearch.Options.GetStringOk("index"); ok {
-		if hasNativeQuery {
-			query.WriteString(fmt.Sprintf(" | search index=%s", index))
-		} else {
+	// 2. Add index if specified - but ONLY if no native query is provided.
+	// When using nativeQuery, the user has full control over the index in their query.
+	if !hasNativeQuery {
+		if index, ok := logSearch.Options.GetStringOk("index"); ok {
 			query.WriteString(fmt.Sprintf("index=%s", index))
 		}
 	}
@@ -171,28 +181,39 @@ func getSearchRequest(logSearch *client.LogSearch) (ty.MS, error) {
 	// 3. Get the effective filter (combines legacy Fields with new Filter)
 	effectiveFilter := logSearch.GetEffectiveFilter()
 
+	// Collect all additional search conditions to append as a single | search command
+	var searchConditions []string
+	var regexConditions []string
+
 	if effectiveFilter != nil {
-		filterQuery, regexConditions := buildSplunkQuery(effectiveFilter)
-
+		filterQuery, regexConds := buildSplunkQuery(effectiveFilter)
 		if filterQuery != "" {
-			if query.Len() > 0 {
-				// Use pipe search if we have a native query, otherwise space join
-				if hasNativeQuery {
-					query.WriteString(" | search ")
-				} else {
-					query.WriteString(" ")
-				}
-			}
-			query.WriteString(filterQuery)
+			searchConditions = append(searchConditions, filterQuery)
 		}
+		regexConditions = regexConds
+	}
 
-		// Add regex conditions as pipe commands
-		for _, regex := range regexConditions {
-			if query.Len() > 0 {
-				query.WriteString(" | ")
+	// Append all search conditions as a single | search command (if we have a native query)
+	// or space-joined (if building from scratch)
+	if len(searchConditions) > 0 {
+		combinedConditions := strings.Join(searchConditions, " ")
+		if query.Len() > 0 {
+			if hasNativeQuery {
+				// Use single pipe search for all conditions
+				query.WriteString(" | search ")
+			} else {
+				query.WriteString(" ")
 			}
-			query.WriteString(regex)
 		}
+		query.WriteString(combinedConditions)
+	}
+
+	// Add regex conditions as separate pipe commands (they cannot be combined)
+	for _, regex := range regexConditions {
+		if query.Len() > 0 {
+			query.WriteString(" | ")
+		}
+		query.WriteString(regex)
 	}
 
 	// Add fields selection if specified

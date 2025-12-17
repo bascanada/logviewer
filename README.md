@@ -625,6 +625,12 @@ LogViewer templates use Go's `text/template` engine with additional helper funct
   {{.Timestamp.Format "Jan _2 15:04:05"}}     # Dec  5 10:30:45
   ```
 
+* **`{{FormatTimestamp .Timestamp "layout"}}`** - Format timestamp with N/A fallback
+  ```yaml
+  # Returns "N/A" for unknown/missing timestamps (e.g., stats results)
+  {{FormatTimestamp .Timestamp "15:04:05"}}  # 10:30:45 or "N/A"
+  ```
+
 * **`{{.Field "name"}}`** - Access fields case-insensitively
   ```yaml
   {{.Field "level"}}   # Access level field (lowercase or uppercase)
@@ -982,7 +988,12 @@ contexts:
         last: 24h
 ```
 
-When using `nativeQuery`, any additional filters are appended using SPL's `| search` syntax, allowing you to combine native SPL with LogViewer's filter system.
+When using `nativeQuery`, any additional filters are appended using SPL's `| search` syntax as a single command, allowing you to combine native SPL with LogViewer's filter system.
+
+**Important behavior:**
+- When `nativeQuery` is set, `options.index` is **ignored** since you have full control over the index in your native query
+- Trailing pipes in `nativeQuery` are automatically trimmed to prevent invalid queries
+- All filters are combined into a single `| search` command for efficiency
 
 ##### Transforming Commands
 

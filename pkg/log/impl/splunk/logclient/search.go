@@ -135,18 +135,15 @@ func (s SplunkLogSearchResult) parseResults(searchResponse *restapi.SearchResult
 		// but may have _time (e.g., timechart) or _span
 		if s.useResultsEndpoint {
 			// Try to parse _time if present (timechart, chart results have it)
+			// If missing or unparseable, timestamp remains zero-value to indicate unknown
 			if timeStr := result.GetString("_time"); timeStr != "" {
 				var err error
 				timestamp, err = time.Parse(time.RFC3339, timeStr)
 				if err != nil {
 					// Try alternative format used by Splunk
-					timestamp, err = time.Parse("2006-01-02T15:04:05.000-07:00", timeStr)
-					if err != nil {
-						timestamp = time.Now()
-					}
+					timestamp, _ = time.Parse("2006-01-02T15:04:05.000-07:00", timeStr)
+					// If still fails, timestamp remains zero-value (time.Time{})
 				}
-			} else {
-				timestamp = time.Now()
 			}
 			// Build message from all fields for display
 			message = s.formatAggregatedResult(result)

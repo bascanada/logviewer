@@ -352,16 +352,19 @@ func TestSearchRequest(t *testing.T) {
 		assert.Equal(t, `index=main sourcetype=syslog | stats count by host`, requestBodyFields["search"])
 	})
 
-	t.Run("native query - with index option appended", func(t *testing.T) {
+	t.Run("native query - options.index is ignored when nativeQuery is set", func(t *testing.T) {
+		// When nativeQuery is provided, the user has full control over the index.
+		// options.index should NOT be appended to avoid redundant/conflicting indices.
 		logSearch := &client.LogSearch{
-			NativeQuery: ty.OptWrap(`sourcetype=access_combined | top limit=10 uri`),
-			Options:     ty.MI{"index": "web"},
+			NativeQuery: ty.OptWrap(`index=main sourcetype=access_combined | top limit=10 uri`),
+			Options:     ty.MI{"index": "web"}, // This should be ignored
 		}
 		logSearch.Range.Last.S("1h")
 
 		requestBodyFields, err := getSearchRequest(logSearch)
 		assert.NoError(t, err)
-		assert.Equal(t, `sourcetype=access_combined | top limit=10 uri | search index=web`, requestBodyFields["search"])
+		assert.Equal(t, `index=main sourcetype=access_combined | top limit=10 uri`, requestBodyFields["search"])
+		assert.NotContains(t, requestBodyFields["search"], `index=web`)
 	})
 
 	t.Run("native query - with filters appended", func(t *testing.T) {
@@ -376,10 +379,11 @@ func TestSearchRequest(t *testing.T) {
 		assert.Equal(t, `index=main sourcetype=syslog | search host="server01"`, requestBodyFields["search"])
 	})
 
-	t.Run("native query - with index and filters", func(t *testing.T) {
+	t.Run("native query - with filters appended as single search command", func(t *testing.T) {
+		// All filters should be combined into a single | search command
 		logSearch := &client.LogSearch{
-			NativeQuery: ty.OptWrap(`sourcetype=access_combined`),
-			Options:     ty.MI{"index": "web"},
+			NativeQuery: ty.OptWrap(`index=main sourcetype=access_combined`),
+			Options:     ty.MI{"index": "web"}, // Should be ignored
 			Filter: &client.Filter{
 				Logic: client.LogicOr,
 				Filters: []client.Filter{
@@ -392,9 +396,10 @@ func TestSearchRequest(t *testing.T) {
 
 		requestBodyFields, err := getSearchRequest(logSearch)
 		assert.NoError(t, err)
-		assert.Contains(t, requestBodyFields["search"], `sourcetype=access_combined`)
-		assert.Contains(t, requestBodyFields["search"], `| search index=web`)
-		assert.Contains(t, requestBodyFields["search"], `| search (status="500" OR status="503")`)
+		// Should have native query followed by single | search with filters
+		assert.Equal(t, `index=main sourcetype=access_combined | search (status="500" OR status="503")`, requestBodyFields["search"])
+		// Should NOT have multiple | search commands or index=web
+		assert.NotContains(t, requestBodyFields["search"], `index=web`)
 	})
 
 	t.Run("native query - empty value is ignored", func(t *testing.T) {
@@ -409,6 +414,83 @@ func TestSearchRequest(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, `index=main level="ERROR"`, requestBodyFields["search"])
 	})
+
+	// Tests for trailing pipe handling
+	t.Run("native query - trailing pipe is trimmed", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			NativeQuery: ty.OptWrap(`index=main sourcetype=syslog |`),
+			Fields:      ty.MS{"level": "ERROR"},
+		}
+		logSearch.Range.Last.S("1h")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		// Should NOT produce "... | | search ..." - trailing pipe should be trimmed
+		assert.Equal(t, `index=main sourcetype=syslog | search level="ERROR"`, requestBodyFields["search"])
+		assert.NotContains(t, requestBodyFields["search"], "| |")
+	})
+
+	t.Run("native query - trailing pipe with whitespace is trimmed", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			NativeQuery: ty.OptWrap(`index=main sourcetype=syslog |   `),
+			Fields:      ty.MS{"host": "server01"},
+		}
+		logSearch.Range.Last.S("1h")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Equal(t, `index=main sourcetype=syslog | search host="server01"`, requestBodyFields["search"])
+	})
+
+	t.Run("native query - multiple trailing pipes are trimmed", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			NativeQuery: ty.OptWrap(`index=main | where status>400 | |  `),
+			Fields:      ty.MS{"app": "web"},
+		}
+		logSearch.Range.Last.S("1h")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Equal(t, `index=main | where status>400 | search app="web"`, requestBodyFields["search"])
+	})
+
+	t.Run("native query - no filters does not add spurious search command", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			NativeQuery: ty.OptWrap(`index=main | stats count by host |`),
+		}
+		logSearch.Range.Last.S("1h")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		// Should just trim the trailing pipe, not add anything
+		assert.Equal(t, `index=main | stats count by host`, requestBodyFields["search"])
+	})
+}
+
+func TestTrimTrailingPipe(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"no trailing pipe", "index=main | stats count", "index=main | stats count"},
+		{"single trailing pipe", "index=main |", "index=main"},
+		{"trailing pipe with space", "index=main | ", "index=main"},
+		{"trailing pipe with multiple spaces", "index=main |   ", "index=main"},
+		{"multiple trailing pipes", "index=main | |", "index=main"},
+		{"multiple trailing pipes with spaces", "index=main |  |  ", "index=main"},
+		{"trailing whitespace only", "index=main   ", "index=main"},
+		{"empty string", "", ""},
+		{"pipe only", "|", ""},
+		{"complex query with trailing pipe", "index=main | where x>1 | eval y=2 |", "index=main | where x>1 | eval y=2"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := trimTrailingPipe(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
 
 func TestContainsTransformingCommand(t *testing.T) {

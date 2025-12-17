@@ -21,6 +21,16 @@ func FormatDate(layout string, t time.Time) string {
 	return t.Format(layout)
 }
 
+// FormatTimestamp formats a timestamp, returning "N/A" for zero-value timestamps.
+// This is useful for aggregated results (stats, timechart) where timestamps may be unknown.
+// Usage in template: {{FormatTimestamp .Timestamp "15:04:05"}}
+func FormatTimestamp(t time.Time, layout string) string {
+	if t.IsZero() {
+		return "N/A"
+	}
+	return t.Format(layout)
+}
+
 func MultlineFields(values ty.MI) string {
 	str := ""
 
@@ -88,11 +98,12 @@ func Trim(s string) string {
 
 func GetTemplateFunctionsMap() template.FuncMap {
 	return template.FuncMap{
-		"Format":     FormatDate,
-		"MultiLine":  MultlineFields,
-		"ExpandJson": ExpandJson,
-		"Field":      GetField,
-		"KV":         KV,
-		"Trim":       Trim,
+		"Format":          FormatDate,
+		"FormatTimestamp": FormatTimestamp,
+		"MultiLine":       MultlineFields,
+		"ExpandJson":      ExpandJson,
+		"Field":           GetField,
+		"KV":              KV,
+		"Trim":            Trim,
 	}
 }
