@@ -131,12 +131,13 @@ contexts:
   # CloudWatch logs (if using LocalStack for additional logging)
   cloudwatch-orders:
     client: sim-cloudwatch
-    description: "CloudWatch logs for Orders"
+    description: "CloudWatch logs via LocalStack"
     searchInherit: []
     search:
       fields: {}
       options:
-        logGroupName: /aws/lambda/orders
+        logGroupName: my-app-logs
+        useInsights: false
 
   # Native Query examples for testing
   splunk-native-query:

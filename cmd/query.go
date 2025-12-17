@@ -582,6 +582,7 @@ Examples:
 		ctx := context.Background()
 
 		// Get field values for each context
+		hasError := false
 		for _, contextId := range contextIds {
 			if len(contextIds) > 1 {
 				fmt.Printf("=== Context: %s ===\n", contextId)
@@ -590,6 +591,7 @@ Examples:
 			fieldValues, err := searchFactory.GetFieldValues(ctx, contextId, inherits, searchRequest, fieldNames, runtimeVars)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error getting field values for %s: %v\n", contextId, err)
+				hasError = true
 				continue
 			}
 
@@ -598,6 +600,7 @@ Examples:
 				enc := json.NewEncoder(os.Stdout)
 				if err := enc.Encode(fieldValues); err != nil {
 					fmt.Fprintf(os.Stderr, "error encoding JSON: %v\n", err)
+					hasError = true
 				}
 			} else {
 				// Output as formatted text (same format as query field)
@@ -614,6 +617,10 @@ Examples:
 					}
 				}
 			}
+		}
+
+		if hasError {
+			os.Exit(1)
 		}
 	},
 }

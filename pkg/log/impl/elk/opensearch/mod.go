@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/bascanada/logviewer/pkg/http"
 	"github.com/bascanada/logviewer/pkg/log/client"
@@ -118,10 +119,14 @@ func (kc openSearchClient) GetFieldValues(ctx context.Context, search *client.Lo
 	aggs := ty.MI{}
 	for _, field := range fields {
 		// Use .keyword suffix for text fields to enable aggregation
-		// This is a common pattern in OpenSearch/Elasticsearch
+		// This is required in OpenSearch/Elasticsearch for analyzed text fields
+		fieldName := field
+		if !strings.HasSuffix(field, ".keyword") {
+			fieldName = field + ".keyword"
+		}
 		aggs[field+"_values"] = ty.MI{
 			"terms": ty.MI{
-				"field": field,
+				"field": fieldName,
 				"size":  100,
 			},
 		}
