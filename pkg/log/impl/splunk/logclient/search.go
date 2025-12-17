@@ -2,8 +2,11 @@ package logclient
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
@@ -22,6 +25,9 @@ type SplunkLogSearchResult struct {
 	entriesChan chan ty.UniSet[string]
 	// parsed offset from the incoming page token (set by client.Get)
 	CurrentOffset int
+	// useResultsEndpoint indicates if the query has transforming commands
+	// (stats, chart, etc.) requiring the /results endpoint instead of /events
+	useResultsEndpoint bool
 }
 
 func (s SplunkLogSearchResult) GetSearch() *client.LogSearch {
@@ -58,7 +64,7 @@ func (s SplunkLogSearchResult) GetEntries(ctx context.Context) ([]client.LogEntr
 			case <-time.After(pollInterval):
 				log.Printf("polling for new events for job %s", s.sid)
 				// for a follow, we get all the events every time
-				results, err := s.logClient.client.GetSearchResult(s.sid, offset, 0)
+				results, err := s.logClient.client.GetSearchResult(s.sid, offset, 0, s.useResultsEndpoint)
 				if err != nil {
 					log.Printf("error while polling for events: %s", err)
 					continue
@@ -122,12 +128,39 @@ func (s SplunkLogSearchResult) parseResults(searchResponse *restapi.SearchResult
 	entries := make([]client.LogEntry, len(searchResponse.Results))
 
 	for i, result := range searchResponse.Results {
-		timestamp, err := time.Parse(time.RFC3339, result.GetString("_time"))
-		if err != nil {
-			log.Println("warning failed to parsed timestamp " + result.GetString("_time"))
+		var timestamp time.Time
+		var message string
+
+		// For transforming commands (stats, chart, etc.), results don't have _raw
+		// but may have _time (e.g., timechart) or _span
+		if s.useResultsEndpoint {
+			// Try to parse _time if present (timechart, chart results have it)
+			if timeStr := result.GetString("_time"); timeStr != "" {
+				var err error
+				timestamp, err = time.Parse(time.RFC3339, timeStr)
+				if err != nil {
+					// Try alternative format used by Splunk
+					timestamp, err = time.Parse("2006-01-02T15:04:05.000-07:00", timeStr)
+					if err != nil {
+						timestamp = time.Now()
+					}
+				}
+			} else {
+				timestamp = time.Now()
+			}
+			// Build message from all fields for display
+			message = s.formatAggregatedResult(result)
+		} else {
+			// Standard event parsing
+			var err error
+			timestamp, err = time.Parse(time.RFC3339, result.GetString("_time"))
+			if err != nil {
+				log.Println("warning failed to parsed timestamp " + result.GetString("_time"))
+			}
+			message = result.GetString("_raw")
 		}
 
-		entries[i].Message = result.GetString("_raw")
+		entries[i].Message = message
 		entries[i].Timestamp = timestamp
 		entries[i].Level = ""
 		entries[i].Fields = ty.MI{}
@@ -141,6 +174,24 @@ func (s SplunkLogSearchResult) parseResults(searchResponse *restapi.SearchResult
 
 	return entries
 
+}
+
+// formatAggregatedResult formats a stats/aggregated result as a readable string
+func (s SplunkLogSearchResult) formatAggregatedResult(result ty.MI) string {
+	// Collect keys and sort for consistent output
+	var keys []string
+	for k := range result {
+		if k[0] != '_' {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+
+	var parts []string
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%v", k, result[k]))
+	}
+	return strings.Join(parts, "  ")
 }
 
 func (s SplunkLogSearchResult) Err() <-chan error {

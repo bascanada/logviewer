@@ -148,10 +148,17 @@ func (src SplunkRestClient) GetSearchResult(
 	sid string,
 	offset int,
 	count int,
+	useResultsEndpoint bool,
 ) (SearchResultsResponse, error) {
 	var response SearchResultsResponse
 
-	searchPath := fmt.Sprintf("/search/jobs/%s/events", sid)
+	// Use /results for transforming commands (stats, chart, etc.)
+	// Use /events for regular log searches
+	endpoint := "events"
+	if useResultsEndpoint {
+		endpoint = "results"
+	}
+	searchPath := fmt.Sprintf("/search/jobs/%s/%s", sid, endpoint)
 
 	queryParams := ty.MS{
 		"output_mode": "json",

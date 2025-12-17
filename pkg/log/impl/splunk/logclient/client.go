@@ -57,17 +57,23 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 		return nil, err
 	}
 
-	searchJobResponse, err := s.client.CreateSearchJob(searchRequest["search"], searchRequest["earliest_time"], searchRequest["latest_time"], search.Follow, s.options.Headers, s.options.SearchBody)
+	// Detect if query contains transforming commands (stats, chart, etc.)
+	// These require fetching from /results endpoint instead of /events
+	queryString := searchRequest["search"]
+	useResultsEndpoint := ContainsTransformingCommand(queryString)
+
+	searchJobResponse, err := s.client.CreateSearchJob(queryString, searchRequest["earliest_time"], searchRequest["latest_time"], search.Follow, s.options.Headers, s.options.SearchBody)
 	if err != nil {
 		return nil, err
 	}
 
 	if search.Follow {
 		return SplunkLogSearchResult{
-			logClient: &s,
-			search:    search,
-			sid:       searchJobResponse.Sid,
-			isFollow:  true,
+			logClient:          &s,
+			search:             search,
+			sid:                searchJobResponse.Sid,
+			isFollow:           true,
+			useResultsEndpoint: useResultsEndpoint,
 		}, nil
 	}
 
@@ -132,18 +138,19 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 		}
 	}
 
-	firstResult, err := s.client.GetSearchResult(searchJobResponse.Sid, offset, search.Size.Value)
+	firstResult, err := s.client.GetSearchResult(searchJobResponse.Sid, offset, search.Size.Value, useResultsEndpoint)
 
 	if err != nil {
 		return nil, err
 	}
 
 	return SplunkLogSearchResult{
-		logClient:     &s,
-		search:        search,
-		sid:           searchJobResponse.Sid,
-		results:       []restapi.SearchResultsResponse{firstResult},
-		CurrentOffset: offset,
+		logClient:          &s,
+		search:             search,
+		sid:                searchJobResponse.Sid,
+		results:            []restapi.SearchResultsResponse{firstResult},
+		CurrentOffset:      offset,
+		useResultsEndpoint: useResultsEndpoint,
 	}, nil
 }
 

@@ -144,6 +144,16 @@ func GetSearchRequest(logSearch *client.LogSearch) (SearchRequest, error) {
 	// Build conditions from the effective filter
 	var filterConditions []Map
 
+	// 1. Add Native Query if provided (using query_string for raw Lucene syntax)
+	if logSearch.NativeQuery.Set && logSearch.NativeQuery.Value != "" {
+		filterConditions = append(filterConditions, Map{
+			"query_string": Map{
+				"query": logSearch.NativeQuery.Value,
+			},
+		})
+	}
+
+	// 2. Add effective filter conditions
 	effectiveFilter := logSearch.GetEffectiveFilter()
 	if effectiveFilter != nil {
 		filterQuery := buildOpenSearchQuery(effectiveFilter)

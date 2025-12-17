@@ -406,6 +406,12 @@ Parameters:
 	pageToken (string, optional): Token for pagination to fetch older logs (returned in previous response meta).
 	size (number, optional): Max number of log entries.
 	fields (object, optional): Exact-match key/value filters.
+	nativeQuery (string, optional): Raw query in the backend's native syntax (e.g. Splunk SPL, OpenSearch Lucene).
+		Use this for advanced queries that leverage backend-specific features.
+		The nativeQuery acts as the base search; fields filters are appended to refine results.
+		Examples:
+		- Splunk: "index=main sourcetype=httpevent | eval severity=if(level==\"ERROR\", \"HIGH\", \"LOW\")"
+		- OpenSearch: "level:ERROR AND message:*timeout*"
 
 Behavior improvements:
 	- If contextId is invalid, the response includes suggestions (no need to pre-call list_contexts).
@@ -421,6 +427,7 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 		mcp.WithString("pageToken", mcp.Description("Token for pagination to fetch older logs (returned in previous response meta).")),
 		mcp.WithObject("fields", mcp.Description("Exact match key/value filters (JSON object).")),
 		mcp.WithNumber("size", mcp.Description("Maximum number of log entries to return.")),
+		mcp.WithString("nativeQuery", mcp.Description("Raw query in backend's native syntax (Splunk SPL, OpenSearch Lucene). Acts as base search with filters appended.")),
 		mcp.WithObject("variables", mcp.Description("Runtime variables for the context (JSON object).")),
 	)
 	queryLogsHandler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -446,6 +453,9 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 		}
 		if size, err := request.RequireFloat("size"); err == nil && int(size) > 0 {
 			searchRequest.Size.S(int(size))
+		}
+		if nativeQuery, err := request.RequireString("nativeQuery"); err == nil && nativeQuery != "" {
+			searchRequest.NativeQuery.S(nativeQuery)
 		}
 
 		runtimeVars := make(map[string]string)

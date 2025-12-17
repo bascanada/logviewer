@@ -339,4 +339,124 @@ func TestSearchRequest(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Contains(t, requestBodyFields["search"], `trace_id=*`)
 	})
+
+	// Tests for NativeQuery support
+	t.Run("native query - standalone", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			NativeQuery: ty.OptWrap(`index=main sourcetype=syslog | stats count by host`),
+		}
+		logSearch.Range.Last.S("1h")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Equal(t, `index=main sourcetype=syslog | stats count by host`, requestBodyFields["search"])
+	})
+
+	t.Run("native query - with index option appended", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			NativeQuery: ty.OptWrap(`sourcetype=access_combined | top limit=10 uri`),
+			Options:     ty.MI{"index": "web"},
+		}
+		logSearch.Range.Last.S("1h")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Equal(t, `sourcetype=access_combined | top limit=10 uri | search index=web`, requestBodyFields["search"])
+	})
+
+	t.Run("native query - with filters appended", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			NativeQuery: ty.OptWrap(`index=main sourcetype=syslog`),
+			Fields:      ty.MS{"host": "server01"},
+		}
+		logSearch.Range.Last.S("1h")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Equal(t, `index=main sourcetype=syslog | search host="server01"`, requestBodyFields["search"])
+	})
+
+	t.Run("native query - with index and filters", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			NativeQuery: ty.OptWrap(`sourcetype=access_combined`),
+			Options:     ty.MI{"index": "web"},
+			Filter: &client.Filter{
+				Logic: client.LogicOr,
+				Filters: []client.Filter{
+					{Field: "status", Value: "500"},
+					{Field: "status", Value: "503"},
+				},
+			},
+		}
+		logSearch.Range.Last.S("1h")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Contains(t, requestBodyFields["search"], `sourcetype=access_combined`)
+		assert.Contains(t, requestBodyFields["search"], `| search index=web`)
+		assert.Contains(t, requestBodyFields["search"], `| search (status="500" OR status="503")`)
+	})
+
+	t.Run("native query - empty value is ignored", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			NativeQuery: ty.OptWrap(""),
+			Options:     ty.MI{"index": "main"},
+			Fields:      ty.MS{"level": "ERROR"},
+		}
+		logSearch.Range.Last.S("1h")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Equal(t, `index=main level="ERROR"`, requestBodyFields["search"])
+	})
+}
+
+func TestContainsTransformingCommand(t *testing.T) {
+	tests := []struct {
+		name     string
+		query    string
+		expected bool
+	}{
+		// Transforming commands - should return true
+		{"stats command", "index=main | stats count by host", true},
+		{"chart command", "index=main | chart count over time", true},
+		{"timechart command", "index=main | timechart span=1h count", true},
+		{"top command", "index=main | top limit=10 uri", true},
+		{"rare command", "index=main | rare src_ip", true},
+		{"table command", "index=main | table host, source, _time", true},
+		{"fields command", "index=main | fields host, source", true},
+		{"transaction command", "index=main | transaction session_id", true},
+		{"tstats command", "| tstats count where index=main by host", true},
+		{"eventstats command", "index=main | eventstats avg(duration) by host", true},
+		{"streamstats command", "index=main | streamstats count by host", true},
+		{"bucket command", "index=main | bucket _time span=1h", true},
+
+		// Case insensitive
+		{"stats uppercase", "index=main | STATS count by host", true},
+		{"Stats mixed case", "index=main | Stats count by host", true},
+
+		// Non-transforming commands - should return false
+		{"simple search", "index=main sourcetype=syslog", false},
+		{"search with where", "index=main | where status=500", false},
+		{"search with eval", "index=main | eval severity=if(level==\"ERROR\", \"HIGH\", \"LOW\")", false},
+		{"search with rex", "index=main | rex field=_raw \"(?<ip>\\d+\\.\\d+\\.\\d+\\.\\d+)\"", false},
+		{"search with search", "index=main | search level=ERROR", false},
+		{"search with head", "index=main | head 100", false},
+		{"search with tail", "index=main | tail 100", false},
+		{"search with sort", "index=main | sort -_time", false},
+		{"search with dedup", "index=main | dedup host", false},
+
+		// Edge cases
+		{"empty query", "", false},
+		{"no pipe", "index=main sourcetype=json level=ERROR", false},
+		{"stats in field value", `index=main message="stats count"`, false},
+		{"topaz should not match top", "index=main app=topaz", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ContainsTransformingCommand(tt.query)
+			assert.Equal(t, tt.expected, result, "query: %s", tt.query)
+		})
+	}
 }

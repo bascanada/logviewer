@@ -230,3 +230,88 @@ func TestGetSearchRequest_RecursiveFilter(t *testing.T) {
 		}
 	})
 }
+
+func TestGetSearchRequest_NativeQuery(t *testing.T) {
+	t.Run("native query standalone", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			NativeQuery: ty.OptWrap(`status:500 AND host:server*`),
+			Range:       client.SearchRange{Last: ty.OptWrap("30m")},
+			Size:        ty.OptWrap(100),
+		}
+
+		request, err := GetSearchRequest(logSearch)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+
+		b, _ := json.MarshalIndent(&request, "", "    ")
+		queryStr := string(b)
+
+		if !strings.Contains(queryStr, "query_string") {
+			t.Errorf("expected query to contain 'query_string', got: %s", queryStr)
+		}
+		if !strings.Contains(queryStr, "status:500 AND host:server*") {
+			t.Errorf("expected query to contain native query, got: %s", queryStr)
+		}
+	})
+
+	t.Run("native query with filters appended", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			NativeQuery: ty.OptWrap(`message:error*`),
+			Filter: &client.Filter{
+				Field: "level",
+				Value: "ERROR",
+			},
+			Range: client.SearchRange{Last: ty.OptWrap("30m")},
+			Size:  ty.OptWrap(100),
+		}
+
+		request, err := GetSearchRequest(logSearch)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+
+		b, _ := json.MarshalIndent(&request, "", "    ")
+		queryStr := string(b)
+
+		// Should contain both native query and filter
+		if !strings.Contains(queryStr, "query_string") {
+			t.Errorf("expected query to contain 'query_string', got: %s", queryStr)
+		}
+		if !strings.Contains(queryStr, "message:error*") {
+			t.Errorf("expected query to contain native query, got: %s", queryStr)
+		}
+		if !strings.Contains(queryStr, "ERROR") {
+			t.Errorf("expected query to contain filter value 'ERROR', got: %s", queryStr)
+		}
+	})
+
+	t.Run("empty native query is ignored", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			NativeQuery: ty.OptWrap(""),
+			Filter: &client.Filter{
+				Field: "level",
+				Value: "ERROR",
+			},
+			Range: client.SearchRange{Last: ty.OptWrap("30m")},
+			Size:  ty.OptWrap(100),
+		}
+
+		request, err := GetSearchRequest(logSearch)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+
+		b, _ := json.MarshalIndent(&request, "", "    ")
+		queryStr := string(b)
+
+		// Should NOT contain query_string since native query is empty
+		if strings.Contains(queryStr, "query_string") {
+			t.Errorf("expected query to NOT contain 'query_string' for empty native query, got: %s", queryStr)
+		}
+		// Should still contain the filter
+		if !strings.Contains(queryStr, "ERROR") {
+			t.Errorf("expected query to contain filter value 'ERROR', got: %s", queryStr)
+		}
+	})
+}
