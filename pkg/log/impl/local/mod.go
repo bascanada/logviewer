@@ -87,6 +87,15 @@ func (lc localLogClient) Get(ctx context.Context, search *client.LogSearch) (cli
 	return reader.GetLogResult(search, scanner, stdout)
 }
 
+func (lc localLogClient) GetFieldValues(ctx context.Context, search *client.LogSearch, fields []string) (map[string][]string, error) {
+	// For local/text-based backends, we need to run a search and extract field values
+	result, err := lc.Get(ctx, search)
+	if err != nil {
+		return nil, err
+	}
+	return client.GetFieldValuesFromResult(ctx, result, fields)
+}
+
 func GetLogClient() (client.LogClient, error) {
 	return localLogClient{}, nil
 }

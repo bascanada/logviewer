@@ -208,6 +208,15 @@ func getSearchRequest(search *client.LogSearch) (SearchRequest, error) {
 	return request, nil
 }
 
+func (kc kibanaClient) GetFieldValues(ctx context.Context, search *client.LogSearch, fields []string) (map[string][]string, error) {
+	// For kibana, we need to run a search and extract field values from the results
+	result, err := kc.Get(ctx, search)
+	if err != nil {
+		return nil, err
+	}
+	return client.GetFieldValuesFromResult(ctx, result, fields)
+}
+
 func GetClient(target KibanaTarget) (client.LogClient, error) {
 	client := new(kibanaClient)
 	client.target = target

@@ -136,6 +136,15 @@ func (lc DockerLogClient) Get(ctx context.Context, search *logclient.LogSearch) 
 	return reader.GetLogResult(search, scanner, closer)
 }
 
+func (lc DockerLogClient) GetFieldValues(ctx context.Context, search *logclient.LogSearch, fields []string) (map[string][]string, error) {
+	// For docker/text-based backends, we need to run a search and extract field values
+	result, err := lc.Get(ctx, search)
+	if err != nil {
+		return nil, err
+	}
+	return logclient.GetFieldValuesFromResult(ctx, result, fields)
+}
+
 func GetLogClient(host string) (logclient.LogClient, error) {
 	// Prepare basic options
 	opts := []client.Opt{

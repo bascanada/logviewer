@@ -270,6 +270,15 @@ func (lc k8sLogClient) getLogsFromMultiplePods(
 	return multiResult, nil
 }
 
+func (lc k8sLogClient) GetFieldValues(ctx context.Context, search *client.LogSearch, fields []string) (map[string][]string, error) {
+	// For k8s/text-based backends, we need to run a search and extract field values
+	result, err := lc.Get(ctx, search)
+	if err != nil {
+		return nil, err
+	}
+	return client.GetFieldValuesFromResult(ctx, result, fields)
+}
+
 func ensureKubeconfig(kubeconfig string) error {
 	if _, err := os.Stat(kubeconfig); err == nil {
 		return nil

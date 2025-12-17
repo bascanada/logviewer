@@ -38,6 +38,17 @@ func (m *mockSearchFactory) GetSearchContext(ctx context.Context, contextId stri
 	}, nil
 }
 
+func (m *mockSearchFactory) GetFieldValues(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, fields []string, runtimeVars map[string]string) (map[string][]string, error) {
+	if contextId == "error" {
+		return nil, errors.New("backend error")
+	}
+	result := make(map[string][]string)
+	for _, f := range fields {
+		result[f] = []string{"value1", "value2"}
+	}
+	return result, nil
+}
+
 // mockLogSearchResult is a mock implementation of client.LogSearchResult
 type mockLogSearchResult struct {
 	client.LogSearchResult

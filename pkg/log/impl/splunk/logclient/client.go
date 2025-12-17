@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	httpPkg "github.com/bascanada/logviewer/pkg/http"
@@ -41,7 +42,6 @@ type SplunkLogSearchClient struct {
 }
 
 func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
-
 	// initiate the things and wait for query to be done
 
 	if s.options.Headers == nil {
@@ -154,6 +154,137 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 	}, nil
 }
 
+func (s SplunkLogSearchClient) GetFieldValues(ctx context.Context, search *client.LogSearch, fields []string) (map[string][]string, error) {
+	if s.options.Headers == nil {
+		s.options.Headers = ty.MS{}
+	}
+	if s.options.SearchBody == nil {
+		s.options.SearchBody = ty.MS{}
+	}
+
+	// Build the base search request
+	searchRequest, err := getSearchRequest(search)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get the base query
+	baseQuery := searchRequest["search"]
+
+	// If no fields specified, fall back to regular search
+	if len(fields) == 0 {
+		return s.getFieldValuesFromSearch(ctx, search)
+	}
+
+	// Determine the max number of distinct values to return per field
+	// Use search.Size if specified, otherwise default to 100
+	maxValues := 100
+	if search.Size.Set && search.Size.Value > 0 {
+		maxValues = search.Size.Value
+	}
+
+	// Build a single efficient query using stats values() for all fields at once
+	// Use limit=N to control how many distinct values are returned per field
+	// Example: <baseQuery> | stats limit=100 values(field1) as field1, values(field2) as field2
+	var valuesClauses []string
+	for _, field := range fields {
+		valuesClauses = append(valuesClauses, fmt.Sprintf("values(%s) as %s", field, field))
+	}
+	query := baseQuery + fmt.Sprintf(" | stats limit=%d ", maxValues) + strings.Join(valuesClauses, ", ")
+
+	searchJobResponse, err := s.client.CreateSearchJob(query, searchRequest["earliest_time"], searchRequest["latest_time"], false, s.options.Headers, s.options.SearchBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create search job: %w", err)
+	}
+
+	// Wait for job to complete
+	pollInterval := time.Duration(1) * time.Second
+	maxRetries := maxRetryDoneJob
+	if s.options.PollIntervalSeconds > 0 {
+		pollInterval = time.Duration(s.options.PollIntervalSeconds) * time.Second
+	}
+	if s.options.MaxRetries > 0 {
+		maxRetries = s.options.MaxRetries
+	}
+
+	isDone := false
+	for tryCount := 0; tryCount < maxRetries; tryCount++ {
+		select {
+		case <-ctx.Done():
+			s.client.CancelSearchJob(searchJobResponse.Sid)
+			return nil, ctx.Err()
+		case <-time.After(pollInterval):
+		}
+
+		status, err := s.client.GetSearchStatus(searchJobResponse.Sid)
+		if err != nil {
+			s.client.CancelSearchJob(searchJobResponse.Sid)
+			return nil, err
+		}
+
+		if len(status.Entry) > 0 {
+			isDone = status.Entry[0].Content.IsDone
+		}
+		if isDone {
+			break
+		}
+	}
+
+	if !isDone {
+		s.client.CancelSearchJob(searchJobResponse.Sid)
+		return nil, fmt.Errorf("timeout waiting for splunk job")
+	}
+
+	// Get results from /results endpoint since we're using stats
+	results, err := s.client.GetSearchResult(searchJobResponse.Sid, 0, 1, true)
+	s.client.CancelSearchJob(searchJobResponse.Sid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get results: %w", err)
+	}
+
+	// Extract distinct values from the single result row
+	// The stats values() command returns a multivalue field (array) for each field
+	result := make(map[string][]string)
+	for _, field := range fields {
+		result[field] = []string{} // Initialize with empty slice
+	}
+
+	if len(results.Results) > 0 {
+		row := results.Results[0]
+		for _, field := range fields {
+			if v, ok := row[field]; ok {
+				// Handle multivalue field - can be a single value or an array
+				switch val := v.(type) {
+				case []interface{}:
+					for _, item := range val {
+						result[field] = append(result[field], fmt.Sprintf("%v", item))
+					}
+				case string:
+					if val != "" {
+						result[field] = []string{val}
+					}
+				default:
+					if val != nil {
+						result[field] = []string{fmt.Sprintf("%v", val)}
+					}
+				}
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// getFieldValuesFromSearch falls back to getting field values from a regular search
+func (s SplunkLogSearchClient) getFieldValuesFromSearch(ctx context.Context, search *client.LogSearch) (map[string][]string, error) {
+	searchResult, err := s.Get(ctx, search)
+	if err != nil {
+		return nil, err
+	}
+
+	return client.GetFieldValuesFromResult(ctx, searchResult, nil)
+}
+
 func GetClient(options SplunkLogSearchClientOptions) (client.LogClient, error) {
 
 	if options.Url == "" {
@@ -170,6 +301,9 @@ func GetClient(options SplunkLogSearchClientOptions) (client.LogClient, error) {
 	if options.Auth.Header != nil && len(options.Auth.Header) > 0 {
 		// set the Auth on the target so Get requests include the same headers
 		target.Auth = httpPkg.HeaderAuth{Headers: options.Auth.Header}
+	} else if options.Headers != nil && len(options.Headers) > 0 {
+		// Also check options.Headers for ad-hoc queries that pass headers directly
+		target.Auth = httpPkg.HeaderAuth{Headers: options.Headers}
 	}
 
 	restClient, err := restapi.GetSplunkRestClient(target)

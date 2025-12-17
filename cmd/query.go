@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"sync"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
+	"github.com/bascanada/logviewer/pkg/log/client/config"
 	"github.com/bascanada/logviewer/pkg/log/factory"
 	"github.com/bascanada/logviewer/pkg/log/impl/cloudwatch"
 	"github.com/bascanada/logviewer/pkg/log/impl/docker"
@@ -57,14 +59,14 @@ func stringArrayEnvVariable(strs []string, maps *ty.MS) error {
 	return nil
 }
 
-func resolveSearch() (client.LogSearchResult, error) {
-
-	// resolve this from args
+// buildSearchRequest creates a LogSearch from CLI flags
+func buildSearchRequest() client.LogSearch {
 	searchRequest := client.LogSearch{
 		Fields:          ty.MS{},
 		FieldsCondition: ty.MS{},
 		Options:         ty.MI{},
 	}
+
 	if size > 0 {
 		searchRequest.Size.S(size)
 	}
@@ -80,178 +82,53 @@ func resolveSearch() (client.LogSearchResult, error) {
 	if kvRegex != "" {
 		searchRequest.FieldExtraction.KvRegex.S(kvRegex)
 	}
-
 	if to != "" {
-		searchRequest.Range.Lte.S(to)
+		normalizedTo, _ := ty.NormalizeTimeValue(to)
+		searchRequest.Range.Lte.S(normalizedTo)
 	}
-
 	if from != "" {
-		searchRequest.Range.Gte.S(from)
+		normalizedFrom, _ := ty.NormalizeTimeValue(from)
+		searchRequest.Range.Gte.S(normalizedFrom)
 	}
-
 	if last != "" {
 		searchRequest.Range.Last.S(last)
 	}
-
 	if len(fields) > 0 {
 		stringArrayEnvVariable(fields, &searchRequest.Fields)
 	}
-
 	if len(fieldsOps) > 0 {
 		stringArrayEnvVariable(fieldsOps, &searchRequest.FieldsCondition)
 	}
-
 	if index != "" {
-		// use lowercase `index` consistently with splunk mapper and tests
 		searchRequest.Options["index"] = index
 	}
-
 	if k8sContainer != "" {
 		searchRequest.Options[k8s.FieldContainer] = k8sContainer
 	}
-
 	if k8sNamespace != "" {
 		searchRequest.Options[k8s.FieldNamespace] = k8sNamespace
 	}
-
 	if k8sPod != "" {
 		searchRequest.Options[k8s.FieldPod] = k8sPod
 	}
-
 	if k8sLabelSelector != "" {
 		searchRequest.Options[k8s.FieldLabelSelector] = k8sLabelSelector
 	}
-
 	if k8sPrevious {
 		searchRequest.Options[k8s.FieldPrevious] = k8sPrevious
 	}
-
 	if k8sTimestamp {
 		searchRequest.Options[k8s.OptionsTimestamp] = k8sTimestamp
 	}
-
 	if cmd != "" {
 		searchRequest.Options[local.OptionsCmd] = cmd
 	}
-
-	// Propagate SSH DisablePTY flag into per-search options so the SSH client
-	// behaviour can be controlled from the CLI. This mirrors the config option
-	// "disablePTY" available in search contexts.
 	if sshOptions.DisablePTY {
 		searchRequest.Options["disablePTY"] = true
 	}
-
 	if template != "" {
 		searchRequest.PrinterOptions.Template.S(template)
 	}
-
-	searchRequest.Follow = refresh
-
-	// Centralized config handling:
-	// - If an explicit configPath is given, use it.
-	// - If no configPath but context ids (-i) are provided, attempt to load the default config.
-	// - If no configPath and no -i, do not load any config and continue with non-config flow.
-	if configPath != "" || len(contextIds) > 0 {
-		cfg, _, err := loadConfig(configPath)
-		if err != nil {
-			return nil, err
-		}
-
-		clientFactory, err := factory.GetLogClientFactory(cfg.Clients)
-		if err != nil {
-			return nil, err
-		}
-
-		searchFactory, err := factory.GetLogSearchFactory(clientFactory, *cfg)
-		if err != nil {
-			return nil, err
-		}
-
-		// Parse --var flags into a map for runtime variable substitution.
-		runtimeVars := make(map[string]string)
-		for _, v := range vars {
-			parts := strings.SplitN(v, "=", 2)
-			if len(parts) == 2 {
-				runtimeVars[parts[0]] = parts[1]
-			}
-		}
-
-		// If no contexts are specified via -i, check if a current context is active from state
-		if len(contextIds) == 0 {
-			if cfg.CurrentContext != "" {
-				// Verify the active context still exists in the configuration
-				if _, ok := cfg.Contexts[cfg.CurrentContext]; ok {
-					contextIds = []string{cfg.CurrentContext}
-				}
-			}
-		}
-
-		// If still no contexts are specified, fail.
-		if len(contextIds) == 0 {
-			// This check is to prevent trying to query nothing when in non-interactive mode.
-			return nil, errors.New("no contexts specified for query; use -i to select one or more contexts or set a default with 'logviewer context use'")
-		}
-
-		// For single context, execute directly without MultiLogSearchResult wrapper
-		if len(contextIds) == 1 {
-			ctx := context.Background()
-			// Set context ID even for single context (needed for multi-pod k8s queries, etc.)
-			searchRequest.Options["__context_id__"] = contextIds[0]
-			return searchFactory.GetSearchResult(ctx, contextIds[0], inherits, searchRequest, runtimeVars)
-		}
-
-		// Fan-out: execute queries for each context concurrently.
-		multiResult, err := client.NewMultiLogSearchResult(&searchRequest)
-		if err != nil {
-			return nil, err
-		}
-		var wg sync.WaitGroup
-		ctx := context.Background()
-
-		for _, contextId := range contextIds {
-			wg.Add(1)
-			go func(cid string) {
-				defer wg.Done()
-				// The search request is copied to avoid data races.
-				reqCopy := searchRequest
-				// Deep copy map fields to avoid concurrent map writes.
-				reqCopy.Options = ty.MergeM(make(ty.MI, len(searchRequest.Options)+1), searchRequest.Options)
-				reqCopy.Options["__context_id__"] = cid
-				reqCopy.Fields = ty.MergeM(make(ty.MS, len(searchRequest.Fields)), searchRequest.Fields)
-				reqCopy.FieldsCondition = ty.MergeM(make(ty.MS, len(searchRequest.FieldsCondition)), searchRequest.FieldsCondition)
-				if searchRequest.Variables != nil {
-					reqCopy.Variables = make(map[string]client.VariableDefinition, len(searchRequest.Variables))
-					for k, v := range searchRequest.Variables {
-						reqCopy.Variables[k] = v
-					}
-				}
-				sr, err := searchFactory.GetSearchResult(ctx, cid, inherits, reqCopy, runtimeVars)
-				multiResult.Add(sr, err)
-			}(contextId)
-		}
-
-		wg.Wait()
-
-		// Print errors for failed contexts to stderr.
-		if len(multiResult.Errors) > 0 {
-			var errorStrings []string
-			for _, e := range multiResult.Errors {
-				errorStrings = append(errorStrings, e.Error())
-			}
-			fmt.Fprintf(os.Stderr, "errors encountered for some contexts:\n%s\n", strings.Join(errorStrings, "\n"))
-		}
-		return multiResult, nil
-	}
-
-	if headerField != "" {
-		headerMap := ty.MS{}
-
-		if err := headerMap.LoadMS(headerField); err != nil {
-			return nil, err
-		}
-
-	}
-
 	if dockerContainer != "" {
 		searchRequest.Options["container"] = dockerContainer
 	}
@@ -261,7 +138,53 @@ func resolveSearch() (client.LogSearchResult, error) {
 	if dockerProject != "" {
 		searchRequest.Options["project"] = dockerProject
 	}
+	if nativeQuery != "" {
+		searchRequest.NativeQuery.S(nativeQuery)
+	}
 
+	searchRequest.Follow = refresh
+
+	return searchRequest
+}
+
+// parseRuntimeVars parses --var flags into a map
+func parseRuntimeVars() map[string]string {
+	runtimeVars := make(map[string]string)
+	for _, v := range vars {
+		parts := strings.SplitN(v, "=", 2)
+		if len(parts) == 2 {
+			runtimeVars[parts[0]] = parts[1]
+		}
+	}
+	return runtimeVars
+}
+
+// resolveContextIdsFromConfig resolves context IDs, using current context if none specified
+func resolveContextIdsFromConfig(cfg *config.ContextConfig) []string {
+	if len(contextIds) > 0 {
+		return contextIds
+	}
+	if cfg.CurrentContext != "" {
+		if _, ok := cfg.Contexts[cfg.CurrentContext]; ok {
+			return []string{cfg.CurrentContext}
+		}
+	}
+	return []string{}
+}
+
+// isAdHocQuery returns true if CLI flags indicate an ad-hoc query (no config)
+func isAdHocQuery() bool {
+	return endpointOpensearch != "" ||
+		endpointKibana != "" ||
+		cloudwatchLogGroup != "" ||
+		(k8sNamespace != "" && len(contextIds) == 0 && configPath == "") ||
+		(cmd != "" && len(contextIds) == 0 && configPath == "") ||
+		endpointSplunk != "" ||
+		((dockerContainer != "" || dockerService != "") && len(contextIds) == 0 && configPath == "")
+}
+
+// getAdHocLogClient creates a LogClient from ad-hoc CLI flags
+func getAdHocLogClient(searchRequest *client.LogSearch) (client.LogClient, error) {
 	var err error
 	var system string
 
@@ -289,7 +212,7 @@ func resolveSearch() (client.LogSearchResult, error) {
 			* --docker-container or --docker-service
 			* --splunk-endpoint
 			* --kibana-endpoint
-            * --openseach-endpoint
+            * --opensearch-endpoint
             * --k8s-namespace
             * --ssh-addr
             * --cmd
@@ -298,12 +221,12 @@ func resolveSearch() (client.LogSearchResult, error) {
 
 	var logClient client.LogClient
 
-	if system == "opensearch" {
+	switch system {
+	case "opensearch":
 		logClient, err = opensearch.GetClient(opensearch.OpenSearchTarget{Endpoint: endpointOpensearch})
-	} else if system == "kibana" {
+	case "kibana":
 		logClient, err = kibana.GetClient(kibana.KibanaTarget{Endpoint: endpointKibana})
-	} else if system == "cloudwatch" {
-		// Build options map expected by cloudwatch.GetLogClient
+	case "cloudwatch":
 		opts := ty.MI{}
 		if cloudwatchRegion != "" {
 			opts["region"] = cloudwatchRegion
@@ -314,7 +237,6 @@ func resolveSearch() (client.LogSearchResult, error) {
 		if cloudwatchEndpoint != "" {
 			opts["endpoint"] = cloudwatchEndpoint
 		}
-		// These options are per-search rather than client creation, push into search.Options
 		if cloudwatchLogGroup != "" {
 			searchRequest.Options["logGroupName"] = cloudwatchLogGroup
 		}
@@ -328,51 +250,219 @@ func resolveSearch() (client.LogSearchResult, error) {
 		if cloudwatchPollBackoff != "" {
 			searchRequest.Options["cloudwatchPollBackoff"] = cloudwatchPollBackoff
 		}
-
 		logClient, err = cloudwatch.GetLogClient(opts)
-	} else if system == "k8s" {
+	case "k8s":
 		logClient, err = k8s.GetLogClient(k8s.K8sLogClientOptions{})
-	} else if system == "ssh" {
+	case "ssh":
 		logClient, err = ssh.GetLogClient(sshOptions)
-	} else if system == "docker" {
+	case "docker":
 		logClient, err = docker.GetLogClient(dockerHost)
-	} else if system == "splunk" {
+	case "splunk":
 		headers := ty.MS{}
-		body := ty.MS{}
+		body := ty.MS{"output_mode": "json"} // Default to JSON output
 		if headerField != "" {
 			if err = headers.LoadMS(headerField); err != nil {
 				return nil, err
 			}
-
 			headers = headers.ResolveVariables()
 		}
 		if bodyField != "" {
 			if err = body.LoadMS(bodyField); err != nil {
 				return nil, err
 			}
-
 			body = body.ResolveVariables()
 		}
-
 		logClient, err = splunk.GetClient(splunk.SplunkLogSearchClientOptions{
 			Url:        endpointSplunk,
 			SearchBody: body,
 			Headers:    headers,
 		})
-	} else {
+	default:
 		logClient, err = local.GetLogClient()
 	}
+
+	return logClient, err
+}
+
+func resolveSearch() (client.LogSearchResult, error) {
+	searchRequest := buildSearchRequest()
+
+	// Check if this is a config-based query
+	if configPath != "" || len(contextIds) > 0 {
+		cfg, _, err := loadConfig(configPath)
+		if err != nil {
+			return nil, err
+		}
+
+		clientFactory, err := factory.GetLogClientFactory(cfg.Clients)
+		if err != nil {
+			return nil, err
+		}
+
+		searchFactory, err := factory.GetLogSearchFactory(clientFactory, *cfg)
+		if err != nil {
+			return nil, err
+		}
+
+		runtimeVars := parseRuntimeVars()
+		resolvedContextIds := resolveContextIdsFromConfig(cfg)
+
+		if len(resolvedContextIds) == 0 {
+			return nil, errors.New("no contexts specified for query; use -i to select one or more contexts or set a default with 'logviewer context use'")
+		}
+
+		// For single context, execute directly without MultiLogSearchResult wrapper
+		if len(resolvedContextIds) == 1 {
+			ctx := context.Background()
+			searchRequest.Options["__context_id__"] = resolvedContextIds[0]
+			return searchFactory.GetSearchResult(ctx, resolvedContextIds[0], inherits, searchRequest, runtimeVars)
+		}
+
+		// Fan-out: execute queries for each context concurrently.
+		multiResult, err := client.NewMultiLogSearchResult(&searchRequest)
+		if err != nil {
+			return nil, err
+		}
+		var wg sync.WaitGroup
+		ctx := context.Background()
+
+		for _, contextId := range resolvedContextIds {
+			wg.Add(1)
+			go func(cid string) {
+				defer wg.Done()
+				reqCopy := searchRequest
+				reqCopy.Options = ty.MergeM(make(ty.MI, len(searchRequest.Options)+1), searchRequest.Options)
+				reqCopy.Options["__context_id__"] = cid
+				reqCopy.Fields = ty.MergeM(make(ty.MS, len(searchRequest.Fields)), searchRequest.Fields)
+				reqCopy.FieldsCondition = ty.MergeM(make(ty.MS, len(searchRequest.FieldsCondition)), searchRequest.FieldsCondition)
+				if searchRequest.Variables != nil {
+					reqCopy.Variables = make(map[string]client.VariableDefinition, len(searchRequest.Variables))
+					for k, v := range searchRequest.Variables {
+						reqCopy.Variables[k] = v
+					}
+				}
+				sr, err := searchFactory.GetSearchResult(ctx, cid, inherits, reqCopy, runtimeVars)
+				multiResult.Add(sr, err)
+			}(contextId)
+		}
+
+		wg.Wait()
+
+		if len(multiResult.Errors) > 0 {
+			var errorStrings []string
+			for _, e := range multiResult.Errors {
+				errorStrings = append(errorStrings, e.Error())
+			}
+			fmt.Fprintf(os.Stderr, "errors encountered for some contexts:\n%s\n", strings.Join(errorStrings, "\n"))
+		}
+		return multiResult, nil
+	}
+
+	// Ad-hoc query (no config)
+	if headerField != "" {
+		headerMap := ty.MS{}
+		if err := headerMap.LoadMS(headerField); err != nil {
+			return nil, err
+		}
+	}
+
+	logClient, err := getAdHocLogClient(&searchRequest)
 	if err != nil {
 		return nil, err
 	}
 
-	searchResult, err2 := logClient.Get(context.Background(), &searchRequest)
-	if err2 != nil {
-		return nil, err2
+	searchResult, err := logClient.Get(context.Background(), &searchRequest)
+	if err != nil {
+		return nil, err
 	}
 
 	return searchResult, nil
+}
 
+// resolveFieldValues handles both config-based and ad-hoc queries for field values
+func resolveFieldValues(fieldNames []string) (map[string][]string, error) {
+	searchRequest := buildSearchRequest()
+	ctx := context.Background()
+
+	// Check if this is an ad-hoc query
+	if isAdHocQuery() {
+		logClient, err := getAdHocLogClient(&searchRequest)
+		if err != nil {
+			return nil, err
+		}
+		return logClient.GetFieldValues(ctx, &searchRequest, fieldNames)
+	}
+
+	// Config-based query
+	if configPath == "" && len(contextIds) == 0 {
+		return nil, errors.New("no config or context specified; use -i to select a context or provide endpoint flags for ad-hoc query")
+	}
+
+	cfg, _, err := loadConfig(configPath)
+	if err != nil {
+		return nil, err
+	}
+
+	clientFactory, err := factory.GetLogClientFactory(cfg.Clients)
+	if err != nil {
+		return nil, err
+	}
+
+	searchFactory, err := factory.GetLogSearchFactory(clientFactory, *cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	runtimeVars := parseRuntimeVars()
+	resolvedContextIds := resolveContextIdsFromConfig(cfg)
+
+	if len(resolvedContextIds) == 0 {
+		return nil, errors.New("no context specified; use -i to select a context")
+	}
+
+	// For multiple contexts, aggregate results using sets for efficiency
+	allResultsSet := make(map[string]map[string]struct{})
+	var hasError bool
+
+	for _, contextId := range resolvedContextIds {
+		if len(resolvedContextIds) > 1 {
+			fmt.Fprintf(os.Stderr, "=== Context: %s ===\n", contextId)
+		}
+
+		fieldValues, err := searchFactory.GetFieldValues(ctx, contextId, inherits, searchRequest, fieldNames, runtimeVars)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error getting field values for %s: %v\n", contextId, err)
+			hasError = true
+			continue
+		}
+
+		// Merge results into a set for uniqueness
+		for field, values := range fieldValues {
+			if _, ok := allResultsSet[field]; !ok {
+				allResultsSet[field] = make(map[string]struct{})
+			}
+			for _, v := range values {
+				allResultsSet[field][v] = struct{}{}
+			}
+		}
+	}
+
+	if hasError && len(allResultsSet) == 0 {
+		return nil, errors.New("failed to get field values from all contexts")
+	}
+
+	// Convert sets to sorted slices for deterministic output
+	allResults := make(map[string][]string, len(allResultsSet))
+	for field, valuesSet := range allResultsSet {
+		values := make([]string, 0, len(valuesSet))
+		for v := range valuesSet {
+			values = append(values, v)
+		}
+		sort.Strings(values)
+		allResults[field] = values
+	}
+
+	return allResults, nil
 }
 
 var queryFieldCommand = &cobra.Command{
@@ -482,12 +572,67 @@ var queryLogCommand = &cobra.Command{
 	},
 }
 
+var queryValuesCommand = &cobra.Command{
+	Use:   "values [field...]",
+	Short: "Get distinct values for specific fields from logs",
+	Long: `Get distinct values for one or more specific fields from logs.
+
+This command efficiently retrieves distinct values for the specified fields,
+respecting current filters and time range.
+
+Examples:
+  # Get distinct values for a single field
+  logviewer query values -i prod-logs error_code --last 1h
+
+  # Get distinct values for multiple fields
+  logviewer query values -i prod-logs level service error_code --last 2h
+
+  # With filters applied
+  logviewer query values -i prod-logs error_code -f level=ERROR --last 1h
+
+  # Ad-hoc query (without config)
+  logviewer query values level app --opensearch-endpoint http://localhost:9200 --elk-index app-logs --last 1h`,
+	PreRun: onCommandStart,
+	Args:   cobra.MinimumNArgs(1), // Require at least one field
+	Run: func(cmd *cobra.Command, args []string) {
+		fieldNames := args
+
+		fieldValues, err := resolveFieldValues(fieldNames)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+
+		if jsonOutput {
+			enc := json.NewEncoder(os.Stdout)
+			if err := enc.Encode(fieldValues); err != nil {
+				fmt.Fprintf(os.Stderr, "error encoding JSON: %v\n", err)
+				os.Exit(1)
+			}
+		} else {
+			// Output as formatted text (same format as query field)
+			for _, field := range fieldNames {
+				values, ok := fieldValues[field]
+				if !ok || len(values) == 0 {
+					fmt.Printf("%s \n", field)
+					fmt.Println("    (no values found)")
+					continue
+				}
+				fmt.Printf("%s \n", field)
+				for _, v := range values {
+					fmt.Println("    " + v)
+				}
+			}
+		}
+	},
+}
+
 var queryCommand = &cobra.Command{
 	Use:    "query",
 	Short:  "Query a login system for logs and available fields",
 	PreRun: onCommandStart,
 	Run: func(cmd *cobra.Command, args []string) {
-		cmd.Println("Please use 'logviewer query log' to stream logs or 'logviewer query field' to inspect fields.")
+		cmd.Println("Please use 'logviewer query log' to stream logs, 'logviewer query field' to inspect fields, or 'logviewer query values' to get distinct values.")
 		cmd.Help()
 	},
 }

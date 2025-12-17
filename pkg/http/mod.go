@@ -102,8 +102,6 @@ func (c HttpClient) post(path string, headers ty.MS, buf *bytes.Buffer, response
 		return err
 	}
 
-	//println(string(resBody))
-
 	if res.StatusCode >= 400 {
 		log.Printf("error %d  %s"+ty.LB, res.StatusCode, string(resBody))
 		return fmt.Errorf("request failed with status code %d: %s", res.StatusCode, string(resBody))

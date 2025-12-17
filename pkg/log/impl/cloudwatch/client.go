@@ -233,6 +233,15 @@ func (r *staticCloudWatchResult) GetFields(ctx context.Context) (ty.UniSet[strin
 func (r *staticCloudWatchResult) GetPaginationInfo() *client.PaginationInfo { return nil }
 func (r *staticCloudWatchResult) Err() <-chan error                         { return nil }
 
+func (c *CloudWatchLogClient) GetFieldValues(ctx context.Context, search *client.LogSearch, fields []string) (map[string][]string, error) {
+	// For CloudWatch, we need to run a search and extract field values from the results
+	result, err := c.Get(ctx, search)
+	if err != nil {
+		return nil, err
+	}
+	return client.GetFieldValuesFromResult(ctx, result, fields)
+}
+
 // GetLogClient creates a new CloudWatch Logs client.
 // It uses the 'region' and 'profile' from the options if provided.
 func GetLogClient(options ty.MI) (client.LogClient, error) {

@@ -21,14 +21,15 @@ func FormatDate(layout string, t time.Time) string {
 	return t.Format(layout)
 }
 
-// FormatTimestamp formats a timestamp, returning "N/A" for zero-value timestamps.
+// FormatTimestamp formats a timestamp in local time, returning "N/A" for zero-value timestamps.
 // This is useful for aggregated results (stats, timechart) where timestamps may be unknown.
+// Converting to local time ensures the displayed time matches what users can type in --from/--to.
 // Usage in template: {{FormatTimestamp .Timestamp "15:04:05"}}
 func FormatTimestamp(t time.Time, layout string) string {
 	if t.IsZero() {
 		return "N/A"
 	}
-	return t.Format(layout)
+	return t.Local().Format(layout)
 }
 
 func MultlineFields(values ty.MI) string {
