@@ -154,6 +154,120 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 	}, nil
 }
 
+func (s SplunkLogSearchClient) GetFieldValues(ctx context.Context, search *client.LogSearch, fields []string) (map[string][]string, error) {
+	if s.options.Headers == nil {
+		s.options.Headers = ty.MS{}
+	}
+	if s.options.SearchBody == nil {
+		s.options.SearchBody = ty.MS{}
+	}
+
+	// Build the base search request
+	searchRequest, err := getSearchRequest(search)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get the base query
+	baseQuery := searchRequest["search"]
+
+	// Build the aggregation query to get distinct values
+	// If no fields specified, we can't use this optimization - fall back to regular search
+	if len(fields) == 0 {
+		// Fall back to getting all fields from a regular search
+		return s.getFieldValuesFromSearch(ctx, search)
+	}
+
+	result := make(map[string][]string)
+
+	// For each field, run a separate query to get distinct values
+	// Using `| stats count by <field>` to get distinct values with counts
+	for _, field := range fields {
+		query := baseQuery + fmt.Sprintf(" | stats count by %s | fields - count | head 100", field)
+
+		searchJobResponse, err := s.client.CreateSearchJob(query, searchRequest["earliest_time"], searchRequest["latest_time"], false, s.options.Headers, s.options.SearchBody)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create search job for field %s: %w", field, err)
+		}
+
+		// Wait for job to complete
+		pollInterval := time.Duration(1) * time.Second
+		maxRetries := maxRetryDoneJob
+		if s.options.PollIntervalSeconds > 0 {
+			pollInterval = time.Duration(s.options.PollIntervalSeconds) * time.Second
+		}
+		if s.options.MaxRetries > 0 {
+			maxRetries = s.options.MaxRetries
+		}
+
+		isDone := false
+		for tryCount := 0; tryCount < maxRetries; tryCount++ {
+			select {
+			case <-ctx.Done():
+				s.client.CancelSearchJob(searchJobResponse.Sid)
+				return nil, ctx.Err()
+			case <-time.After(pollInterval):
+			}
+
+			status, err := s.client.GetSearchStatus(searchJobResponse.Sid)
+			if err != nil {
+				s.client.CancelSearchJob(searchJobResponse.Sid)
+				return nil, err
+			}
+
+			if len(status.Entry) > 0 {
+				isDone = status.Entry[0].Content.IsDone
+			}
+			if isDone {
+				break
+			}
+		}
+
+		if !isDone {
+			s.client.CancelSearchJob(searchJobResponse.Sid)
+			return nil, fmt.Errorf("timeout waiting for splunk job for field %s", field)
+		}
+
+		// Get results from /results endpoint since we're using stats
+		results, err := s.client.GetSearchResult(searchJobResponse.Sid, 0, 100, true)
+		s.client.CancelSearchJob(searchJobResponse.Sid)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get results for field %s: %w", field, err)
+		}
+
+		// Extract distinct values from results
+		var values []string
+		for _, r := range results.Results {
+			if v, ok := r[field]; ok {
+				values = append(values, fmt.Sprintf("%v", v))
+			}
+		}
+		result[field] = values
+	}
+
+	return result, nil
+}
+
+// getFieldValuesFromSearch falls back to getting field values from a regular search
+func (s SplunkLogSearchClient) getFieldValuesFromSearch(ctx context.Context, search *client.LogSearch) (map[string][]string, error) {
+	searchResult, err := s.Get(ctx, search)
+	if err != nil {
+		return nil, err
+	}
+
+	fields, _, err := searchResult.GetFields(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert UniSet to map[string][]string
+	result := make(map[string][]string)
+	for k, v := range fields {
+		result[k] = v
+	}
+	return result, nil
+}
+
 func GetClient(options SplunkLogSearchClientOptions) (client.LogClient, error) {
 
 	if options.Url == "" {

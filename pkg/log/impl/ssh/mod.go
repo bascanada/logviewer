@@ -125,6 +125,15 @@ func (lc sshLogClient) Get(ctx context.Context, search *client.LogSearch) (clien
 	return result, nil
 }
 
+func (lc sshLogClient) GetFieldValues(ctx context.Context, search *client.LogSearch, fields []string) (map[string][]string, error) {
+	// For SSH/text-based backends, we need to run a search and extract field values
+	result, err := lc.Get(ctx, search)
+	if err != nil {
+		return nil, err
+	}
+	return client.GetFieldValuesFromResult(ctx, result, fields)
+}
+
 func GetLogClient(options SSHLogClientOptions) (client.LogClient, error) {
 
 	if options.Addr == "" {

@@ -482,12 +482,148 @@ var queryLogCommand = &cobra.Command{
 	},
 }
 
+var queryValuesCommand = &cobra.Command{
+	Use:   "values [field...]",
+	Short: "Get distinct values for specific fields from logs",
+	Long: `Get distinct values for one or more specific fields from logs.
+
+This command efficiently retrieves distinct values for the specified fields,
+respecting current filters and time range.
+
+Examples:
+  # Get distinct values for a single field
+  logviewer query values -i prod-logs error_code --last 1h
+
+  # Get distinct values for multiple fields
+  logviewer query values -i prod-logs level service error_code --last 2h
+
+  # With filters applied
+  logviewer query values -i prod-logs error_code -f level=ERROR --last 1h`,
+	PreRun: onCommandStart,
+	Args:   cobra.MinimumNArgs(1), // Require at least one field
+	Run: func(cmd *cobra.Command, args []string) {
+		fieldNames := args
+
+		// Build search request (same logic as resolveSearch but we only need factory)
+		searchRequest := client.LogSearch{
+			Fields:          ty.MS{},
+			FieldsCondition: ty.MS{},
+			Options:         ty.MI{},
+		}
+		if size > 0 {
+			searchRequest.Size.S(size)
+		}
+		if to != "" {
+			searchRequest.Range.Lte.S(to)
+		}
+		if from != "" {
+			searchRequest.Range.Gte.S(from)
+		}
+		if last != "" {
+			searchRequest.Range.Last.S(last)
+		}
+		if len(fields) > 0 {
+			stringArrayEnvVariable(fields, &searchRequest.Fields)
+		}
+		if len(fieldsOps) > 0 {
+			stringArrayEnvVariable(fieldsOps, &searchRequest.FieldsCondition)
+		}
+		if index != "" {
+			searchRequest.Options["index"] = index
+		}
+
+		// Load config
+		if configPath == "" && len(contextIds) == 0 {
+			fmt.Fprintln(os.Stderr, "error: config or context ID required for query values")
+			os.Exit(1)
+		}
+
+		cfg, _, err := loadConfig(configPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+
+		clientFactory, err := factory.GetLogClientFactory(cfg.Clients)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+
+		searchFactory, err := factory.GetLogSearchFactory(clientFactory, *cfg)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+
+		// Parse runtime variables
+		runtimeVars := make(map[string]string)
+		for _, v := range vars {
+			parts := strings.SplitN(v, "=", 2)
+			if len(parts) == 2 {
+				runtimeVars[parts[0]] = parts[1]
+			}
+		}
+
+		// Get context IDs
+		if len(contextIds) == 0 {
+			if cfg.CurrentContext != "" {
+				if _, ok := cfg.Contexts[cfg.CurrentContext]; ok {
+					contextIds = []string{cfg.CurrentContext}
+				}
+			}
+		}
+
+		if len(contextIds) == 0 {
+			fmt.Fprintln(os.Stderr, "error: no context specified; use -i to select a context")
+			os.Exit(1)
+		}
+
+		ctx := context.Background()
+
+		// Get field values for each context
+		for _, contextId := range contextIds {
+			if len(contextIds) > 1 {
+				fmt.Printf("=== Context: %s ===\n", contextId)
+			}
+
+			fieldValues, err := searchFactory.GetFieldValues(ctx, contextId, inherits, searchRequest, fieldNames, runtimeVars)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error getting field values for %s: %v\n", contextId, err)
+				continue
+			}
+
+			if jsonOutput {
+				// Output as JSON
+				enc := json.NewEncoder(os.Stdout)
+				if err := enc.Encode(fieldValues); err != nil {
+					fmt.Fprintf(os.Stderr, "error encoding JSON: %v\n", err)
+				}
+			} else {
+				// Output as formatted text (same format as query field)
+				for _, field := range fieldNames {
+					values, ok := fieldValues[field]
+					if !ok || len(values) == 0 {
+						fmt.Printf("%s \n", field)
+						fmt.Println("    (no values found)")
+						continue
+					}
+					fmt.Printf("%s \n", field)
+					for _, v := range values {
+						fmt.Println("    " + v)
+					}
+				}
+			}
+		}
+	},
+}
+
 var queryCommand = &cobra.Command{
 	Use:    "query",
 	Short:  "Query a login system for logs and available fields",
 	PreRun: onCommandStart,
 	Run: func(cmd *cobra.Command, args []string) {
-		cmd.Println("Please use 'logviewer query log' to stream logs or 'logviewer query field' to inspect fields.")
+		cmd.Println("Please use 'logviewer query log' to stream logs, 'logviewer query field' to inspect fields, or 'logviewer query values' to get distinct values.")
 		cmd.Help()
 	},
 }

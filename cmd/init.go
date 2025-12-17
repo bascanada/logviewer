@@ -299,5 +299,6 @@ func init() {
 
 	queryCommand.AddCommand(queryLogCommand)
 	queryCommand.AddCommand(queryFieldCommand)
+	queryCommand.AddCommand(queryValuesCommand)
 
 }

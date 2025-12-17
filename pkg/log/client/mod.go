@@ -62,6 +62,10 @@ type PaginationInfo struct {
 // Client to start a log search
 type LogClient interface {
 	Get(ctx context.Context, search *LogSearch) (LogSearchResult, error)
+	// GetFieldValues returns distinct values for the specified fields.
+	// If fields is empty, returns values for all fields.
+	// The result maps field names to their distinct values.
+	GetFieldValues(ctx context.Context, search *LogSearch, fields []string) (map[string][]string, error)
 }
 
 // ExtractJSONFromEntry extracts JSON fields from the entry's Message and populates
@@ -138,6 +142,56 @@ func ExtractJSONFromEntry(entry *LogEntry, search *LogSearch) {
 			entry.Timestamp = parsed
 		}
 	}
+}
+
+// GetFieldValuesFromResult is a helper function for backends that don't have native
+// aggregation support. It extracts field values from a LogSearchResult by iterating
+// through all entries. If fields is empty, returns all fields found.
+func GetFieldValuesFromResult(ctx context.Context, result LogSearchResult, fields []string) (map[string][]string, error) {
+	entries, _, err := result.GetEntries(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Use a map of sets to track unique values per field
+	valueSet := make(map[string]map[string]bool)
+
+	for _, entry := range entries {
+		// Extract JSON fields if needed
+		ExtractJSONFromEntry(&entry, result.GetSearch())
+
+		// If no specific fields requested, collect all fields
+		if len(fields) == 0 {
+			for k, v := range entry.Fields {
+				if valueSet[k] == nil {
+					valueSet[k] = make(map[string]bool)
+				}
+				valueSet[k][fmt.Sprintf("%v", v)] = true
+			}
+		} else {
+			// Only collect values for requested fields
+			for _, field := range fields {
+				if v, ok := entry.Fields[field]; ok {
+					if valueSet[field] == nil {
+						valueSet[field] = make(map[string]bool)
+					}
+					valueSet[field][fmt.Sprintf("%v", v)] = true
+				}
+			}
+		}
+	}
+
+	// Convert sets to slices
+	result2 := make(map[string][]string)
+	for k, v := range valueSet {
+		values := make([]string, 0, len(v))
+		for val := range v {
+			values = append(values, val)
+		}
+		result2[k] = values
+	}
+
+	return result2, nil
 }
 
 // parseTimestamp attempts to parse various timestamp formats

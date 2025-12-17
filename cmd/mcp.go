@@ -561,6 +561,134 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 	s.AddTool(queryLogsTool, queryLogsHandler)
 	handlers["query_logs"] = queryLogsHandler
 
+	// --- Tool: get_field_values ---
+	getFieldValuesTool := mcp.NewTool("get_field_values",
+		mcp.WithDescription(`Get distinct values for specific log fields to understand data distribution or find specific values.
+
+Usage: get_field_values contextId=<context> fields=["level","error_code"] [last=15m]
+
+Parameters:
+  contextId (string, required): Context identifier.
+  fields (array of strings, required): Field names to get distinct values for.
+  last (string, optional): Relative time window (e.g. 15m, 2h). Defaults to 15m.
+  start_time (string, optional): Absolute start time (RFC3339).
+  end_time (string, optional): Absolute end time (RFC3339).
+  filters (object, optional): Additional key/value filters to apply.
+
+Returns: JSON object mapping field names to arrays of distinct values.
+
+Example response:
+{
+  "level": ["ERROR", "WARN", "INFO"],
+  "error_code": ["TIMEOUT", "AUTH_FAILURE", "DB_CONN_ERR"]
+}
+`),
+		mcp.WithString("contextId", mcp.Required(), mcp.Description("Context identifier to query.")),
+		mcp.WithArray("fields", mcp.Required(), mcp.Description("Field names to get distinct values for (array of strings).")),
+		mcp.WithString("last", mcp.Description("Relative time window like 15m, 2h, 1d.")),
+		mcp.WithString("start_time", mcp.Description("Absolute start time (RFC3339).")),
+		mcp.WithString("end_time", mcp.Description("Absolute end time (RFC3339).")),
+		mcp.WithObject("filters", mcp.Description("Additional key/value filters to apply (JSON object).")),
+	)
+	getFieldValuesHandler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		cfg, searchFactory := cm.Get()
+		contextId, err := request.RequireString("contextId")
+		if err != nil || contextId == "" {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid or missing contextId: %v", err)), nil
+		}
+
+		// Extract fields array
+		var fieldNames []string
+		args := request.GetArguments()
+		if args != nil {
+			if rawFields, ok := args["fields"]; ok && rawFields != nil {
+				switch v := rawFields.(type) {
+				case []interface{}:
+					for _, f := range v {
+						if s, ok := f.(string); ok {
+							fieldNames = append(fieldNames, s)
+						}
+					}
+				case []string:
+					fieldNames = v
+				}
+			}
+		}
+		if len(fieldNames) == 0 {
+			return mcp.NewToolResultError("fields parameter is required and must be a non-empty array of field names"), nil
+		}
+
+		searchRequest := client.LogSearch{}
+		if last, err := request.RequireString("last"); err == nil && last != "" {
+			searchRequest.Range.Last.S(last)
+		}
+		if startTime, err := request.RequireString("start_time"); err == nil && startTime != "" {
+			searchRequest.Range.Gte.S(startTime)
+		}
+		if endTime, err := request.RequireString("end_time"); err == nil && endTime != "" {
+			searchRequest.Range.Lte.S(endTime)
+		}
+
+		// Handle filters
+		if args != nil {
+			if rawFilters, ok := args["filters"]; ok && rawFilters != nil {
+				if filterMap, ok := rawFilters.(map[string]any); ok {
+					if searchRequest.Fields == nil {
+						searchRequest.Fields = ty.MS{}
+					}
+					for k, v := range filterMap {
+						searchRequest.Fields[k] = fmt.Sprintf("%v", v)
+					}
+				}
+			}
+		}
+
+		// Fallback: ensure some time window is always specified
+		if !searchRequest.Range.Last.Set && !searchRequest.Range.Gte.Set {
+			searchRequest.Range.Last.S("15m")
+		}
+
+		// Pre-flight check for context existence
+		_, err = searchFactory.GetSearchContext(ctx, contextId, []string{}, searchRequest, nil)
+		if err != nil {
+			if errors.Is(err, config.ErrContextNotFound) {
+				all := make([]string, 0, len(cfg.Contexts))
+				for id := range cfg.Contexts {
+					all = append(all, id)
+				}
+				sort.Strings(all)
+				suggestions := suggestSimilar(contextId, all, 3)
+				payload := map[string]any{
+					"code":              "CONTEXT_NOT_FOUND",
+					"error":             err.Error(),
+					"invalidContext":    contextId,
+					"availableContexts": all,
+					"suggestions":       suggestions,
+					"hint":              "Use a suggested contextId or call list_contexts for enumeration.",
+				}
+				b, mErr := json.Marshal(payload)
+				if mErr != nil {
+					return mcp.NewToolResultError(fmt.Sprintf("failed to marshal error payload: %v", mErr)), nil
+				}
+				return mcp.NewToolResultText(string(b)), nil
+			}
+			return mcp.NewToolResultError(fmt.Sprintf("failed to get search context: %v", err)), nil
+		}
+
+		fieldValues, err := searchFactory.GetFieldValues(ctx, contextId, []string{}, searchRequest, fieldNames, nil)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to get field values: %v", err)), nil
+		}
+
+		jsonBytes, err := json.Marshal(fieldValues)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to marshal field values: %v", err)), nil
+		}
+		return mcp.NewToolResultText(string(jsonBytes)), nil
+	}
+	s.AddTool(getFieldValuesTool, getFieldValuesHandler)
+	handlers["get_field_values"] = getFieldValuesHandler
+
 	getContextDetailsTool := mcp.NewTool("get_context_details",
 		mcp.WithDescription("Inspect a context's details, including its variable schema."),
 		mcp.WithString("contextId", mcp.Required(), mcp.Description("The context ID to inspect.")),
