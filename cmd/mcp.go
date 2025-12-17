@@ -570,6 +570,7 @@ Example response:
 		mcp.WithString("start_time", mcp.Description("Absolute start time (RFC3339).")),
 		mcp.WithString("end_time", mcp.Description("Absolute end time (RFC3339).")),
 		mcp.WithObject("filters", mcp.Description("Additional key/value filters to apply (JSON object).")),
+		mcp.WithObject("variables", mcp.Description("Runtime variables for the context (JSON object).")),
 	)
 	getFieldValuesHandler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		cfg, searchFactory := cm.Get()
@@ -610,7 +611,8 @@ Example response:
 			searchRequest.Range.Lte.S(endTime)
 		}
 
-		// Handle filters
+		// Handle filters and variables
+		runtimeVars := make(map[string]string)
 		if args != nil {
 			if rawFilters, ok := args["filters"]; ok && rawFilters != nil {
 				if filterMap, ok := rawFilters.(map[string]any); ok {
@@ -622,6 +624,14 @@ Example response:
 					}
 				}
 			}
+			// Parse variables
+			if rawVars, ok := args["variables"]; ok && rawVars != nil {
+				if varMap, ok := rawVars.(map[string]any); ok {
+					for k, v := range varMap {
+						runtimeVars[k] = fmt.Sprintf("%v", v)
+					}
+				}
+			}
 		}
 
 		// Fallback: ensure some time window is always specified
@@ -630,7 +640,7 @@ Example response:
 		}
 
 		// Pre-flight check for context existence
-		_, err = searchFactory.GetSearchContext(ctx, contextId, []string{}, searchRequest, nil)
+		_, err = searchFactory.GetSearchContext(ctx, contextId, []string{}, searchRequest, runtimeVars)
 		if err != nil {
 			if errors.Is(err, config.ErrContextNotFound) {
 				return handleContextNotFound(contextId, cfg, err), nil
@@ -638,7 +648,7 @@ Example response:
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get search context: %v", err)), nil
 		}
 
-		fieldValues, err := searchFactory.GetFieldValues(ctx, contextId, []string{}, searchRequest, fieldNames, nil)
+		fieldValues, err := searchFactory.GetFieldValues(ctx, contextId, []string{}, searchRequest, fieldNames, runtimeVars)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get field values: %v", err)), nil
 		}

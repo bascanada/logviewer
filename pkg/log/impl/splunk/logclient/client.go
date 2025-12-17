@@ -42,7 +42,6 @@ type SplunkLogSearchClient struct {
 }
 
 func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
-
 	// initiate the things and wait for query to be done
 
 	if s.options.Headers == nil {
@@ -312,6 +311,9 @@ func GetClient(options SplunkLogSearchClientOptions) (client.LogClient, error) {
 	if options.Auth.Header != nil && len(options.Auth.Header) > 0 {
 		// set the Auth on the target so Get requests include the same headers
 		target.Auth = httpPkg.HeaderAuth{Headers: options.Auth.Header}
+	} else if options.Headers != nil && len(options.Headers) > 0 {
+		// Also check options.Headers for ad-hoc queries that pass headers directly
+		target.Auth = httpPkg.HeaderAuth{Headers: options.Headers}
 	}
 
 	restClient, err := restapi.GetSplunkRestClient(target)

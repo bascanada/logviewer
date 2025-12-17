@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"sync"
 
@@ -82,10 +83,12 @@ func buildSearchRequest() client.LogSearch {
 		searchRequest.FieldExtraction.KvRegex.S(kvRegex)
 	}
 	if to != "" {
-		searchRequest.Range.Lte.S(to)
+		normalizedTo, _ := ty.NormalizeTimeValue(to)
+		searchRequest.Range.Lte.S(normalizedTo)
 	}
 	if from != "" {
-		searchRequest.Range.Gte.S(from)
+		normalizedFrom, _ := ty.NormalizeTimeValue(from)
+		searchRequest.Range.Gte.S(normalizedFrom)
 	}
 	if last != "" {
 		searchRequest.Range.Last.S(last)
@@ -134,6 +137,9 @@ func buildSearchRequest() client.LogSearch {
 	}
 	if dockerProject != "" {
 		searchRequest.Options["project"] = dockerProject
+	}
+	if nativeQuery != "" {
+		searchRequest.NativeQuery.S(nativeQuery)
 	}
 
 	searchRequest.Follow = refresh
@@ -253,7 +259,7 @@ func getAdHocLogClient(searchRequest *client.LogSearch) (client.LogClient, error
 		logClient, err = docker.GetLogClient(dockerHost)
 	case "splunk":
 		headers := ty.MS{}
-		body := ty.MS{}
+		body := ty.MS{"output_mode": "json"} // Default to JSON output
 		if headerField != "" {
 			if err = headers.LoadMS(headerField); err != nil {
 				return nil, err
@@ -414,8 +420,8 @@ func resolveFieldValues(fieldNames []string) (map[string][]string, error) {
 		return nil, errors.New("no context specified; use -i to select a context")
 	}
 
-	// For multiple contexts, aggregate results
-	allResults := make(map[string][]string)
+	// For multiple contexts, aggregate results using sets for efficiency
+	allResultsSet := make(map[string]map[string]struct{})
 	var hasError bool
 
 	for _, contextId := range resolvedContextIds {
@@ -430,27 +436,30 @@ func resolveFieldValues(fieldNames []string) (map[string][]string, error) {
 			continue
 		}
 
-		// Merge results (for single context, this just copies; for multiple, it aggregates)
+		// Merge results into a set for uniqueness
 		for field, values := range fieldValues {
-			if existing, ok := allResults[field]; ok {
-				// Merge unique values
-				seen := make(map[string]bool)
-				for _, v := range existing {
-					seen[v] = true
-				}
-				for _, v := range values {
-					if !seen[v] {
-						allResults[field] = append(allResults[field], v)
-					}
-				}
-			} else {
-				allResults[field] = values
+			if _, ok := allResultsSet[field]; !ok {
+				allResultsSet[field] = make(map[string]struct{})
+			}
+			for _, v := range values {
+				allResultsSet[field][v] = struct{}{}
 			}
 		}
 	}
 
-	if hasError && len(allResults) == 0 {
+	if hasError && len(allResultsSet) == 0 {
 		return nil, errors.New("failed to get field values from all contexts")
+	}
+
+	// Convert sets to sorted slices for deterministic output
+	allResults := make(map[string][]string, len(allResultsSet))
+	for field, valuesSet := range allResultsSet {
+		values := make([]string, 0, len(valuesSet))
+		for v := range valuesSet {
+			values = append(values, v)
+		}
+		sort.Strings(values)
+		allResults[field] = values
 	}
 
 	return allResults, nil

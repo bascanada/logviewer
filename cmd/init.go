@@ -57,6 +57,9 @@ var (
 	to   string
 	last string
 
+	// native query
+	nativeQuery string
+
 	// fields
 	fields     []string
 	fieldsOps  []string
@@ -180,6 +183,9 @@ func init() {
 	queryCommand.PersistentFlags().StringVar(&from, "from", "", "Get entry gte datetime date >= from")
 	queryCommand.PersistentFlags().StringVar(&to, "to", "", "Get entry lte datetime date <= to")
 	queryCommand.PersistentFlags().StringVar(&last, "last", "", "Get entry in the last duration")
+
+	// NATIVE QUERY
+	queryCommand.PersistentFlags().StringVar(&nativeQuery, "native-query", "", "Raw query in backend's native syntax (Splunk SPL, OpenSearch Lucene)")
 
 	// Register completion for --last flag
 	_ = queryCommand.RegisterFlagCompletionFunc("last", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
