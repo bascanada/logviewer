@@ -282,17 +282,7 @@ func (s SplunkLogSearchClient) getFieldValuesFromSearch(ctx context.Context, sea
 		return nil, err
 	}
 
-	fields, _, err := searchResult.GetFields(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Convert UniSet to map[string][]string
-	result := make(map[string][]string)
-	for k, v := range fields {
-		result[k] = v
-	}
-	return result, nil
+	return client.GetFieldValuesFromResult(ctx, searchResult, nil)
 }
 
 func GetClient(options SplunkLogSearchClientOptions) (client.LogClient, error) {

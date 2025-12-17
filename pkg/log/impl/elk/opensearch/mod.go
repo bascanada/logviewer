@@ -185,17 +185,7 @@ func (kc openSearchClient) getFieldValuesFromSearch(ctx context.Context, search 
 		return nil, err
 	}
 
-	fields, _, err := searchResult.GetFields(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Convert UniSet to map[string][]string
-	result := make(map[string][]string)
-	for k, v := range fields {
-		result[k] = v
-	}
-	return result, nil
+	return client.GetFieldValuesFromResult(ctx, searchResult, nil)
 }
 
 func GetClient(target OpenSearchTarget) (client.LogClient, error) {

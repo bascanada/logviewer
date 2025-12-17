@@ -426,7 +426,7 @@ func resolveFieldValues(fieldNames []string) (map[string][]string, error) {
 
 	for _, contextId := range resolvedContextIds {
 		if len(resolvedContextIds) > 1 {
-			fmt.Printf("=== Context: %s ===\n", contextId)
+			fmt.Fprintf(os.Stderr, "=== Context: %s ===\n", contextId)
 		}
 
 		fieldValues, err := searchFactory.GetFieldValues(ctx, contextId, inherits, searchRequest, fieldNames, runtimeVars)
