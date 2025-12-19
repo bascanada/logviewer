@@ -233,11 +233,22 @@ type Client struct {
 	Options ty.MI  `json:"options"`
 }
 
+// PromptConfig holds optional customization for MCP prompt generation.
+type PromptConfig struct {
+	// Description overrides the auto-generated prompt description
+	Description string `json:"description,omitempty" yaml:"description,omitempty"`
+	// ExampleQueries provides context-specific example queries for the prompt
+	ExampleQueries []string `json:"exampleQueries,omitempty" yaml:"exampleQueries,omitempty"`
+	// Disabled prevents prompt generation for this context
+	Disabled bool `json:"disabled,omitempty" yaml:"disabled,omitempty"`
+}
+
 type SearchContext struct {
 	Description   string           `json:"description,omitempty" yaml:"description,omitempty"`
 	Client        string           `json:"client" yaml:"client"`
 	SearchInherit []string         `json:"searchInherit" yaml:"searchInherit"`
 	Search        client.LogSearch `json:"search" yaml:"search"`
+	Prompt        PromptConfig     `json:"prompt,omitempty" yaml:"prompt,omitempty"`
 }
 
 type Clients map[string]Client
