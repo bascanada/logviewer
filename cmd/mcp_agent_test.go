@@ -92,7 +92,7 @@ func NewOllamaClient(baseURL, model string) *OllamaClient {
 		baseURL = "http://localhost:11434"
 	}
 	if model == "" {
-		model = "mistral" // Good tool-calling support
+		model = "llama3.1" // Recommended for good tool-calling support
 	}
 	return &OllamaClient{
 		BaseURL: baseURL,

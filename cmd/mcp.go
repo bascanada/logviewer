@@ -1128,15 +1128,19 @@ func generatePromptContent(
 	sb.WriteString("```\n")
 	sb.WriteString(fmt.Sprintf("query_logs contextId=%s last=%s", contextId, timeRange))
 
-	// Add any required variables to the example
+	// Add any required variables to the example as a single JSON object
+	var requiredVarParts []string
 	for name, def := range ctxConfig.Search.Variables {
 		if def.Required {
 			exampleVal := "<value>"
 			if def.Default != nil {
 				exampleVal = fmt.Sprintf("%v", def.Default)
 			}
-			sb.WriteString(fmt.Sprintf(" variables={\"%s\":\"%s\"}", name, exampleVal))
+			requiredVarParts = append(requiredVarParts, fmt.Sprintf("\"%s\":\"%s\"", name, exampleVal))
 		}
+	}
+	if len(requiredVarParts) > 0 {
+		sb.WriteString(fmt.Sprintf(" variables={%s}", strings.Join(requiredVarParts, ", ")))
 	}
 	sb.WriteString("\n```\n")
 
