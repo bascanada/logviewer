@@ -90,6 +90,126 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// BackendGuide contains syntax documentation for a specific backend type.
+type BackendGuide struct {
+	Name           string
+	QueryLang      string
+	SyntaxGuide    string
+	ExampleQueries []string
+}
+
+// backendSyntaxGuides maps backend types to their query syntax documentation.
+var backendSyntaxGuides = map[string]BackendGuide{
+	"splunk": {
+		Name:      "Splunk",
+		QueryLang: "SPL (Search Processing Language)",
+		SyntaxGuide: `SPL Syntax:
+- Basic search: index=main sourcetype=json
+- Field filters: level=ERROR app="payment-service"
+- Wildcards: message=*timeout*
+- Time: earliest=-1h latest=now
+- Stats: | stats count by level
+- Timechart: | timechart span=1h count by level`,
+		ExampleQueries: []string{
+			`index=main level=ERROR | stats count by app`,
+			`index=main sourcetype=json | timechart span=1h count by level`,
+			`index=main message=*timeout* | top 10 app`,
+		},
+	},
+	"opensearch": {
+		Name:      "OpenSearch",
+		QueryLang: "Lucene Query Syntax",
+		SyntaxGuide: `Lucene Syntax:
+- Field match: level:ERROR
+- AND/OR: level:ERROR AND app:payment-service
+- Wildcards: message:*timeout*
+- Ranges: @timestamp:[2024-01-01 TO 2024-12-31]
+- Exists: _exists_:trace_id`,
+		ExampleQueries: []string{
+			`level:ERROR OR level:WARN`,
+			`app:payment-service AND message:*timeout*`,
+			`level:ERROR AND NOT app:debug-service`,
+		},
+	},
+	"kibana": {
+		Name:      "Kibana",
+		QueryLang: "KQL (Kibana Query Language)",
+		SyntaxGuide: `KQL Syntax:
+- Field match: level: ERROR
+- AND/OR: level: ERROR and app: payment-service
+- Wildcards: message: *timeout*
+- Negation: not level: DEBUG`,
+		ExampleQueries: []string{
+			`level: ERROR or level: WARN`,
+			`app: payment-service and message: *error*`,
+		},
+	},
+	"k8s": {
+		Name:      "Kubernetes",
+		QueryLang: "Label Selectors + Client-side Filtering",
+		SyntaxGuide: `Kubernetes Options:
+- namespace: Target namespace
+- pod: Specific pod name
+- labelSelector: Match pods (e.g., "app=api,env=prod")
+- container: Target container in multi-container pods
+- previous: Logs from previous container instance
+
+Filtering is done client-side on extracted fields.`,
+		ExampleQueries: []string{
+			`labelSelector=app=payment-processor,env=prod`,
+			`pod=payment-service-abc123 container=main`,
+		},
+	},
+	"docker": {
+		Name:      "Docker",
+		QueryLang: "Container Selectors",
+		SyntaxGuide: `Docker Options:
+- container: Container ID or name
+- service: Docker Compose service name
+- project: Docker Compose project name
+- timestamps: Include timestamps`,
+		ExampleQueries: []string{
+			`container=my-app`,
+			`service=api-gateway project=myproject`,
+		},
+	},
+	"cloudwatch": {
+		Name:      "CloudWatch Logs",
+		QueryLang: "CloudWatch Logs Insights",
+		SyntaxGuide: `Insights Syntax:
+- fields @timestamp, @message
+- filter @message like /error/i
+- filter level = 'ERROR'
+- stats count(*) by level
+- sort @timestamp desc`,
+		ExampleQueries: []string{
+			`fields @timestamp, @message | filter level = 'ERROR' | sort @timestamp desc`,
+			`stats count(*) by level | sort count desc`,
+		},
+	},
+	"ssh": {
+		Name:      "SSH",
+		QueryLang: "Shell Commands",
+		SyntaxGuide: `SSH executes shell commands on remote hosts.
+- cmd: Shell command template
+- Template variables: {{.Size.Value}}, {{.Range.Last.Value}}`,
+		ExampleQueries: []string{
+			`tail -f /var/log/app.log`,
+			`journalctl -u myservice --since "1 hour ago"`,
+		},
+	},
+	"local": {
+		Name:      "Local",
+		QueryLang: "Shell Commands",
+		SyntaxGuide: `Local backend executes shell commands locally.
+- cmd: Shell command template`,
+		ExampleQueries: []string{
+			`tail -f /var/log/syslog`,
+			`cat /path/to/app.log | grep ERROR`,
+		},
+	},
+}
+
 var mcpPort int
 
 var mcpCmd = &cobra.Command{
@@ -663,7 +783,20 @@ Example response:
 	handlers["get_field_values"] = getFieldValuesHandler
 
 	getContextDetailsTool := mcp.NewTool("get_context_details",
-		mcp.WithDescription("Inspect a context's details, including its variable schema."),
+		mcp.WithDescription(`Inspect a context's configuration including required variables, backend type, and capabilities.
+
+Usage: get_context_details contextId=<context>
+
+Parameters:
+  contextId (string, required): Context identifier to inspect.
+
+Returns: JSON object with context configuration (backend type, variables, field mappings).
+
+When to use:
+  - Before query_logs if you need to know what variables are required
+  - To discover backend-specific capabilities (e.g., native query syntax)
+  - To understand field mappings and available filters for a context
+`),
 		mcp.WithString("contextId", mcp.Required(), mcp.Description("The context ID to inspect.")),
 	)
 	getContextDetailsHandler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -709,7 +842,10 @@ Example response:
 		return []mcp.ResourceContents{mcp.TextResourceContents{URI: "logviewer://contexts", MIMEType: "application/json", Text: string(b)}}, nil
 	})
 
-	// Prompt guiding efficient investigation workflow
+	// Register dynamic context-specific prompts
+	generateContextPrompts(s, cm)
+
+	// Prompt guiding efficient investigation workflow (generic fallback)
 	investigationPrompt := mcp.NewPrompt(
 		"log_investigation",
 		mcp.WithPromptDescription("Guide for investigating logs: query first, broaden or discover fields only if needed."),
@@ -841,4 +977,177 @@ func levenshtein(a, b string) int {
 		}
 	}
 	return dp[m]
+}
+
+// generateContextPrompts creates and registers MCP prompts for all contexts.
+func generateContextPrompts(s *server.MCPServer, cm *ConfigManager) {
+	cfg, _ := cm.Get()
+
+	for contextId, ctx := range cfg.Contexts {
+		// Skip if prompt generation is disabled for this context
+		if ctx.Prompt.Disabled {
+			continue
+		}
+
+		// Get backend type from client config
+		backendType := "unknown"
+		if client, ok := cfg.Clients[ctx.Client]; ok {
+			backendType = client.Type
+		}
+
+		// Build prompt description
+		promptDesc := ctx.Prompt.Description
+		if promptDesc == "" {
+			promptDesc = fmt.Sprintf("Investigation guide for %s (%s backend)", contextId, backendType)
+			if ctx.Description != "" {
+				promptDesc = fmt.Sprintf("%s - %s", promptDesc, ctx.Description)
+			}
+		}
+
+		// Create prompt with arguments
+		prompt := mcp.NewPrompt(
+			fmt.Sprintf("investigate_%s", contextId),
+			mcp.WithPromptDescription(promptDesc),
+			mcp.WithArgument("objective", mcp.ArgumentDescription("What you're investigating (e.g., 'find payment failures', 'trace latency issues')")),
+			mcp.WithArgument("timeRange", mcp.ArgumentDescription("Time window to search (e.g., '15m', '1h', '24h'). Default: 15m")),
+		)
+
+		// Capture variables for closure
+		ctxId := contextId
+		ctxConfig := ctx
+		backend := backendType
+
+		// Register prompt with handler
+		s.AddPrompt(prompt, func(ctx context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+			return generatePromptContent(cm, ctxId, ctxConfig, backend, request)
+		})
+	}
+}
+
+// generatePromptContent builds the full prompt text for a context.
+func generatePromptContent(
+	cm *ConfigManager,
+	contextId string,
+	ctxConfig config.SearchContext,
+	backendType string,
+	request mcp.GetPromptRequest,
+) (*mcp.GetPromptResult, error) {
+	objective := request.Params.Arguments["objective"]
+	if objective == "" {
+		objective = "general log investigation"
+	}
+	timeRange := request.Params.Arguments["timeRange"]
+	if timeRange == "" {
+		timeRange = "15m"
+	}
+
+	guide := backendSyntaxGuides[backendType]
+	if guide.Name == "" {
+		guide = BackendGuide{Name: backendType, QueryLang: "N/A"}
+	}
+
+	var sb strings.Builder
+
+	// Section 1: Context Overview
+	sb.WriteString(fmt.Sprintf("# Investigation Guide: %s\n\n", contextId))
+	sb.WriteString(fmt.Sprintf("**Objective:** %s\n", objective))
+	sb.WriteString(fmt.Sprintf("**Time Range:** %s\n\n", timeRange))
+
+	sb.WriteString("## Context Overview\n")
+	if ctxConfig.Description != "" {
+		sb.WriteString(fmt.Sprintf("- **Description:** %s\n", ctxConfig.Description))
+	}
+	sb.WriteString(fmt.Sprintf("- **Backend:** %s (%s)\n", guide.Name, guide.QueryLang))
+	sb.WriteString(fmt.Sprintf("- **Client:** %s\n\n", ctxConfig.Client))
+
+	// Section 2: Variables (if any)
+	if len(ctxConfig.Search.Variables) > 0 {
+		sb.WriteString("## Variables\n")
+		for name, def := range ctxConfig.Search.Variables {
+			required := ""
+			if def.Required {
+				required = " **[REQUIRED]**"
+			}
+			defaultVal := ""
+			if def.Default != nil {
+				defaultVal = fmt.Sprintf(" (default: %v)", def.Default)
+			}
+			sb.WriteString(fmt.Sprintf("- `%s`%s: %s%s\n", name, required, def.Description, defaultVal))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Section 3: Field Extraction Info
+	fe := ctxConfig.Search.FieldExtraction
+	if fe.Json.Set && fe.Json.Value {
+		sb.WriteString("## Field Extraction\n")
+		sb.WriteString("- **Format:** JSON structured logs\n")
+		if fe.JsonMessageKey.Set {
+			sb.WriteString(fmt.Sprintf("  - Message key: `%s`\n", fe.JsonMessageKey.Value))
+		}
+		if fe.JsonLevelKey.Set {
+			sb.WriteString(fmt.Sprintf("  - Level key: `%s`\n", fe.JsonLevelKey.Value))
+		}
+		if fe.JsonTimestampKey.Set {
+			sb.WriteString(fmt.Sprintf("  - Timestamp key: `%s`\n", fe.JsonTimestampKey.Value))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Section 4: Native Query Syntax
+	if guide.SyntaxGuide != "" {
+		sb.WriteString("## Native Query Syntax\n")
+		sb.WriteString(fmt.Sprintf("```\n%s\n```\n\n", guide.SyntaxGuide))
+	}
+
+	// Section 5: Example Queries
+	examples := guide.ExampleQueries
+	if len(ctxConfig.Prompt.ExampleQueries) > 0 {
+		examples = ctxConfig.Prompt.ExampleQueries
+	}
+	if len(examples) > 0 {
+		sb.WriteString("## Example Queries\n")
+		for _, ex := range examples {
+			sb.WriteString(fmt.Sprintf("- `%s`\n", ex))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Section 6: Investigation Workflow
+	sb.WriteString("## Investigation Workflow\n")
+	sb.WriteString(fmt.Sprintf(`1. **Start broad:** query_logs contextId=%s last=%s size=50
+2. **Review results:** Look for patterns, errors, anomalies
+3. **Narrow down:** Add filters (e.g., fields={"level":"ERROR"})
+4. **Use native query:** For complex searches, use nativeQuery parameter
+5. **Discover fields:** If unsure about field names, call get_fields contextId=%s
+
+`, contextId, timeRange, contextId))
+
+	// Section 7: Quick Start Command
+	sb.WriteString("## Quick Start\n")
+	sb.WriteString("```\n")
+	sb.WriteString(fmt.Sprintf("query_logs contextId=%s last=%s", contextId, timeRange))
+
+	// Add any required variables to the example as a single JSON object
+	var requiredVarParts []string
+	for name, def := range ctxConfig.Search.Variables {
+		if def.Required {
+			exampleVal := "<value>"
+			if def.Default != nil {
+				exampleVal = fmt.Sprintf("%v", def.Default)
+			}
+			requiredVarParts = append(requiredVarParts, fmt.Sprintf("\"%s\":\"%s\"", name, exampleVal))
+		}
+	}
+	if len(requiredVarParts) > 0 {
+		sb.WriteString(fmt.Sprintf(" variables={%s}", strings.Join(requiredVarParts, ", ")))
+	}
+	sb.WriteString("\n```\n")
+
+	return mcp.NewGetPromptResult(
+		fmt.Sprintf("Investigation Guide: %s", contextId),
+		[]mcp.PromptMessage{
+			mcp.NewPromptMessage(mcp.RoleAssistant, mcp.NewTextContent(sb.String())),
+		},
+	), nil
 }

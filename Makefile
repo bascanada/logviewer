@@ -1,4 +1,4 @@
-.PHONY: build build/all release release/all test test/coverage integration/start integration/stop integration/tests integration/logs integration/start/logs integration/stop/logs integration/deploy-simulation install uninstall
+.PHONY: build build/all release release/all test test/coverage integration/start integration/stop integration/tests integration/logs integration/start/logs integration/stop/logs integration/deploy-simulation integration/mcp/setup integration/mcp/test install uninstall
 
 SHA=$(shell git rev-parse --short HEAD)
 # Determine latest tag (fallback to '0.0.0' when repository has no tags or git fails)
@@ -219,5 +219,20 @@ integration/tests: build
 	@COREDNS_POD=$$(KUBECONFIG=$(K3S_KUBECONFIG) kubectl get pods -n kube-system -l k8s-app=kube-dns -o jsonpath='{.items[0].metadata.name}') \
 		build/logviewer query log -c ./config.json -i k3s-coredns --size 200
 	@echo "Querying logs from localstack"
-	@build/logviewer query log -c ./config.json -i cloudwatch-app-logs --last 24h --size 3	
+	@build/logviewer query log -c ./config.json -i cloudwatch-app-logs --last 24h --size 3
+
+
+# MCP Agent Integration Tests (requires Ollama)
+
+integration/mcp/setup:
+	@echo "Setting up MCP integration tests..."
+	@command -v ollama >/dev/null 2>&1 || { echo "ERROR: Ollama not installed. Visit https://ollama.ai/download"; exit 1; }
+	@echo "Pulling llama3.1 model (this may take a while)..."
+	@ollama pull llama3.1
+	@echo "MCP integration setup complete."
+
+integration/mcp/test:
+	@echo "Running MCP agent integration tests..."
+	@command -v ollama >/dev/null 2>&1 || { echo "ERROR: Ollama not installed. Run 'make integration/mcp/setup' first."; exit 1; }
+	@OLLAMA_MODEL=llama3.1 go test ./cmd/... -run TestMCPAgent -v
 

@@ -185,6 +185,98 @@ kubectl --kubeconfig=integration/k8s/k3s.yaml delete -f integration/k8s/app.yaml
 make integration/stop
 ```
 
+## MCP Agent Integration Tests
+
+The logviewer includes LLM-driven integration tests that use a local Ollama instance to test the MCP server with an actual AI agent. These tests validate that an LLM can effectively discover contexts, query logs, and investigate issues.
+
+### Prerequisites
+
+1. **Install Ollama**: https://ollama.ai/download
+2. **Pull a model with tool-calling support**:
+   ```bash
+   ollama pull mistral  # Recommended for tool calling
+   # or
+   ollama pull llama3
+   ```
+3. **Start Ollama**:
+   ```bash
+   ollama serve
+   ```
+
+### Running LLM Integration Tests
+
+```bash
+# Run all MCP agent tests (requires Ollama running)
+go test ./cmd/... -run TestMCPAgent -v
+
+# Run specific test scenarios
+go test ./cmd/... -run TestMCPAgent_DiscoveryWorkflow -v
+go test ./cmd/... -run TestMCPAgent_ErrorInvestigation -v
+go test ./cmd/... -run TestMCPAgent_MultiStepReasoning -v
+go test ./cmd/... -run TestMCPAgent_ContextNotFound -v
+go test ./cmd/... -run TestMCPAgent_DynamicPrompts -v
+
+# Run benchmarks
+go test ./cmd/... -run=^$ -bench=BenchmarkMCPToolCall -v
+```
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OLLAMA_HOST` | `http://localhost:11434` | Ollama API endpoint |
+| `OLLAMA_MODEL` | `llama3.1` | Model to use for testing |
+
+### Recommended Models
+
+Tool-calling capability varies by model. Recommended models in order of reliability:
+
+1. **llama3.1** (8B) - Good balance of speed and tool-calling
+2. **qwen2.5** - Excellent tool-calling support
+3. **mistral** - Works but sometimes describes instead of calling tools
+4. **llama3.1:70b** - Best accuracy but requires more resources
+
+```bash
+# Pull recommended model
+ollama pull llama3.1
+
+# Or for better accuracy (requires ~40GB RAM)
+ollama pull llama3.1:70b
+```
+
+### Test Scenarios
+
+1. **Discovery Workflow**: Agent lists available contexts and fields
+2. **Error Investigation**: Agent finds ERROR logs using appropriate filters
+3. **Multi-Step Reasoning**: Complex queries requiring multiple tool calls
+4. **Context Not Found**: Error handling when context doesn't exist
+5. **Dynamic Prompts**: Validates context-specific prompt generation
+
+### Test Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   Test Harness                      │
+│  ┌───────────────────┐    ┌─────────────────────┐  │
+│  │   OllamaClient    │    │   MCP In-Process    │  │
+│  │  (LLM Interface)  │◄──►│      Client         │  │
+│  └───────────────────┘    └─────────────────────┘  │
+│           │                         │               │
+│           ▼                         ▼               │
+│  ┌───────────────────┐    ┌─────────────────────┐  │
+│  │  Local Ollama     │    │   MCP Server        │  │
+│  │  (llama3.1)       │    │   (logviewer)       │  │
+│  └───────────────────┘    └─────────────────────┘  │
+└─────────────────────────────────────────────────────┘
+```
+
+The test harness:
+1. Starts an in-process MCP server
+2. Connects to local Ollama
+3. Sends prompts to the LLM with MCP tools available
+4. Executes tool calls and feeds results back to LLM
+5. Validates the agent's tool usage and final response
+
 ## Development
 
 To modify the simulator:
