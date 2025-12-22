@@ -55,38 +55,83 @@ func buildKibanaCondition(f *client.Filter) ty.MI {
 		field = "_all"
 	}
 
+	var condition ty.MI
+
 	switch op {
 	case operator.Regex:
-		return ty.MI{
+		condition = ty.MI{
 			"regexp": ty.MI{
 				field: f.Value,
 			},
 		}
 	case operator.Wildcard:
-		return ty.MI{
+		condition = ty.MI{
 			"wildcard": ty.MI{
 				field: f.Value,
 			},
 		}
 	case operator.Exists:
-		return ty.MI{
+		condition = ty.MI{
 			"exists": ty.MI{
 				"field": field,
 			},
 		}
 	case operator.Equals:
-		return ty.MI{
+		condition = ty.MI{
 			"term": ty.MI{
 				field: f.Value,
 			},
 		}
+	case operator.Gt:
+		condition = ty.MI{
+			"range": ty.MI{
+				field: ty.MI{
+					"gt": f.Value,
+				},
+			},
+		}
+	case operator.Gte:
+		condition = ty.MI{
+			"range": ty.MI{
+				field: ty.MI{
+					"gte": f.Value,
+				},
+			},
+		}
+	case operator.Lt:
+		condition = ty.MI{
+			"range": ty.MI{
+				field: ty.MI{
+					"lt": f.Value,
+				},
+			},
+		}
+	case operator.Lte:
+		condition = ty.MI{
+			"range": ty.MI{
+				field: ty.MI{
+					"lte": f.Value,
+				},
+			},
+		}
 	default: // match - use match_phrase for Kibana (default behavior)
-		return ty.MI{
+		condition = ty.MI{
 			"match_phrase": ty.MI{
 				field: f.Value,
 			},
 		}
 	}
+
+	// Handle negation
+	if f.Negate {
+		return ty.MI{
+			"bool": ty.MI{
+				"must_not": []ty.MI{condition},
+			},
+		}
+	}
+
+	return condition
 }
 
 // buildKibanaQuery recursively builds a Kibana bool query from a Filter AST.

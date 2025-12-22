@@ -60,6 +60,9 @@ var (
 	// native query
 	nativeQuery string
 
+	// hl-compatible query expression
+	queryExpr string
+
 	// fields
 	fields     []string
 	fieldsOps  []string
@@ -186,6 +189,9 @@ func init() {
 
 	// NATIVE QUERY
 	queryCommand.PersistentFlags().StringVar(&nativeQuery, "native-query", "", "Raw query in backend's native syntax (Splunk SPL, OpenSearch Lucene)")
+
+	// HL-COMPATIBLE QUERY
+	queryCommand.PersistentFlags().StringVarP(&queryExpr, "query", "q", "", "Complex filter expression with boolean logic (e.g., '(level=error OR status>=500) AND service=api')")
 
 	// Register completion for --last flag
 	_ = queryCommand.RegisterFlagCompletionFunc("last", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

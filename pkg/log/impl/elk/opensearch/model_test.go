@@ -231,6 +231,269 @@ func TestGetSearchRequest_RecursiveFilter(t *testing.T) {
 	})
 }
 
+// Tests for hl-compatible query operators
+func TestGetSearchRequest_HLCompatibleOperators(t *testing.T) {
+	t.Run("comparison operator - greater than", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Field: "latency_ms",
+				Op:    "gt",
+				Value: "1000",
+			},
+			Range: client.SearchRange{Last: ty.OptWrap("30m")},
+			Size:  ty.OptWrap(100),
+		}
+
+		request, err := GetSearchRequest(logSearch)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+
+		b, _ := json.MarshalIndent(&request, "", "    ")
+		queryStr := string(b)
+
+		if !strings.Contains(queryStr, "range") {
+			t.Errorf("expected query to contain 'range', got: %s", queryStr)
+		}
+		if !strings.Contains(queryStr, `"gt"`) {
+			t.Errorf("expected query to contain 'gt', got: %s", queryStr)
+		}
+		if !strings.Contains(queryStr, "1000") {
+			t.Errorf("expected query to contain '1000', got: %s", queryStr)
+		}
+	})
+
+	t.Run("comparison operator - greater than or equal", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Field: "latency_ms",
+				Op:    "gte",
+				Value: "500",
+			},
+			Range: client.SearchRange{Last: ty.OptWrap("30m")},
+			Size:  ty.OptWrap(100),
+		}
+
+		request, err := GetSearchRequest(logSearch)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+
+		b, _ := json.MarshalIndent(&request, "", "    ")
+		queryStr := string(b)
+
+		if !strings.Contains(queryStr, "range") {
+			t.Errorf("expected query to contain 'range', got: %s", queryStr)
+		}
+		if !strings.Contains(queryStr, `"gte"`) {
+			t.Errorf("expected query to contain 'gte', got: %s", queryStr)
+		}
+	})
+
+	t.Run("comparison operator - less than", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Field: "latency_ms",
+				Op:    "lt",
+				Value: "100",
+			},
+			Range: client.SearchRange{Last: ty.OptWrap("30m")},
+			Size:  ty.OptWrap(100),
+		}
+
+		request, err := GetSearchRequest(logSearch)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+
+		b, _ := json.MarshalIndent(&request, "", "    ")
+		queryStr := string(b)
+
+		if !strings.Contains(queryStr, "range") {
+			t.Errorf("expected query to contain 'range', got: %s", queryStr)
+		}
+		if !strings.Contains(queryStr, `"lt"`) {
+			t.Errorf("expected query to contain 'lt', got: %s", queryStr)
+		}
+	})
+
+	t.Run("comparison operator - less than or equal", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Field: "latency_ms",
+				Op:    "lte",
+				Value: "200",
+			},
+			Range: client.SearchRange{Last: ty.OptWrap("30m")},
+			Size:  ty.OptWrap(100),
+		}
+
+		request, err := GetSearchRequest(logSearch)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+
+		b, _ := json.MarshalIndent(&request, "", "    ")
+		queryStr := string(b)
+
+		if !strings.Contains(queryStr, "range") {
+			t.Errorf("expected query to contain 'range', got: %s", queryStr)
+		}
+		if !strings.Contains(queryStr, `"lte"`) {
+			t.Errorf("expected query to contain 'lte', got: %s", queryStr)
+		}
+	})
+
+	t.Run("negate field - equals with negate", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Field:  "level",
+				Op:     "equals",
+				Value:  "INFO",
+				Negate: true,
+			},
+			Range: client.SearchRange{Last: ty.OptWrap("30m")},
+			Size:  ty.OptWrap(100),
+		}
+
+		request, err := GetSearchRequest(logSearch)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+
+		b, _ := json.MarshalIndent(&request, "", "    ")
+		queryStr := string(b)
+
+		if !strings.Contains(queryStr, "must_not") {
+			t.Errorf("expected query to contain 'must_not' for negated filter, got: %s", queryStr)
+		}
+		if !strings.Contains(queryStr, "INFO") {
+			t.Errorf("expected query to contain 'INFO', got: %s", queryStr)
+		}
+	})
+
+	t.Run("negate field - comparison with negate", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Field:  "latency_ms",
+				Op:     "gt",
+				Value:  "1000",
+				Negate: true,
+			},
+			Range: client.SearchRange{Last: ty.OptWrap("30m")},
+			Size:  ty.OptWrap(100),
+		}
+
+		request, err := GetSearchRequest(logSearch)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+
+		b, _ := json.MarshalIndent(&request, "", "    ")
+		queryStr := string(b)
+
+		if !strings.Contains(queryStr, "must_not") {
+			t.Errorf("expected query to contain 'must_not' for negated filter, got: %s", queryStr)
+		}
+		if !strings.Contains(queryStr, "range") {
+			t.Errorf("expected query to contain 'range', got: %s", queryStr)
+		}
+	})
+
+	t.Run("complex - OR with comparison operators", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Logic: client.LogicOr,
+				Filters: []client.Filter{
+					{Field: "level", Value: "ERROR"},
+					{Field: "latency_ms", Op: "gt", Value: "1000"},
+				},
+			},
+			Range: client.SearchRange{Last: ty.OptWrap("30m")},
+			Size:  ty.OptWrap(100),
+		}
+
+		request, err := GetSearchRequest(logSearch)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+
+		b, _ := json.MarshalIndent(&request, "", "    ")
+		queryStr := string(b)
+
+		if !strings.Contains(queryStr, "should") {
+			t.Errorf("expected query to contain 'should' for OR, got: %s", queryStr)
+		}
+		if !strings.Contains(queryStr, "ERROR") {
+			t.Errorf("expected query to contain 'ERROR', got: %s", queryStr)
+		}
+		if !strings.Contains(queryStr, "range") {
+			t.Errorf("expected query to contain 'range', got: %s", queryStr)
+		}
+	})
+
+	t.Run("complex - AND with negation", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Logic: client.LogicAnd,
+				Filters: []client.Filter{
+					{Field: "level", Value: "ERROR"},
+					{Field: "app", Op: "equals", Value: "payment-service", Negate: true},
+				},
+			},
+			Range: client.SearchRange{Last: ty.OptWrap("30m")},
+			Size:  ty.OptWrap(100),
+		}
+
+		request, err := GetSearchRequest(logSearch)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+
+		b, _ := json.MarshalIndent(&request, "", "    ")
+		queryStr := string(b)
+
+		if !strings.Contains(queryStr, "must") {
+			t.Errorf("expected query to contain 'must' for AND, got: %s", queryStr)
+		}
+		if !strings.Contains(queryStr, "must_not") {
+			t.Errorf("expected query to contain 'must_not' for negated filter, got: %s", queryStr)
+		}
+		if !strings.Contains(queryStr, "ERROR") {
+			t.Errorf("expected query to contain 'ERROR', got: %s", queryStr)
+		}
+	})
+
+	t.Run("comparison range - latency between values", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Logic: client.LogicAnd,
+				Filters: []client.Filter{
+					{Field: "latency_ms", Op: "gte", Value: "500"},
+					{Field: "latency_ms", Op: "lt", Value: "2000"},
+				},
+			},
+			Range: client.SearchRange{Last: ty.OptWrap("30m")},
+			Size:  ty.OptWrap(100),
+		}
+
+		request, err := GetSearchRequest(logSearch)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+
+		b, _ := json.MarshalIndent(&request, "", "    ")
+		queryStr := string(b)
+
+		if !strings.Contains(queryStr, `"gte"`) {
+			t.Errorf("expected query to contain 'gte', got: %s", queryStr)
+		}
+		if !strings.Contains(queryStr, `"lt"`) {
+			t.Errorf("expected query to contain 'lt', got: %s", queryStr)
+		}
+	})
+}
+
 func TestGetSearchRequest_NativeQuery(t *testing.T) {
 	t.Run("native query standalone", func(t *testing.T) {
 		logSearch := &client.LogSearch{
