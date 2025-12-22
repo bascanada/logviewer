@@ -16,3 +16,5 @@ integration/k8s/k3s.*
 .DS_Store
 
 dist/
+
+logviewer.wiki/

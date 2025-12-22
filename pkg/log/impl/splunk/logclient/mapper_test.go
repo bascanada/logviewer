@@ -493,6 +493,168 @@ func TestTrimTrailingPipe(t *testing.T) {
 	}
 }
 
+// Tests for hl-compatible query operators
+func TestSearchRequest_HLCompatibleOperators(t *testing.T) {
+	t.Run("comparison operator - greater than", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Field: "latency_ms",
+				Op:    operator.Gt,
+				Value: "1000",
+			},
+			Options: ty.MI{"index": "main"},
+		}
+		logSearch.Range.Last.S("1h")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Contains(t, requestBodyFields["search"], `latency_ms>1000`)
+	})
+
+	t.Run("comparison operator - greater than or equal", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Field: "latency_ms",
+				Op:    operator.Gte,
+				Value: "500",
+			},
+			Options: ty.MI{"index": "main"},
+		}
+		logSearch.Range.Last.S("1h")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Contains(t, requestBodyFields["search"], `latency_ms>=500`)
+	})
+
+	t.Run("comparison operator - less than", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Field: "latency_ms",
+				Op:    operator.Lt,
+				Value: "100",
+			},
+			Options: ty.MI{"index": "main"},
+		}
+		logSearch.Range.Last.S("1h")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Contains(t, requestBodyFields["search"], `latency_ms<100`)
+	})
+
+	t.Run("comparison operator - less than or equal", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Field: "latency_ms",
+				Op:    operator.Lte,
+				Value: "200",
+			},
+			Options: ty.MI{"index": "main"},
+		}
+		logSearch.Range.Last.S("1h")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Contains(t, requestBodyFields["search"], `latency_ms<=200`)
+	})
+
+	t.Run("negate field - equals with negate", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Field:  "level",
+				Op:     operator.Equals,
+				Value:  "DEBUG",
+				Negate: true,
+			},
+			Options: ty.MI{"index": "main"},
+		}
+		logSearch.Range.Last.S("1h")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Contains(t, requestBodyFields["search"], `NOT`)
+		assert.Contains(t, requestBodyFields["search"], `level="DEBUG"`)
+	})
+
+	t.Run("negate field - regex with negate", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Field:  "message",
+				Op:     operator.Regex,
+				Value:  ".*success.*",
+				Negate: true,
+			},
+			Options: ty.MI{"index": "main"},
+		}
+		logSearch.Range.Last.S("1h")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		// Negated regex in Splunk uses `where NOT match(...)` for valid SPL
+		assert.Contains(t, requestBodyFields["search"], `where NOT match(message, ".*success.*")`)
+	})
+
+	t.Run("complex - OR with comparison operators", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Logic: client.LogicOr,
+				Filters: []client.Filter{
+					{Field: "level", Value: "ERROR"},
+					{Field: "latency_ms", Op: operator.Gt, Value: "1000"},
+				},
+			},
+			Options: ty.MI{"index": "main"},
+		}
+		logSearch.Range.Last.S("1h")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Contains(t, requestBodyFields["search"], `level="ERROR"`)
+		assert.Contains(t, requestBodyFields["search"], `latency_ms>1000`)
+		assert.Contains(t, requestBodyFields["search"], `OR`)
+	})
+
+	t.Run("complex - AND with negation", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Logic: client.LogicAnd,
+				Filters: []client.Filter{
+					{Field: "level", Value: "ERROR"},
+					{Field: "app", Op: operator.Equals, Value: "payment-service", Negate: true},
+				},
+			},
+			Options: ty.MI{"index": "main"},
+		}
+		logSearch.Range.Last.S("1h")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Contains(t, requestBodyFields["search"], `level="ERROR"`)
+		assert.Contains(t, requestBodyFields["search"], `NOT`)
+		assert.Contains(t, requestBodyFields["search"], `app="payment-service"`)
+	})
+
+	t.Run("comparison with range - latency between values", func(t *testing.T) {
+		logSearch := &client.LogSearch{
+			Filter: &client.Filter{
+				Logic: client.LogicAnd,
+				Filters: []client.Filter{
+					{Field: "latency_ms", Op: operator.Gte, Value: "500"},
+					{Field: "latency_ms", Op: operator.Lt, Value: "2000"},
+				},
+			},
+			Options: ty.MI{"index": "main"},
+		}
+		logSearch.Range.Last.S("1h")
+
+		requestBodyFields, err := getSearchRequest(logSearch)
+		assert.NoError(t, err)
+		assert.Contains(t, requestBodyFields["search"], `latency_ms>=500`)
+		assert.Contains(t, requestBodyFields["search"], `latency_ms<2000`)
+	})
+}
+
 func TestContainsTransformingCommand(t *testing.T) {
 	tests := []struct {
 		name     string

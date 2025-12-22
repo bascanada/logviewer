@@ -43,38 +43,85 @@ func buildOpenSearchCondition(f *client.Filter) Map {
 		field = "_all" // OpenSearch full-text field
 	}
 
+	var condition Map
+
 	switch op {
 	case operator.Regex:
-		return Map{
+		condition = Map{
 			"regexp": Map{
 				field: f.Value,
 			},
 		}
 	case operator.Wildcard:
-		return Map{
+		condition = Map{
 			"wildcard": Map{
 				field: f.Value,
 			},
 		}
 	case operator.Exists:
-		return Map{
+		condition = Map{
 			"exists": Map{
 				"field": field,
 			},
 		}
 	case operator.Equals:
-		return Map{
-			"term": Map{
+		// Use match instead of term for text fields compatibility
+		// term query requires exact token match which fails on analyzed text fields
+		condition = Map{
+			"match": Map{
 				field: f.Value,
 			},
 		}
+	case operator.Gt:
+		condition = Map{
+			"range": Map{
+				field: Map{
+					"gt": f.Value,
+				},
+			},
+		}
+	case operator.Gte:
+		condition = Map{
+			"range": Map{
+				field: Map{
+					"gte": f.Value,
+				},
+			},
+		}
+	case operator.Lt:
+		condition = Map{
+			"range": Map{
+				field: Map{
+					"lt": f.Value,
+				},
+			},
+		}
+	case operator.Lte:
+		condition = Map{
+			"range": Map{
+				field: Map{
+					"lte": f.Value,
+				},
+			},
+		}
 	default: // match
-		return Map{
+		condition = Map{
 			"match": Map{
 				field: f.Value,
 			},
 		}
 	}
+
+	// Handle negation
+	if f.Negate {
+		return Map{
+			"bool": Map{
+				"must_not": []Map{condition},
+			},
+		}
+	}
+
+	return condition
 }
 
 // buildOpenSearchQuery recursively builds an OpenSearch bool query from a Filter AST.

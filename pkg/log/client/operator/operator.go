@@ -6,4 +6,9 @@ const (
 	Wildcard = "wildcard"
 	Exists   = "exists"
 	Regex    = "regex"
+	// Comparison operators for hl-compatible syntax
+	Gt  = "gt"  // >
+	Gte = "gte" // >=
+	Lt  = "lt"  // <
+	Lte = "lte" // <=
 )

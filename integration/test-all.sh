@@ -1,7 +1,7 @@
 #!/bin/bash
 # Master test script that runs all integration tests
 # Usage: ./integration/test-all.sh [test-suite]
-# Test suites: log, field, values, filters, native, all (default)
+# Test suites: log, field, values, filters, native, hl, all (default)
 
 source "$(dirname "${BASH_SOURCE[0]}")/test-common.sh"
 
@@ -31,6 +31,7 @@ test_field()   { run_test "test-query-field.sh" "Query Field Tests"; }
 test_values()  { run_test "test-query-values.sh" "Query Values Tests"; }
 test_filters() { run_test "test-recursive-filters.sh" "Recursive Filter Tests"; }
 test_native()  { run_test "test-native-queries.sh" "Native Query Tests"; }
+test_hl()      { run_test "test-hl-queries.sh" "HL-Compatible Query Tests"; }
 
 print_summary() {
     print_major_header "TEST SUMMARY"
@@ -63,16 +64,18 @@ main() {
         values)  test_values ;;
         filters) test_filters ;;
         native)  test_native ;;
+        hl)      test_hl ;;
         all)
             test_log
             test_field
             test_values
             test_filters
             test_native
+            test_hl
             ;;
         *)
             echo "Unknown test suite: $suite"
-            echo "Usage: $0 [log|field|values|filters|native|all]"
+            echo "Usage: $0 [log|field|values|filters|native|hl|all]"
             exit 1
             ;;
     esac

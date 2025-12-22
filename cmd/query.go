@@ -23,10 +23,27 @@ import (
 	splunk "github.com/bascanada/logviewer/pkg/log/impl/splunk/logclient"
 	"github.com/bascanada/logviewer/pkg/log/impl/ssh"
 	"github.com/bascanada/logviewer/pkg/log/printer"
+	"github.com/bascanada/logviewer/pkg/query"
 	"github.com/bascanada/logviewer/pkg/ty"
 
 	"github.com/spf13/cobra"
 )
+
+// mergeFilterWithAnd merges a new filter into an existing filter using AND logic.
+// If existing is nil, it will be set to the new filter.
+func mergeFilterWithAnd(existing **client.Filter, new *client.Filter) {
+	if new == nil {
+		return
+	}
+	if *existing == nil {
+		*existing = new
+	} else {
+		*existing = &client.Filter{
+			Logic:   client.LogicAnd,
+			Filters: []client.Filter{**existing, *new},
+		}
+	}
+}
 
 func stringArrayEnvVariable(strs []string, maps *ty.MS) error {
 	for _, f := range strs {
@@ -93,12 +110,48 @@ func buildSearchRequest() client.LogSearch {
 	if last != "" {
 		searchRequest.Range.Last.S(last)
 	}
+	// Parse fields: auto-detect hl syntax vs legacy syntax
 	if len(fields) > 0 {
-		stringArrayEnvVariable(fields, &searchRequest.Fields)
+		var hlFields []string
+		var legacyFields []string
+
+		for _, f := range fields {
+			if query.IsHLSyntax(f) {
+				hlFields = append(hlFields, f)
+			} else {
+				legacyFields = append(legacyFields, f)
+			}
+		}
+
+		// Process legacy fields (field=value)
+		if len(legacyFields) > 0 {
+			stringArrayEnvVariable(legacyFields, &searchRequest.Fields)
+		}
+
+		// Process hl-syntax fields into Filter
+		if len(hlFields) > 0 {
+			hlFilter, err := query.ParseFilterFlags(hlFields)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "warning: failed to parse filter: %v\n", err)
+			} else {
+				mergeFilterWithAnd(&searchRequest.Filter, hlFilter)
+			}
+		}
 	}
 	if len(fieldsOps) > 0 {
 		stringArrayEnvVariable(fieldsOps, &searchRequest.FieldsCondition)
 	}
+
+	// Parse -q/--query expression
+	if queryExpr != "" {
+		queryFilter, err := query.ParseQueryExpression(queryExpr)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to parse query expression: %v\n", err)
+		} else {
+			mergeFilterWithAnd(&searchRequest.Filter, queryFilter)
+		}
+	}
+
 	if index != "" {
 		searchRequest.Options["index"] = index
 	}

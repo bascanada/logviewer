@@ -3,6 +3,7 @@ package client
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/bascanada/logviewer/pkg/log/client/operator"
@@ -21,9 +22,10 @@ const (
 type Filter struct {
 	// --- Leaf Node (Condition) ---
 	// If Field is set, this is a condition
-	Field string `json:"field,omitempty" yaml:"field,omitempty"`
-	Op    string `json:"op,omitempty" yaml:"op,omitempty"`    // e.g., "equals", "regex", "wildcard", "exists", "match"
-	Value string `json:"value,omitempty" yaml:"value,omitempty"`
+	Field  string `json:"field,omitempty" yaml:"field,omitempty"`
+	Op     string `json:"op,omitempty" yaml:"op,omitempty"` // e.g., "equals", "regex", "wildcard", "exists", "match", "gt", "gte", "lt", "lte"
+	Value  string `json:"value,omitempty" yaml:"value,omitempty"`
+	Negate bool   `json:"negate,omitempty" yaml:"negate,omitempty"` // For != and !~= operators
 
 	// --- Branch Node (Group) ---
 	// If Logic is set, this is a group
@@ -54,7 +56,8 @@ func (f *Filter) Validate() error {
 	if isLeaf {
 		// Validate operator
 		switch f.Op {
-		case "", operator.Equals, operator.Match, operator.Wildcard, operator.Exists, operator.Regex:
+		case "", operator.Equals, operator.Match, operator.Wildcard, operator.Exists, operator.Regex,
+			operator.Gt, operator.Gte, operator.Lt, operator.Lte:
 			// valid
 		default:
 			return fmt.Errorf("invalid operator: %s", f.Op)
@@ -183,13 +186,16 @@ func (f *Filter) matchLeaf(entry LogEntry) bool {
 }
 
 func (f *Filter) matchValue(fieldVal string) bool {
+	var result bool
+
 	switch f.Op {
 	case operator.Regex:
 		matched, err := regexp.MatchString(f.Value, fieldVal)
 		if err != nil {
-			return false
+			result = false
+		} else {
+			result = matched
 		}
-		return matched
 
 	case operator.Wildcard:
 		// Convert glob pattern to regex: * -> .*, ? -> .
@@ -199,21 +205,70 @@ func (f *Filter) matchValue(fieldVal string) bool {
 		pattern = "^" + pattern + "$"
 		matched, err := regexp.MatchString(pattern, fieldVal)
 		if err != nil {
-			return false
+			result = false
+		} else {
+			result = matched
 		}
-		return matched
 
 	case operator.Match:
 		// Match is a case-insensitive contains
-		return strings.Contains(strings.ToLower(fieldVal), strings.ToLower(f.Value))
+		result = strings.Contains(strings.ToLower(fieldVal), strings.ToLower(f.Value))
+
+	case operator.Gt, operator.Gte, operator.Lt, operator.Lte:
+		result = f.compareNumeric(fieldVal)
 
 	case "", operator.Equals:
-		return fieldVal == f.Value
+		result = fieldVal == f.Value
 
 	default:
 		// Unknown operator, default to equals
-		return fieldVal == f.Value
+		result = fieldVal == f.Value
 	}
+
+	// Apply negation if set
+	if f.Negate {
+		return !result
+	}
+	return result
+}
+
+// compareNumeric compares field value with filter value as numbers.
+// Falls back to string comparison if parsing fails.
+func (f *Filter) compareNumeric(fieldVal string) bool {
+	fieldNum, err1 := strconv.ParseFloat(fieldVal, 64)
+	valueNum, err2 := strconv.ParseFloat(f.Value, 64)
+
+	// If either value can't be parsed as a number, fall back to string comparison
+	if err1 != nil || err2 != nil {
+		return f.compareString(fieldVal)
+	}
+
+	switch f.Op {
+	case operator.Gt:
+		return fieldNum > valueNum
+	case operator.Gte:
+		return fieldNum >= valueNum
+	case operator.Lt:
+		return fieldNum < valueNum
+	case operator.Lte:
+		return fieldNum <= valueNum
+	}
+	return false
+}
+
+// compareString compares field value with filter value as strings.
+func (f *Filter) compareString(fieldVal string) bool {
+	switch f.Op {
+	case operator.Gt:
+		return fieldVal > f.Value
+	case operator.Gte:
+		return fieldVal >= f.Value
+	case operator.Lt:
+		return fieldVal < f.Value
+	case operator.Lte:
+		return fieldVal <= f.Value
+	}
+	return false
 }
 
 // toString converts an interface{} to string for comparison

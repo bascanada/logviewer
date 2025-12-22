@@ -55,27 +55,58 @@ func buildSplunkCondition(f *client.Filter) (condition string, isRegex bool) {
 		op = operator.Equals
 	}
 
+	var cond string
+	var isRegexCond bool
+
 	// Handle free-text search (field is "_" or empty)
 	if f.Field == "_" {
 		if op == operator.Regex {
-			return fmt.Sprintf(`regex _raw="%s"`, escapeSplunkValue(f.Value)), true
+			cond = fmt.Sprintf(`regex _raw="%s"`, escapeSplunkValue(f.Value))
+			isRegexCond = true
+		} else if strings.Contains(f.Value, " ") {
+			cond = fmt.Sprintf(`"%s"`, escapeSplunkValue(f.Value))
+		} else {
+			cond = escapeSplunkValue(f.Value)
 		}
-		if strings.Contains(f.Value, " ") {
-			return fmt.Sprintf(`"%s"`, escapeSplunkValue(f.Value)), false
+	} else {
+		switch op {
+		case operator.Regex:
+			cond = fmt.Sprintf(`regex %s="%s"`, f.Field, escapeSplunkValue(f.Value))
+			isRegexCond = true
+		case operator.Wildcard:
+			cond = fmt.Sprintf(`%s="%s*"`, f.Field, escapeSplunkValue(f.Value))
+		case operator.Exists:
+			cond = fmt.Sprintf(`%s=*`, f.Field)
+		case operator.Gt:
+			cond = fmt.Sprintf(`%s>%s`, f.Field, f.Value)
+		case operator.Gte:
+			cond = fmt.Sprintf(`%s>=%s`, f.Field, f.Value)
+		case operator.Lt:
+			cond = fmt.Sprintf(`%s<%s`, f.Field, f.Value)
+		case operator.Lte:
+			cond = fmt.Sprintf(`%s<=%s`, f.Field, f.Value)
+		default: // equals, match
+			cond = fmt.Sprintf(`%s="%s"`, f.Field, escapeSplunkValue(f.Value))
 		}
-		return escapeSplunkValue(f.Value), false
 	}
 
-	switch op {
-	case operator.Regex:
-		return fmt.Sprintf(`regex %s="%s"`, f.Field, escapeSplunkValue(f.Value)), true
-	case operator.Wildcard:
-		return fmt.Sprintf(`%s="%s*"`, f.Field, escapeSplunkValue(f.Value)), false
-	case operator.Exists:
-		return fmt.Sprintf(`%s=*`, f.Field), false
-	default: // equals, match
-		return fmt.Sprintf(`%s="%s"`, f.Field, escapeSplunkValue(f.Value)), false
+	// Handle negation
+	if f.Negate {
+		if isRegexCond {
+			// The `regex` command doesn't support inline negation.
+			// Use `where NOT match(...)` for negated regex, which is valid SPL.
+			field := f.Field
+			if field == "_" {
+				field = "_raw"
+			}
+			cond = fmt.Sprintf(`where NOT match(%s, "%s")`, field, escapeSplunkValue(f.Value))
+			isRegexCond = false // where command is not a regex pipe command
+		} else {
+			cond = fmt.Sprintf("NOT (%s)", cond)
+		}
 	}
+
+	return cond, isRegexCond
 }
 
 // buildSplunkQuery recursively builds a Splunk search query from a Filter AST.
