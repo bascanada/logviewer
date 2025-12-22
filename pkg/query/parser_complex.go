@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/client/operator"
@@ -258,7 +259,7 @@ func mapOperator(symbol string) (string, bool) {
 
 // ParseQueryExpression is the main entry point for parsing a complex query expression
 func ParseQueryExpression(expr string) (*client.Filter, error) {
-	expr = trimSpaces(expr)
+	expr = strings.TrimSpace(expr)
 	if expr == "" {
 		return nil, nil
 	}
@@ -276,23 +277,4 @@ func ParseQueryExpression(expr string) (*client.Filter, error) {
 	}
 
 	return filter, nil
-}
-
-func trimSpaces(s string) string {
-	result := ""
-	for _, r := range s {
-		if r != ' ' && r != '\t' && r != '\n' && r != '\r' || len(result) > 0 {
-			result += string(r)
-		}
-	}
-	// Trim from end
-	for len(result) > 0 {
-		last := result[len(result)-1]
-		if last == ' ' || last == '\t' || last == '\n' || last == '\r' {
-			result = result[:len(result)-1]
-		} else {
-			break
-		}
-	}
-	return result
 }

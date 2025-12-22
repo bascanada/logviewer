@@ -591,8 +591,8 @@ func TestSearchRequest_HLCompatibleOperators(t *testing.T) {
 
 		requestBodyFields, err := getSearchRequest(logSearch)
 		assert.NoError(t, err)
-		// Negated regex in Splunk uses | regex field!~="pattern"
-		assert.Contains(t, requestBodyFields["search"], `regex message!~=".*success.*"`)
+		// Negated regex in Splunk uses `where NOT match(...)` for valid SPL
+		assert.Contains(t, requestBodyFields["search"], `where NOT match(message, ".*success.*")`)
 	})
 
 	t.Run("complex - OR with comparison operators", func(t *testing.T) {

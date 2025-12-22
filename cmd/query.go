@@ -29,6 +29,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// mergeFilterWithAnd merges a new filter into an existing filter using AND logic.
+// If existing is nil, it will be set to the new filter.
+func mergeFilterWithAnd(existing **client.Filter, new *client.Filter) {
+	if new == nil {
+		return
+	}
+	if *existing == nil {
+		*existing = new
+	} else {
+		*existing = &client.Filter{
+			Logic:   client.LogicAnd,
+			Filters: []client.Filter{**existing, *new},
+		}
+	}
+}
+
 func stringArrayEnvVariable(strs []string, maps *ty.MS) error {
 	for _, f := range strs {
 		if strings.Contains(f, "=") {
@@ -117,17 +133,8 @@ func buildSearchRequest() client.LogSearch {
 			hlFilter, err := query.ParseFilterFlags(hlFields)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "warning: failed to parse filter: %v\n", err)
-			} else if hlFilter != nil {
-				// Merge with existing filter if any
-				if searchRequest.Filter == nil {
-					searchRequest.Filter = hlFilter
-				} else {
-					// Combine existing filter with new hl filter using AND
-					searchRequest.Filter = &client.Filter{
-						Logic:   client.LogicAnd,
-						Filters: []client.Filter{*searchRequest.Filter, *hlFilter},
-					}
-				}
+			} else {
+				mergeFilterWithAnd(&searchRequest.Filter, hlFilter)
 			}
 		}
 	}
@@ -140,17 +147,8 @@ func buildSearchRequest() client.LogSearch {
 		queryFilter, err := query.ParseQueryExpression(queryExpr)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: failed to parse query expression: %v\n", err)
-		} else if queryFilter != nil {
-			// Merge with existing filter if any
-			if searchRequest.Filter == nil {
-				searchRequest.Filter = queryFilter
-			} else {
-				// Combine existing filter with query filter using AND
-				searchRequest.Filter = &client.Filter{
-					Logic:   client.LogicAnd,
-					Filters: []client.Filter{*searchRequest.Filter, *queryFilter},
-				}
-			}
+		} else {
+			mergeFilterWithAnd(&searchRequest.Filter, queryFilter)
 		}
 	}
 

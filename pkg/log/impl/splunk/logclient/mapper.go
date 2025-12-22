@@ -93,8 +93,14 @@ func buildSplunkCondition(f *client.Filter) (condition string, isRegex bool) {
 	// Handle negation
 	if f.Negate {
 		if isRegexCond {
-			// For regex, negate the entire regex pipe command
-			cond = fmt.Sprintf(`regex %s!~="%s"`, f.Field, escapeSplunkValue(f.Value))
+			// The `regex` command doesn't support inline negation.
+			// Use `where NOT match(...)` for negated regex, which is valid SPL.
+			field := f.Field
+			if field == "_" {
+				field = "_raw"
+			}
+			cond = fmt.Sprintf(`where NOT match(%s, "%s")`, field, escapeSplunkValue(f.Value))
+			isRegexCond = false // where command is not a regex pipe command
 		} else {
 			cond = fmt.Sprintf("NOT (%s)", cond)
 		}
