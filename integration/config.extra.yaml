@@ -350,3 +350,8 @@ contexts:
             op: equals
             value: payment-service
             negate: true
+
+  # ============================================
+  # NOTE: HL Engine test contexts are in config.hl-benchmark.yaml
+  # Run with: LOGVIEWER_CONFIG="integration/config.hl-benchmark.yaml" ./build/logviewer query log -i local-hl
+  # ============================================

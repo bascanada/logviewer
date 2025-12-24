@@ -41,6 +41,10 @@ func (sf *logSearchFactory) GetSearchResult(ctx context.Context, contextId strin
 		return nil, err
 	}
 
+	// Merge client options into search options so clients can access client-level
+	// configuration (e.g., paths, preferNativeDriver for local/ssh clients)
+	sf.mergeClientOptions(&searchContext.Search, searchContext.Client)
+
 	sr, err := (*logClient).Get(ctx, &searchContext.Search)
 
 	return sr, err
@@ -57,7 +61,32 @@ func (sf *logSearchFactory) GetFieldValues(ctx context.Context, contextId string
 		return nil, err
 	}
 
+	// Merge client options into search options
+	sf.mergeClientOptions(&searchContext.Search, searchContext.Client)
+
 	return (*logClient).GetFieldValues(ctx, &searchContext.Search, fields)
+}
+
+// mergeClientOptions merges client-level options (e.g., paths, preferNativeDriver)
+// into the search options. Client options are merged first so search options can
+// override them if needed.
+func (sf *logSearchFactory) mergeClientOptions(search *client.LogSearch, clientName string) {
+	clientConfig, ok := sf.config.Clients[clientName]
+	if !ok {
+		return
+	}
+
+	if search.Options == nil {
+		search.Options = make(map[string]interface{})
+	}
+
+	// Merge client options into search options (client options first, search can override)
+	for key, value := range clientConfig.Options {
+		// Only set if not already present in search options
+		if _, exists := search.Options[key]; !exists {
+			search.Options[key] = value
+		}
+	}
 }
 
 func GetLogSearchFactory(

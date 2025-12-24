@@ -18,3 +18,5 @@ integration/k8s/k3s.*
 dist/
 
 logviewer.wiki/
+
+*.csv
