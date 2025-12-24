@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log/slog"
 	"net"
@@ -173,16 +172,17 @@ func (lc sshLogClient) Get(ctx context.Context, search *client.LogSearch) (clien
 
 	scanner := bufio.NewScanner(out)
 
-	// For hybrid mode, we might get pre-filtered results
-	// We'll mark it as potentially pre-filtered; the reader will handle appropriately
+	// For hybrid mode, mark it for debugging/metrics purposes.
+	// Note: We do NOT skip client-side filtering based on this flag because
+	// we can't know if hl actually ran on the remote until after all output is read.
+	// The reader will always apply filtering for SSH hybrid mode to ensure correctness.
 	searchToUse := search
 	if useHybridHL {
 		preFilteredSearch := *search
 		if preFilteredSearch.Options == nil {
 			preFilteredSearch.Options = make(map[string]interface{})
 		}
-		// Mark as potentially pre-filtered (if hl ran on remote, it's filtered)
-		// The reader should be lenient - if filters don't match, assume pre-filtered
+		// Mark as hybrid mode for debugging (not used to skip filtering)
 		preFilteredSearch.Options["__hybridHL__"] = true
 		searchToUse = &preFilteredSearch
 	}
@@ -204,25 +204,10 @@ func (lc sshLogClient) Get(ctx context.Context, search *client.LogSearch) (clien
 // 2. Uses hl with filters if available (server-side filtering)
 // 3. Falls back to cat/tail if hl is not available (client-side filtering)
 func (lc sshLogClient) buildHybridHLCommand(search *client.LogSearch, paths []string) (string, error) {
-	// Build hl arguments
-	hlArgs, err := hl.BuildArgs(search, nil) // Don't include paths in args, we'll add them separately
+	// Build hl arguments (paths are passed separately to BuildSSHCommand, not included here)
+	hlArgs, err := hl.BuildArgs(search, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to build hl arguments: %w", err)
-	}
-
-	// Remove paths from args (they're passed separately to BuildSSHCommand)
-	var argsWithoutPaths []string
-	for _, arg := range hlArgs {
-		isPth := false
-		for _, p := range paths {
-			if arg == p {
-				isPth = true
-				break
-			}
-		}
-		if !isPth {
-			argsWithoutPaths = append(argsWithoutPaths, arg)
-		}
 	}
 
 	// Build fallback command
@@ -237,7 +222,7 @@ func (lc sshLogClient) buildHybridHLCommand(search *client.LogSearch, paths []st
 	// Use the SSH builder with marker for engine detection
 	var cmd string
 	if search.Follow {
-		cmd = hl.BuildSSHCommandWithMarker(argsWithoutPaths, paths, fallbackCmd)
+		cmd = hl.BuildSSHCommandWithMarker(hlArgs, paths, fallbackCmd)
 	} else {
 		if fallbackCmd == "" {
 			// Default fallback: cat the files
@@ -248,24 +233,10 @@ func (lc sshLogClient) buildHybridHLCommand(search *client.LogSearch, paths []st
 			}
 			fallbackCmd = strings.Join(catParts, " ")
 		}
-		cmd = hl.BuildSSHCommandWithMarker(argsWithoutPaths, paths, fallbackCmd)
+		cmd = hl.BuildSSHCommandWithMarker(hlArgs, paths, fallbackCmd)
 	}
 
 	return cmd, nil
-}
-
-// sessionCloser wraps an SSH session to implement io.Closer
-type sessionCloser struct {
-	session *sshc.Session
-	stdout  io.Reader
-}
-
-func (sc *sessionCloser) Read(p []byte) (n int, err error) {
-	return sc.stdout.Read(p)
-}
-
-func (sc *sessionCloser) Close() error {
-	return sc.session.Close()
 }
 
 func (lc sshLogClient) GetFieldValues(ctx context.Context, search *client.LogSearch, fields []string) (map[string][]string, error) {

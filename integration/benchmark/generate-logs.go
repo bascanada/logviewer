@@ -156,14 +156,14 @@ func main() {
 		}
 	}
 
-	writer.Flush()
-	if gzWriter != nil {
-		gzWriter.Close()
-	}
-	file.Close()
+	// Flush and close are handled by defer statements above
 
 	// Final stats
-	stat, _ := os.Stat(*output)
+	stat, err := os.Stat(*output)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting file stats: %v\n", err)
+		os.Exit(1)
+	}
 	elapsed := time.Since(start)
 	fmt.Println()
 	fmt.Println("Done!")
