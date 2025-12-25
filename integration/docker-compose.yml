@@ -46,6 +46,7 @@ services:
       - "2222:2222"
     volumes:
       - ./ssh/authorized_keys:/config/authorized_keys:rw
+      - ssh-logs:/data
     environment:
       - PUID=1000
       - PGID=1000
@@ -89,3 +90,4 @@ volumes:
   opensearch-data:
   k3s-data:
   localstack-data:
+  ssh-logs:
