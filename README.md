@@ -30,6 +30,7 @@ LogViewer is a unified CLI tool for querying logs from multiple sources with con
 - **Multi-context search** — Query multiple environments simultaneously
 - **Shell autocomplete** — Tab completion for contexts, fields, and more
 - **AI integration** — Use as an MCP server with Claude, Copilot, or Gemini
+- **High-performance filtering** — Optional [hl](https://github.com/pamburus/hl) integration for fast local/SSH log processing
 
 ## Quick Start
 
@@ -128,14 +129,14 @@ Then ask Claude, Copilot, or Gemini: *"Find all payment errors in the last hour"
 
 ## Supported Backends
 
-| Backend | Type | Native Query |
-|---------|------|--------------|
-| Kubernetes | `k8s` | — |
-| Docker | `docker` | — |
-| Local/SSH | `local`, `ssh` | — |
-| OpenSearch/Elasticsearch | `opensearch` | Lucene |
-| Splunk | `splunk` | SPL |
-| AWS CloudWatch | `cloudwatch` | Insights |
+| Backend | Type | Native Query | Notes |
+|---------|------|--------------|-------|
+| Kubernetes | `k8s` | — | |
+| Docker | `docker` | — | |
+| Local/SSH | `local`, `ssh` | — | [hl](https://github.com/pamburus/hl) support for fast filtering |
+| OpenSearch/Elasticsearch | `opensearch` | Lucene | |
+| Splunk | `splunk` | SPL | |
+| AWS CloudWatch | `cloudwatch` | Insights | |
 
 ## Documentation
 
@@ -154,6 +155,7 @@ Full documentation is available in the **[GitHub Wiki](https://github.com/bascan
 
 ### Backends
 - [Backends Reference](https://github.com/bascanada/logviewer/wiki/Backends) — K8s, Docker, Splunk, OpenSearch, CloudWatch, SSH
+- [HL Integration](https://github.com/bascanada/logviewer/wiki/HL-Integration) — High-performance filtering with hl
 
 ### AI Integration
 - [MCP Integration](https://github.com/bascanada/logviewer/wiki/MCP-Integration) — Setup for AI agents
