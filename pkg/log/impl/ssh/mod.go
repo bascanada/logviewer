@@ -9,8 +9,11 @@ import (
 	"io/ioutil"
 	"net"
 	"path/filepath"
+	"strings"
 	"text/template"
 
+	"github.com/bascanada/logviewer/pkg/adapter/hl"
+	mylog "github.com/bascanada/logviewer/pkg/log"
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/reader"
 	sshc "golang.org/x/crypto/ssh"
@@ -19,6 +22,11 @@ import (
 
 const (
 	OptionsCmd = "cmd"
+	// OptionsPaths specifies file paths to read logs from on the remote host.
+	// When paths are provided, a hybrid command will be used that checks for hl on the remote host.
+	OptionsPaths = "paths"
+	// OptionsPreferNativeDriver when set to true, disables hl usage and forces the native command.
+	OptionsPreferNativeDriver = "preferNativeDriver"
 )
 
 type SSHLogClientOptions struct {
@@ -54,12 +62,40 @@ func getCommand(search *client.LogSearch) (string, error) {
 }
 
 func (lc sshLogClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
-	cmd, err := getCommand(search)
-	if err != nil {
-		if err.Error() == "cmd is missing for sshLogClient" {
-			return nil, fmt.Errorf("configuration error: %w", err)
+	// Check if we should use hl with paths
+	paths, hasPaths := search.Options.GetListOfStringsOk(OptionsPaths)
+	preferNative := search.Options.GetBool(OptionsPreferNativeDriver)
+
+	var cmd string
+	var useHybridHL bool
+
+	if hasPaths && len(paths) > 0 && !preferNative {
+		// Build hybrid command that checks for hl on remote host
+		hybridCmd, err := lc.buildHybridHLCommand(search, paths)
+		if err != nil {
+			mylog.Warn("failed to build hybrid hl command, falling back to native: %v", err)
+		} else {
+			cmd = hybridCmd
+			useHybridHL = true
+			mylog.Debug("using hybrid hl command for SSH: %s", cmd)
 		}
-		return nil, err
+	}
+
+	// Fall back to native command if hybrid didn't work
+	if cmd == "" {
+		var err error
+		cmd, err = getCommand(search)
+		if err != nil {
+			if err.Error() == "cmd is missing for sshLogClient" {
+				// Check if we have paths but failed to build hybrid command
+				if hasPaths && len(paths) > 0 {
+					return nil, errors.New("failed to build hl command and no fallback 'cmd' is configured")
+				}
+				return nil, fmt.Errorf("configuration error: %w", err)
+			}
+			return nil, err
+		}
+		mylog.Debug("using native command for SSH: %s", cmd)
 	}
 
 	session, err := lc.conn.NewSession()
@@ -106,23 +142,101 @@ func (lc sshLogClient) Get(ctx context.Context, search *client.LogSearch) (clien
 		return nil, fmt.Errorf("failed to start ssh command: %w", err)
 	}
 
+	// Track which engine was used (for hybrid mode)
+	var engineUsed string
 	errChan := make(chan error, 1)
 	go func() {
 		defer close(errChan)
+		// Read stderr to detect engine marker and capture errors
+		stderrScanner := bufio.NewScanner(errOut)
+		var stderrOutput bytes.Buffer
+		for stderrScanner.Scan() {
+			line := stderrScanner.Text()
+			// Check for engine marker
+			if strings.HasPrefix(line, "HL_ENGINE=") {
+				engineUsed = strings.TrimPrefix(line, "HL_ENGINE=")
+				mylog.Debug("remote engine detected: %s", engineUsed)
+				continue
+			}
+			stderrOutput.WriteString(line)
+			stderrOutput.WriteString("\n")
+		}
 		if err := session.Wait(); err != nil {
-			by, _ := ioutil.ReadAll(errOut)
-			errChan <- fmt.Errorf("ssh command failed: %w (remote output: %s)", err, string(by))
+			if stderrOutput.Len() > 0 {
+				errChan <- fmt.Errorf("ssh command failed: %w (remote output: %s)", err, stderrOutput.String())
+			} else {
+				errChan <- fmt.Errorf("ssh command failed: %w", err)
+			}
 		}
 	}()
 
 	scanner := bufio.NewScanner(out)
 
-	result, err := reader.GetLogResult(search, scanner, session)
+	// For hybrid mode, mark it for debugging/metrics purposes.
+	// Note: We do NOT skip client-side filtering based on this flag because
+	// we can't know if hl actually ran on the remote until after all output is read.
+	// The reader will always apply filtering for SSH hybrid mode to ensure correctness.
+	searchToUse := search
+	if useHybridHL {
+		preFilteredSearch := *search
+		if preFilteredSearch.Options == nil {
+			preFilteredSearch.Options = make(map[string]interface{})
+		}
+		// Mark as hybrid mode for debugging (not used to skip filtering)
+		preFilteredSearch.Options["__hybridHL__"] = true
+		searchToUse = &preFilteredSearch
+	}
+
+	result, err := reader.GetLogResult(searchToUse, scanner, session)
 	if err != nil {
 		return nil, err
 	}
 	result.ErrChan = errChan
+
+	// Store engine info for debugging/metrics
+	_ = engineUsed // Available for future use (metrics, logging)
+
 	return result, nil
+}
+
+// buildHybridHLCommand creates a shell command that:
+// 1. Checks if hl is available on the remote host
+// 2. Uses hl with filters if available (server-side filtering)
+// 3. Falls back to cat/tail if hl is not available (client-side filtering)
+func (lc sshLogClient) buildHybridHLCommand(search *client.LogSearch, paths []string) (string, error) {
+	// Build hl arguments (paths are passed separately to BuildSSHCommand, not included here)
+	hlArgs, err := hl.BuildArgs(search, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to build hl arguments: %w", err)
+	}
+
+	// Build fallback command
+	var fallbackCmd string
+	if fallback, err := getCommand(search); err == nil && fallback != "" {
+		fallbackCmd = fallback
+	} else if search.Follow {
+		// For follow mode, use tail -f as fallback
+		fallbackCmd = "" // hl.BuildFollowSSHCommand will handle this
+	}
+
+	// Use the SSH builder with marker for engine detection
+	var cmd string
+	if search.Follow {
+		cmd = hl.BuildSSHCommandWithMarker(hlArgs, paths, fallbackCmd)
+	} else {
+		if fallbackCmd == "" {
+			// Default fallback: cat the files
+			var catParts []string
+			catParts = append(catParts, "cat")
+			for _, p := range paths {
+				catParts = append(catParts, hl.ArgsToString([]string{p}))
+			}
+			fallbackCmd = strings.Join(catParts, " ")
+		}
+		cmd = hl.BuildSSHCommandWithMarker(hlArgs, paths, fallbackCmd)
+	}
+
+	return cmd, nil
 }
 
 func (lc sshLogClient) GetFieldValues(ctx context.Context, search *client.LogSearch, fields []string) (map[string][]string, error) {

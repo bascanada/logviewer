@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"regexp"
 	"strings"
 	"time"
@@ -124,12 +125,25 @@ func (lr *ReaderLogResult) parseBlock(block string) (*client.LogEntry, bool) {
 		entry.Level = level
 	}
 
+	// Check if results are pre-filtered (e.g., by hl locally)
+	// When __preFiltered__ is true, skip client-side filtering entirely
+	// Note: __hybridHL__ is NOT used to skip filtering because we can't know
+	// if hl actually ran on the remote until after reading all output.
+	// For hybrid SSH mode, we always filter client-side to ensure correctness.
+	isPreFiltered := lr.search.Options.GetBool("__preFiltered__")
+
+	// DEBUG: Log preFiltered status
+	slog.Debug("parseBlock", "preFiltered", isPreFiltered, "jsonExtract", lr.search.FieldExtraction.Json.Value)
+
 	// Apply filter using the new recursive filter system
-	if lr.namedGroupRegexExtraction != nil || lr.kvRegexExtraction != nil || lr.search.FieldExtraction.Json.Value {
-		effectiveFilter := lr.search.GetEffectiveFilter()
-		if effectiveFilter != nil {
-			if !effectiveFilter.Match(entry) {
-				return nil, false
+	// Skip filtering only if explicitly pre-filtered (local hl mode)
+	if !isPreFiltered {
+		if lr.namedGroupRegexExtraction != nil || lr.kvRegexExtraction != nil || lr.search.FieldExtraction.Json.Value {
+			effectiveFilter := lr.search.GetEffectiveFilter()
+			if effectiveFilter != nil {
+				if !effectiveFilter.Match(entry) {
+					return nil, false
+				}
 			}
 		}
 	}

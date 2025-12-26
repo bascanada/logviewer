@@ -1,0 +1,41 @@
+clients:
+  ssh-hl:
+    type: ssh
+    options:
+      addr: "localhost:2222"
+      user: "testuser"
+      privateKey: "./integration/ssh/id_rsa"
+      disablePTY: true
+      paths:
+        - /data/test-logs.json
+
+  ssh-native:
+    type: ssh
+    options:
+      addr: "localhost:2222"
+      user: "testuser"
+      privateKey: "./integration/ssh/id_rsa"
+      disablePTY: true
+      cmd: "cat /data/test-logs.json"
+      preferNativeDriver: true
+
+searches:
+  json-extract:
+    fieldExtraction:
+      json: true
+      jsonTimestampKey: "@timestamp"
+      jsonLevelKey: "level"
+      jsonMessageKey: "message"
+
+contexts:
+  ssh-hl-test:
+    client: ssh-hl
+    searchInherit: [json-extract]
+    search:
+      fields: {}
+
+  ssh-native-test:
+    client: ssh-native
+    searchInherit: [json-extract]
+    search:
+      fields: {}
