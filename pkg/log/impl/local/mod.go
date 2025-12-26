@@ -6,12 +6,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"os/exec"
 	"runtime"
 	"text/template"
 
 	"github.com/bascanada/logviewer/pkg/adapter/hl"
+	mylog "github.com/bascanada/logviewer/pkg/log"
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/reader"
 )
@@ -67,16 +67,18 @@ func (lc localLogClient) Get(ctx context.Context, search *client.LogSearch) (cli
 
 // getWithHL executes the query using the hl binary for high-performance filtering.
 func (lc localLogClient) getWithHL(ctx context.Context, search *client.LogSearch, paths []string) (client.LogSearchResult, error) {
-	slog.Debug("using hl engine for local log query", "paths", paths)
+	mylog.Debug("using hl engine for local log query, paths=%v", paths)
 
 	// Build hl arguments from the search
 	args, err := hl.BuildArgs(search, paths)
 	if err != nil {
-		slog.Warn("failed to build hl arguments, falling back to native engine", "error", err)
+		mylog.Warn("failed to build hl arguments, falling back to native engine: %v", err)
 		return lc.getWithNativeCmd(ctx, search)
 	}
 
 	hlPath := hl.GetPath()
+	mylog.Debug("executing hl command: %s %v", hlPath, args)
+
 	ecmd := exec.CommandContext(ctx, hlPath, args...)
 
 	stdout, err := ecmd.StdoutPipe()
@@ -90,7 +92,7 @@ func (lc localLogClient) getWithHL(ctx context.Context, search *client.LogSearch
 	}
 
 	if err = ecmd.Start(); err != nil {
-		slog.Warn("failed to start hl, falling back to native engine", "error", err)
+		mylog.Warn("failed to start hl, falling back to native engine: %v", err)
 		return lc.getWithNativeCmd(ctx, search)
 	}
 
@@ -126,7 +128,7 @@ func (lc localLogClient) getWithHL(ctx context.Context, search *client.LogSearch
 	}
 	preFilteredSearch.Options["__preFiltered__"] = true
 
-	slog.Debug("hl preFiltered search created", "preFiltered", preFilteredSearch.Options.GetBool("__preFiltered__"))
+	mylog.Debug("hl preFiltered search created, preFiltered=%v", preFilteredSearch.Options.GetBool("__preFiltered__"))
 
 	// Create a custom closer that waits for the command after stdout is consumed
 	closer := &hlCloser{
@@ -192,7 +194,7 @@ func (lc localLogClient) getWithNativeCmd(ctx context.Context, search *client.Lo
 		return nil, err
 	}
 
-	slog.Debug("using native engine for local log query", "cmd", cmdContent)
+	mylog.Debug("using native engine for local log query, cmd=%s", cmdContent)
 
 	var shellName string
 	var shellArgs []string

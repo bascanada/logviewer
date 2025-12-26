@@ -7,13 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log/slog"
 	"net"
 	"path/filepath"
 	"strings"
 	"text/template"
 
 	"github.com/bascanada/logviewer/pkg/adapter/hl"
+	mylog "github.com/bascanada/logviewer/pkg/log"
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/reader"
 	sshc "golang.org/x/crypto/ssh"
@@ -73,11 +73,11 @@ func (lc sshLogClient) Get(ctx context.Context, search *client.LogSearch) (clien
 		// Build hybrid command that checks for hl on remote host
 		hybridCmd, err := lc.buildHybridHLCommand(search, paths)
 		if err != nil {
-			slog.Warn("failed to build hybrid hl command, falling back to native", "error", err)
+			mylog.Warn("failed to build hybrid hl command, falling back to native: %v", err)
 		} else {
 			cmd = hybridCmd
 			useHybridHL = true
-			slog.Debug("using hybrid hl command for SSH", "cmd", cmd)
+			mylog.Debug("using hybrid hl command for SSH: %s", cmd)
 		}
 	}
 
@@ -95,7 +95,7 @@ func (lc sshLogClient) Get(ctx context.Context, search *client.LogSearch) (clien
 			}
 			return nil, err
 		}
-		slog.Debug("using native command for SSH", "cmd", cmd)
+		mylog.Debug("using native command for SSH: %s", cmd)
 	}
 
 	session, err := lc.conn.NewSession()
@@ -155,7 +155,7 @@ func (lc sshLogClient) Get(ctx context.Context, search *client.LogSearch) (clien
 			// Check for engine marker
 			if strings.HasPrefix(line, "HL_ENGINE=") {
 				engineUsed = strings.TrimPrefix(line, "HL_ENGINE=")
-				slog.Debug("remote engine detected", "engine", engineUsed)
+				mylog.Debug("remote engine detected: %s", engineUsed)
 				continue
 			}
 			stderrOutput.WriteString(line)
