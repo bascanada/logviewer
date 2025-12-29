@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	httpPkg "github.com/bascanada/logviewer/pkg/http"
 	"github.com/bascanada/logviewer/pkg/log"
@@ -91,8 +92,11 @@ var (
 
 func onCommandStart(cmd *cobra.Command, args []string) {
 	log.ConfigureMyLogger(&logger)
-	// enable HTTP debug logs when requested
-	httpPkg.SetDebug(debugHttp)
+	// enable HTTP debug logs when requested via flag or debug logging level
+	level := strings.ToUpper(logger.Level)
+	if debugHttp || level == "DEBUG" || level == "TRACE" {
+		httpPkg.SetDebug(true)
+	}
 }
 
 // loadConfigForCompletion is a helper function that loads the configuration
@@ -313,4 +317,67 @@ func init() {
 	queryCommand.AddCommand(queryFieldCommand)
 	queryCommand.AddCommand(queryValuesCommand)
 
+	// TUI command uses the same flags as query
+	initTUIFlags()
+}
+
+// initTUIFlags adds query-compatible flags to the TUI command
+func initTUIFlags() {
+	// CONFIG
+	tuiCmd.PersistentFlags().StringArrayVarP(&contextIds, "id", "i", []string{}, "Context id to execute")
+
+	// Register completion function for the --id flag
+	_ = tuiCmd.RegisterFlagCompletionFunc("id", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		cfg, directive := loadConfigForCompletion(cmd)
+		if cfg == nil {
+			return nil, directive
+		}
+
+		var suggestions []string
+		for id, ctx := range cfg.Contexts {
+			description := fmt.Sprintf("(%s)", ctx.Client)
+			suggestions = append(suggestions, fmt.Sprintf("%s\t%s", id, description))
+		}
+
+		return suggestions, cobra.ShellCompDirectiveNoFileComp
+	})
+
+	// RANGE
+	tuiCmd.PersistentFlags().StringVar(&from, "from", "", "Get entry gte datetime date >= from")
+	tuiCmd.PersistentFlags().StringVar(&to, "to", "", "Get entry lte datetime date <= to")
+	tuiCmd.PersistentFlags().StringVar(&last, "last", "", "Get entry in the last duration")
+
+	// Register completion for --last flag
+	_ = tuiCmd.RegisterFlagCompletionFunc("last", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{
+			"1m\t1 minute",
+			"5m\t5 minutes",
+			"15m\t15 minutes",
+			"30m\t30 minutes",
+			"1h\t1 hour",
+			"2h\t2 hours",
+			"6h\t6 hours",
+			"12h\t12 hours",
+			"24h\t24 hours",
+			"7d\t7 days",
+			"30d\t30 days",
+		}, cobra.ShellCompDirectiveNoFileComp
+	})
+
+	// NATIVE QUERY
+	tuiCmd.PersistentFlags().StringVar(&nativeQuery, "native-query", "", "Raw query in backend's native syntax (Splunk SPL, OpenSearch Lucene)")
+
+	// HL-COMPATIBLE QUERY
+	tuiCmd.PersistentFlags().StringVarP(&queryExpr, "query", "q", "", "Complex filter expression with boolean logic (e.g., '(level=error OR status>=500) AND service=api')")
+
+	// SIZE
+	tuiCmd.PersistentFlags().IntVar(&size, "size", 0, "Get entry max size")
+
+	// FIELD validation
+	tuiCmd.PersistentFlags().StringArrayVarP(&fields, "fields", "f", []string{}, "Field for selection field=value")
+	tuiCmd.PersistentFlags().StringArrayVar(&vars, "var", []string{}, "Define a runtime variable for the search context (e.g., --var 'sessionId=abc-123')")
+	tuiCmd.PersistentFlags().StringArrayVar(&inherits, "inherits", []string{}, "When using config, list of inherits to execute on top of the one configure for the search")
+
+	// LIVE DATA OPTIONS
+	tuiCmd.PersistentFlags().BoolVar(&refresh, "refresh", false, "If provide activate live data")
 }

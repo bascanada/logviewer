@@ -1,0 +1,1495 @@
+// SPDX-License-Identifier: GPL-3.0-only
+package tui
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"sort"
+	"strings"
+	"text/template"
+	"time"
+
+	"github.com/bascanada/logviewer/pkg/log/client"
+	"github.com/bascanada/logviewer/pkg/log/client/config"
+	"github.com/bascanada/logviewer/pkg/log/factory"
+	"github.com/bascanada/logviewer/pkg/log/printer"
+	"github.com/bascanada/logviewer/pkg/ty"
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/viewport"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+)
+
+// FocusMode represents which component has focus
+type FocusMode int
+
+const (
+	FocusList FocusMode = iota
+	FocusSearch
+	FocusSidebar
+	FocusContextSelect
+	FocusInheritSelect
+)
+
+// SidebarMode represents what content the sidebar displays
+type SidebarMode int
+
+const (
+	SidebarModeEntry  SidebarMode = iota // Show selected entry details
+	SidebarModeFields                    // Show global fields with values
+)
+
+// Tab represents an open context/query tab
+type Tab struct {
+	ID          string
+	Name        string
+	ContextID   string
+	Entries     []client.LogEntry
+	Cursor      int
+	ViewOffset  int
+	Search      *client.LogSearch
+	Inherits    []string           // Search templates to inherit
+	Result      client.LogSearchResult
+	Template    *template.Template // Printer template for formatting entries
+	Fields      ty.UniSet[string]  // Available fields with their values from GetFields()
+	Loading     bool
+	Error       error
+	StreamChan  chan []LogEntryMsg
+	CancelFunc  context.CancelFunc
+
+	// Per-tab search bar state
+	SearchState        ChipSearchState     // The chips and input state for this tab
+	AvailableFields    []string            // Fields discovered from loaded entries
+	AvailableVariables []string            // Variables from config
+	VariableMetadata   map[string]string   // Variable name -> description
+	FieldValues        map[string][]string // Field -> possible values (cached)
+}
+
+// LogEntryMsg is sent when new log entries arrive
+type LogEntryMsg struct {
+	TabID    string
+	Entries  []client.LogEntry
+	Result   client.LogSearchResult // The search result (for printer config)
+	Template *template.Template     // Compiled printer template
+	Fields   ty.UniSet[string]      // Available fields with values from GetFields()
+}
+
+// ErrorMsg is sent when an error occurs
+type ErrorMsg struct {
+	TabID string
+	Err   error
+}
+
+// LoadingMsg indicates loading state change
+type LoadingMsg struct {
+	TabID   string
+	Loading bool
+}
+
+// AddTabMsg requests adding a new tab
+type AddTabMsg struct {
+	ContextID string
+	Search    *client.LogSearch
+}
+
+// InitMsg is sent to trigger initial tab loading
+type InitMsg struct{}
+
+// Model is the main TUI state
+type Model struct {
+	// Window dimensions
+	Width  int
+	Height int
+
+	// Tabs
+	Tabs      []*Tab
+	ActiveTab int
+
+	// UI State
+	Focus          FocusMode
+	DetailsVisible bool
+	SidebarMode    SidebarMode // Entry details or Global fields
+	SplitRatio     float64     // 0.0 to 1.0, ratio for log list
+	ShowHelp       bool
+
+	// Context selection state (for Ctrl+T new tab)
+	AvailableContexts []string
+	ContextCursor     int
+
+	// Inherit selection state (for I key)
+	AvailableSearches []string          // Search template names from config
+	ActiveSearches    map[string]bool   // Currently active inherited searches
+	InheritCursor     int               // Cursor for inherit selection
+
+	// Components
+	SearchBar SearchBar
+	StatusBar StatusBar
+	Viewport  viewport.Model
+	SidebarVP viewport.Model
+
+	// Styling
+	Styles Styles
+	Keys   KeyMap
+
+	// Config
+	Config        *config.ContextConfig
+	ClientFactory factory.LogClientFactory
+	SearchFactory factory.SearchFactory
+
+	// Runtime
+	RuntimeVars map[string]string
+
+	// Initial contexts to load (set before Init)
+	InitialContexts []string
+	InitialSearch   *client.LogSearch
+}
+
+// New creates a new TUI model
+func New(cfg *config.ContextConfig, clientFactory factory.LogClientFactory, searchFactory factory.SearchFactory) Model {
+	vp := viewport.New(80, 20)
+	vp.SetContent("")
+
+	sbvp := viewport.New(30, 20)
+	sbvp.SetContent("")
+
+	// Collect available contexts and searches
+	var contexts []string
+	var searches []string
+	if cfg != nil {
+		for id := range cfg.Contexts {
+			contexts = append(contexts, id)
+		}
+		for id := range cfg.Searches {
+			searches = append(searches, id)
+		}
+	}
+	sort.Strings(contexts)
+	sort.Strings(searches)
+
+	// Create search bar and status bar
+	searchBar := NewSearchBar()
+	statusBar := NewStatusBar()
+
+	return Model{
+		Width:             80,
+		Height:            24,
+		Tabs:              make([]*Tab, 0),
+		ActiveTab:         0,
+		Focus:             FocusList,
+		DetailsVisible:    false,
+		SplitRatio:        0.7,
+		ShowHelp:          false,
+		AvailableContexts: contexts,
+		ContextCursor:     0,
+		AvailableSearches: searches,
+		ActiveSearches:    make(map[string]bool),
+		InheritCursor:     0,
+		SearchBar:         searchBar,
+		StatusBar:         statusBar,
+		Viewport:          vp,
+		SidebarVP:         sbvp,
+		Styles:            DefaultStyles(),
+		Keys:              DefaultKeyMap(),
+		Config:            cfg,
+		ClientFactory:     clientFactory,
+		SearchFactory:     searchFactory,
+		RuntimeVars:       make(map[string]string),
+	}
+}
+
+// Init initializes the TUI
+func (m Model) Init() tea.Cmd {
+	log.Printf("[DEBUG] TUI Init called, initialContexts=%v", m.InitialContexts)
+	return func() tea.Msg { return InitMsg{} }
+}
+
+// addTabCmd creates a tab and returns a command to load its logs
+func (m *Model) addTabCmd(contextID string, search *client.LogSearch) tea.Cmd {
+	name := contextID
+	if name == "" {
+		name = fmt.Sprintf("Tab %d", len(m.Tabs)+1)
+	}
+
+	tab := &Tab{
+		ID:                 fmt.Sprintf("tab-%d-%d", len(m.Tabs), time.Now().UnixNano()),
+		Name:               name,
+		ContextID:          contextID,
+		Entries:            make([]client.LogEntry, 0),
+		Cursor:             0,
+		Search:             search,
+		Loading:            true,
+		SearchState:        NewChipSearchState(),
+		AvailableFields:    make([]string, 0),
+		AvailableVariables: make([]string, 0),
+		VariableMetadata:   make(map[string]string),
+		FieldValues:        make(map[string][]string),
+	}
+
+	m.Tabs = append(m.Tabs, tab)
+	m.ActiveTab = len(m.Tabs) - 1
+
+	// Restore search bar from the new tab (starts with empty/default state)
+	m.restoreSearchBarFromTab(tab)
+	m.StatusBar.UpdateFromTab(tab)
+	m.StatusBar.UpdateTimeRangeFromChips(m.SearchBar.State.Chips)
+
+	log.Printf("[DEBUG] TUI addTabCmd: created tab, tabID=%s, contextID=%s, totalTabs=%d", tab.ID, contextID, len(m.Tabs))
+	return m.loadTabLogsCmd(tab)
+}
+
+// CurrentTab returns the currently active tab or nil
+func (m *Model) CurrentTab() *Tab {
+	if len(m.Tabs) == 0 || m.ActiveTab >= len(m.Tabs) {
+		return nil
+	}
+	return m.Tabs[m.ActiveTab]
+}
+
+// saveSearchBarToTab saves the current search bar state to the given tab
+func (m *Model) saveSearchBarToTab(tab *Tab) {
+	if tab == nil {
+		return
+	}
+	tab.SearchState = m.SearchBar.State
+	tab.AvailableFields = m.SearchBar.AvailableFields
+	tab.AvailableVariables = m.SearchBar.AvailableVariables
+	tab.VariableMetadata = m.SearchBar.VariableMetadata
+	tab.FieldValues = m.SearchBar.FieldValues
+}
+
+// restoreSearchBarFromTab restores the search bar state from the given tab
+func (m *Model) restoreSearchBarFromTab(tab *Tab) {
+	if tab == nil {
+		return
+	}
+	m.SearchBar.State = tab.SearchState
+	m.SearchBar.AvailableFields = tab.AvailableFields
+	m.SearchBar.AvailableVariables = tab.AvailableVariables
+	m.SearchBar.VariableMetadata = tab.VariableMetadata
+	m.SearchBar.FieldValues = tab.FieldValues
+	// Sync the text input with the restored state
+	m.SearchBar.TextInput.SetValue(tab.SearchState.CurrentInput)
+}
+
+// switchToTab saves state from current tab and switches to target tab
+func (m *Model) switchToTab(newIndex int) {
+	if newIndex < 0 || newIndex >= len(m.Tabs) {
+		return
+	}
+	// Save current tab's search bar state
+	m.saveSearchBarToTab(m.CurrentTab())
+	// Switch tab
+	m.ActiveTab = newIndex
+	// Restore new tab's search bar state
+	m.restoreSearchBarFromTab(m.CurrentTab())
+	// Update status bar and viewport
+	m.StatusBar.UpdateFromTab(m.CurrentTab())
+	m.StatusBar.UpdateTimeRangeFromChips(m.SearchBar.State.Chips)
+	m.updateViewportContent()
+}
+
+// AddTab creates a new tab with the given context (for use from Update)
+func (m *Model) AddTab(contextID string, search *client.LogSearch) tea.Cmd {
+	return m.addTabCmd(contextID, search)
+}
+
+// loadTabLogsCmd starts loading logs for a tab
+func (m *Model) loadTabLogsCmd(tab *Tab) tea.Cmd {
+	// Capture values needed by the closure (not pointers to stack-allocated model)
+	searchFactory := m.SearchFactory
+	runtimeVars := m.RuntimeVars
+	tabID := tab.ID
+	contextID := tab.ContextID
+	search := tab.Search
+	inherits := tab.Inherits
+
+	log.Printf("[DEBUG] TUI loadTabLogsCmd: preparing command, tabID=%s, contextID=%s, inherits=%v", tabID, contextID, inherits)
+
+	return func() tea.Msg {
+		log.Printf("[DEBUG] TUI loadTabLogsCmd: executing, tabID=%s", tabID)
+		if searchFactory == nil {
+			log.Printf("[ERROR] TUI loadTabLogsCmd: no search factory")
+			return ErrorMsg{TabID: tabID, Err: fmt.Errorf("no search factory configured")}
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		tab.CancelFunc = cancel
+
+		if search == nil {
+			search = &client.LogSearch{}
+		}
+
+		log.Printf("[DEBUG] TUI loadTabLogsCmd: calling GetSearchResult, tabID=%s, inherits=%v", tabID, inherits)
+		result, err := searchFactory.GetSearchResult(ctx, contextID, inherits, *search, runtimeVars)
+		if err != nil {
+			log.Printf("[ERROR] TUI loadTabLogsCmd: GetSearchResult failed, tabID=%s, error=%v", tabID, err)
+			return ErrorMsg{TabID: tabID, Err: err}
+		}
+
+		tab.Result = result
+
+		// Compile the printer template from the search result
+		printerOptions := result.GetSearch().PrinterOptions
+		templateConfig := printerOptions.Template
+		if templateConfig.Value == "" {
+			// Default template includes message
+			templateConfig.S("[{{FormatTimestamp .Timestamp \"15:04:05\"}}] [{{.ContextID}}] {{.Level}} {{.Message}}")
+		}
+
+		tmpl, tmplErr := template.New("tui_printer").Funcs(printer.GetTemplateFunctionsMap()).Parse(templateConfig.Value)
+		if tmplErr != nil {
+			log.Printf("[WARN] TUI loadTabLogsCmd: failed to parse template: %v, using default", tmplErr)
+			tmpl, _ = template.New("tui_printer").Funcs(printer.GetTemplateFunctionsMap()).Parse("[{{FormatTimestamp .Timestamp \"15:04:05\"}}] [{{.ContextID}}] {{.Level}} {{.Message}}")
+		}
+
+		log.Printf("[DEBUG] TUI loadTabLogsCmd: calling GetEntries, tabID=%s", tabID)
+		entries, entryChan, err := result.GetEntries(ctx)
+		if err != nil {
+			log.Printf("[ERROR] TUI loadTabLogsCmd: GetEntries failed, tabID=%s, error=%v", tabID, err)
+			return ErrorMsg{TabID: tabID, Err: err}
+		}
+
+		// Extract JSON fields from entries
+		searchConfig := result.GetSearch()
+		for i := range entries {
+			client.ExtractJSONFromEntry(&entries[i], searchConfig)
+		}
+
+		log.Printf("[DEBUG] TUI loadTabLogsCmd: got entries, tabID=%s, count=%d", tabID, len(entries))
+
+		// Get available fields for global fields view and autocomplete
+		var fields ty.UniSet[string]
+		if initialFields, _, err := result.GetFields(ctx); err == nil {
+			fields = initialFields
+			log.Printf("[DEBUG] TUI loadTabLogsCmd: got fields, tabID=%s, count=%d", tabID, len(fields))
+		} else {
+			log.Printf("[WARN] TUI loadTabLogsCmd: GetFields failed: %v", err)
+		}
+
+		// Return initial entries with template and fields
+		msg := LogEntryMsg{TabID: tabID, Entries: entries, Result: result, Template: tmpl, Fields: fields}
+
+		// If streaming, start a goroutine to forward new entries
+		if entryChan != nil {
+			go func() {
+				for newEntries := range entryChan {
+					// Extract JSON fields from new entries too
+					for i := range newEntries {
+						client.ExtractJSONFromEntry(&newEntries[i], searchConfig)
+					}
+					// Send via program - we'll need to handle this differently
+					tab.Entries = append(tab.Entries, newEntries...)
+				}
+			}()
+		}
+
+		return msg
+	}
+}
+
+// Update handles messages and updates the model
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.Width = msg.Width
+		m.Height = msg.Height
+		m.updateViewportSizes()
+		m.updateViewportContent()
+		m.updateSidebarContent()
+
+	case tea.KeyMsg:
+		// Handle search input mode separately
+		if m.Focus == FocusSearch {
+			return m.handleSearchInput(msg)
+		}
+		// Handle inherit selection mode
+		if m.Focus == FocusInheritSelect {
+			return m.handleInheritSelect(msg)
+		}
+		// Handle context selection mode
+		if m.Focus == FocusContextSelect {
+			return m.handleContextSelect(msg)
+		}
+		return m.handleKeyPress(msg)
+
+	case LogEntryMsg:
+		// Update the tab with new entries
+		log.Printf("[DEBUG] TUI LogEntryMsg received, tabID=%s, entries=%d, currentTabs=%d", msg.TabID, len(msg.Entries), len(m.Tabs))
+		found := false
+		for _, tab := range m.Tabs {
+			if tab.ID == msg.TabID {
+				tab.Entries = append(tab.Entries, msg.Entries...)
+				tab.Loading = false
+				tab.Result = msg.Result
+				tab.Template = msg.Template
+				log.Printf("[DEBUG] TUI LogEntryMsg: matched tab, tabID=%s, totalEntries=%d", tab.ID, len(tab.Entries))
+
+				// Get available fields from message (for global fields view and autocomplete)
+				if len(msg.Fields) > 0 {
+					tab.Fields = msg.Fields
+					log.Printf("[DEBUG] TUI LogEntryMsg: got fields, count=%d", len(tab.Fields))
+
+					// Store field values in tab's search bar state
+					tab.FieldValues = make(map[string][]string)
+					for field, values := range tab.Fields {
+						tab.FieldValues[field] = values
+					}
+				}
+
+				// Extract available fields from entries and store in tab
+				fieldSet := make(map[string]struct{})
+				for _, entry := range tab.Entries {
+					for field := range entry.Fields {
+						fieldSet[field] = struct{}{}
+					}
+				}
+				tab.AvailableFields = make([]string, 0, len(fieldSet))
+				for field := range fieldSet {
+					tab.AvailableFields = append(tab.AvailableFields, field)
+				}
+				sort.Strings(tab.AvailableFields)
+
+				// Update available variables from search config and store in tab
+				if msg.Result != nil {
+					search := msg.Result.GetSearch()
+					if search != nil && search.Variables != nil {
+						tab.AvailableVariables = make([]string, 0, len(search.Variables))
+						tab.VariableMetadata = make(map[string]string)
+						for varName, varDef := range search.Variables {
+							tab.AvailableVariables = append(tab.AvailableVariables, varName)
+							tab.VariableMetadata[varName] = varDef.Description
+						}
+						sort.Strings(tab.AvailableVariables)
+					}
+
+					// Populate search bar from context config on first load
+					// Only if the search state is empty (not already populated from CLI args)
+					if tab.SearchState.IsEmpty() && search != nil {
+						tempBar := NewSearchBar()
+						tempBar.PopulateFromSearch(search)
+						tab.SearchState = tempBar.State
+						log.Printf("[DEBUG] TUI LogEntryMsg: populated search bar from context config, chips=%d", len(tab.SearchState.Chips))
+					}
+				}
+
+				// If this is the active tab, update the global search bar
+				if m.Tabs[m.ActiveTab].ID == tab.ID {
+					m.SearchBar.FieldValues = tab.FieldValues
+					m.SearchBar.AvailableFields = tab.AvailableFields
+					m.SearchBar.AvailableVariables = tab.AvailableVariables
+					m.SearchBar.VariableMetadata = tab.VariableMetadata
+					// Also sync the search state
+					m.SearchBar.State = tab.SearchState
+					m.StatusBar.UpdateFromTab(tab)
+					m.StatusBar.UpdateTimeRangeFromChips(m.SearchBar.State.Chips)
+				}
+
+				m.updateViewportContent()
+				found = true
+				break
+			}
+		}
+		if !found {
+			log.Printf("[WARN] TUI LogEntryMsg: tab not found, tabID=%s", msg.TabID)
+		}
+
+	case ErrorMsg:
+		for _, tab := range m.Tabs {
+			if tab.ID == msg.TabID {
+				tab.Error = msg.Err
+				tab.Loading = false
+				break
+			}
+		}
+
+	case LoadingMsg:
+		for _, tab := range m.Tabs {
+			if tab.ID == msg.TabID {
+				tab.Loading = msg.Loading
+				break
+			}
+		}
+
+	case InitMsg:
+		// Load initial contexts
+		log.Printf("[DEBUG] TUI InitMsg received, initialContexts=%v", m.InitialContexts)
+
+		// First, create all tabs (this will clear the search bar)
+		var initCmds []tea.Cmd
+		for _, ctxID := range m.InitialContexts {
+			search := m.InitialSearch
+			if search == nil {
+				search = &client.LogSearch{}
+			}
+			// Create a copy for each tab
+			tabSearch := *search
+			initCmds = append(initCmds, m.addTabCmd(ctxID, &tabSearch))
+		}
+
+		// Now populate search bar from CLI arguments (after tabs are created)
+		if m.InitialSearch != nil {
+			m.SearchBar.PopulateFromSearch(m.InitialSearch)
+			// Update status bar with time range from chips
+			m.StatusBar.UpdateTimeRangeFromChips(m.SearchBar.State.Chips)
+		}
+
+		// Copy the populated search bar state to all tabs
+		for _, tab := range m.Tabs {
+			tab.SearchState = m.SearchBar.State
+		}
+
+		log.Printf("[DEBUG] TUI InitMsg: created tabs, tabCount=%d, cmdCount=%d", len(m.Tabs), len(initCmds))
+		return m, tea.Batch(initCmds...)
+
+	case AddTabMsg:
+		cmd := m.addTabCmd(msg.ContextID, msg.Search)
+		return m, cmd
+	}
+
+	return m, tea.Batch(cmds...)
+}
+
+// handleKeyPress processes keyboard input
+func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.Keys.Quit):
+		m.cleanup()
+		return m, tea.Quit
+
+	case key.Matches(msg, m.Keys.Help):
+		m.ShowHelp = !m.ShowHelp
+		return m, nil
+
+	case key.Matches(msg, m.Keys.Search):
+		m.Focus = FocusSearch
+		return m, m.SearchBar.Focus()
+
+	case key.Matches(msg, m.Keys.NextTab):
+		if len(m.Tabs) > 0 {
+			newIndex := (m.ActiveTab + 1) % len(m.Tabs)
+			m.switchToTab(newIndex)
+		}
+		return m, nil
+
+	case key.Matches(msg, m.Keys.PrevTab):
+		if len(m.Tabs) > 0 {
+			newIndex := (m.ActiveTab - 1 + len(m.Tabs)) % len(m.Tabs)
+			m.switchToTab(newIndex)
+		}
+		return m, nil
+
+	case key.Matches(msg, m.Keys.NewTab):
+		if len(m.AvailableContexts) > 0 {
+			m.Focus = FocusContextSelect
+			m.ContextCursor = 0
+		}
+		return m, nil
+
+	case key.Matches(msg, m.Keys.CloseTab):
+		return m, m.closeCurrentTab()
+
+	case key.Matches(msg, m.Keys.ToggleSidebar):
+		m.DetailsVisible = !m.DetailsVisible
+		m.updateViewportSizes()
+		m.updateSidebarContent()
+		return m, nil
+
+	case key.Matches(msg, m.Keys.ExpandSidebar):
+		if m.DetailsVisible && m.SplitRatio > 0.3 {
+			m.SplitRatio -= 0.05
+			m.updateViewportSizes()
+		}
+		return m, nil
+
+	case key.Matches(msg, m.Keys.ShrinkSidebar):
+		if m.DetailsVisible && m.SplitRatio < 0.9 {
+			m.SplitRatio += 0.05
+			m.updateViewportSizes()
+		}
+		return m, nil
+
+	case key.Matches(msg, m.Keys.Up):
+		return m.moveCursor(-1), nil
+
+	case key.Matches(msg, m.Keys.Down):
+		return m.moveCursor(1), nil
+
+	case key.Matches(msg, m.Keys.PageUp):
+		return m.moveCursor(-10), nil
+
+	case key.Matches(msg, m.Keys.PageDown):
+		return m.moveCursor(10), nil
+
+	case key.Matches(msg, m.Keys.Home):
+		return m.moveCursor(-len(m.CurrentTab().Entries)), nil
+
+	case key.Matches(msg, m.Keys.End):
+		tab := m.CurrentTab()
+		if tab != nil {
+			return m.moveCursor(len(tab.Entries)), nil
+		}
+		return m, nil
+
+	case key.Matches(msg, m.Keys.Refresh):
+		cmd := m.refreshCurrentTab()
+		m.StatusBar.UpdateFromTab(m.CurrentTab())
+		return m, cmd
+
+	case key.Matches(msg, m.Keys.ClearSearch):
+		m.SearchBar.Clear()
+		m.updateViewportContent()
+		return m, nil
+	}
+
+	// Handle F key for sidebar mode toggle (not captured by Keys)
+	if msg.String() == "F" && m.DetailsVisible {
+		if m.SidebarMode == SidebarModeEntry {
+			m.SidebarMode = SidebarModeFields
+		} else {
+			m.SidebarMode = SidebarModeEntry
+		}
+		m.updateSidebarContent()
+		return m, nil
+	}
+
+	// Handle I key for inherit selection
+	if msg.String() == "I" && len(m.AvailableSearches) > 0 {
+		m.Focus = FocusInheritSelect
+		m.InheritCursor = 0
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// handleSearchInput handles input when in search mode
+func (m Model) handleSearchInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle escape to exit search mode (unless autocomplete is open)
+	if msg.Type == tea.KeyEscape && !m.SearchBar.State.AutocompleteOpen {
+		m.Focus = FocusList
+		m.SearchBar.Blur()
+		return m, nil
+	}
+
+	// Handle enter to commit and trigger a new search request
+	if msg.Type == tea.KeyEnter && !m.SearchBar.State.AutocompleteOpen {
+		log.Printf("[DEBUG] handleSearchInput: Enter pressed, triggering refresh")
+		// Commit any pending input
+		if m.SearchBar.State.CurrentInput != "" {
+			m.SearchBar.commitCurrentInput()
+		}
+		m.Focus = FocusList
+		m.SearchBar.Blur()
+		// Save search bar state to current tab
+		m.saveSearchBarToTab(m.CurrentTab())
+		// Update status bar with time range from chips
+		m.StatusBar.UpdateTimeRangeFromChips(m.SearchBar.State.Chips)
+		// Trigger a new search request with the updated chips (time range, inherits, etc.)
+		cmd := m.refreshCurrentTab()
+		// Update status bar to show loading state
+		m.StatusBar.UpdateFromTab(m.CurrentTab())
+		return m, cmd
+	}
+
+	// Delegate to search bar
+	var cmd tea.Cmd
+	m.SearchBar, cmd = m.SearchBar.Update(msg)
+	// Don't update viewport content while typing - wait for Enter to apply changes
+	// Only update status bar with time range from chips (preview what will be applied)
+	m.StatusBar.UpdateTimeRangeFromChips(m.SearchBar.State.Chips)
+	return m, cmd
+}
+
+// handleContextSelect handles input when selecting a context for new tab
+func (m Model) handleContextSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEscape:
+		m.Focus = FocusList
+		return m, nil
+
+	case tea.KeyEnter:
+		if m.ContextCursor < len(m.AvailableContexts) {
+			selectedContext := m.AvailableContexts[m.ContextCursor]
+			// Save current tab's search bar state before creating new tab
+			m.saveSearchBarToTab(m.CurrentTab())
+			m.Focus = FocusList
+			return m, m.AddTab(selectedContext, &client.LogSearch{})
+		}
+		return m, nil
+
+	case tea.KeyUp:
+		if m.ContextCursor > 0 {
+			m.ContextCursor--
+		}
+		return m, nil
+
+	case tea.KeyDown:
+		if m.ContextCursor < len(m.AvailableContexts)-1 {
+			m.ContextCursor++
+		}
+		return m, nil
+	}
+
+	// Handle j/k for navigation
+	switch msg.String() {
+	case "j":
+		if m.ContextCursor < len(m.AvailableContexts)-1 {
+			m.ContextCursor++
+		}
+	case "k":
+		if m.ContextCursor > 0 {
+			m.ContextCursor--
+		}
+	}
+
+	return m, nil
+}
+
+// handleInheritSelect handles input when selecting inherited searches
+func (m Model) handleInheritSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEscape:
+		m.Focus = FocusList
+		return m, nil
+
+	case tea.KeyEnter:
+		// Confirm and close, trigger refresh with loading indicator
+		m.Focus = FocusList
+		cmd := m.refreshCurrentTab()
+		m.StatusBar.UpdateFromTab(m.CurrentTab())
+		return m, cmd
+
+	case tea.KeySpace:
+		// Toggle current search template
+		if m.InheritCursor < len(m.AvailableSearches) {
+			search := m.AvailableSearches[m.InheritCursor]
+			m.ActiveSearches[search] = !m.ActiveSearches[search]
+		}
+		return m, nil
+
+	case tea.KeyUp:
+		if m.InheritCursor > 0 {
+			m.InheritCursor--
+		}
+		return m, nil
+
+	case tea.KeyDown:
+		if m.InheritCursor < len(m.AvailableSearches)-1 {
+			m.InheritCursor++
+		}
+		return m, nil
+	}
+
+	// Handle j/k for navigation, space for toggle
+	switch msg.String() {
+	case "j":
+		if m.InheritCursor < len(m.AvailableSearches)-1 {
+			m.InheritCursor++
+		}
+	case "k":
+		if m.InheritCursor > 0 {
+			m.InheritCursor--
+		}
+	case " ":
+		// Toggle current search template
+		if m.InheritCursor < len(m.AvailableSearches) {
+			search := m.AvailableSearches[m.InheritCursor]
+			m.ActiveSearches[search] = !m.ActiveSearches[search]
+		}
+	}
+
+	return m, nil
+}
+
+// moveCursor moves the cursor by delta positions
+func (m Model) moveCursor(delta int) Model {
+	tab := m.CurrentTab()
+	if tab == nil || len(tab.Entries) == 0 {
+		return m
+	}
+
+	oldCursor := tab.Cursor
+	newCursor := tab.Cursor + delta
+	if newCursor < 0 {
+		newCursor = 0
+	}
+	if newCursor >= len(tab.Entries) {
+		newCursor = len(tab.Entries) - 1
+	}
+
+	// Only update if cursor actually changed
+	if newCursor == oldCursor {
+		return m
+	}
+
+	tab.Cursor = newCursor
+	m.updateViewportContent()
+	m.updateSidebarContent()
+	return m
+}
+
+// closeCurrentTab closes the active tab
+func (m *Model) closeCurrentTab() tea.Cmd {
+	if len(m.Tabs) == 0 {
+		return nil
+	}
+
+	tab := m.CurrentTab()
+	if tab != nil && tab.CancelFunc != nil {
+		tab.CancelFunc()
+	}
+
+	m.Tabs = append(m.Tabs[:m.ActiveTab], m.Tabs[m.ActiveTab+1:]...)
+	if m.ActiveTab >= len(m.Tabs) && m.ActiveTab > 0 {
+		m.ActiveTab--
+	}
+
+	if len(m.Tabs) == 0 {
+		return tea.Quit
+	}
+
+	m.updateViewportContent()
+	return nil
+}
+
+// refreshCurrentTab reloads the current tab's logs
+func (m *Model) refreshCurrentTab() tea.Cmd {
+	log.Printf("[DEBUG] refreshCurrentTab: called, chips count=%d", len(m.SearchBar.State.Chips))
+	for i, c := range m.SearchBar.State.Chips {
+		log.Printf("[DEBUG] refreshCurrentTab: chip[%d] type=%d field=%s op=%s value=%s", i, c.Type, c.Field, c.Operator, c.Value)
+	}
+
+	tab := m.CurrentTab()
+	if tab == nil {
+		return nil
+	}
+
+	if tab.CancelFunc != nil {
+		tab.CancelFunc()
+	}
+
+	tab.Entries = make([]client.LogEntry, 0)
+	tab.Cursor = 0
+	tab.Loading = true
+	tab.Error = nil
+
+	// Rebuild search entirely from chips (time range, fields, etc.)
+	// This ensures removed chips are not included in the search
+	chipSearch := m.SearchBar.BuildSearchFromChips()
+
+	// Get variable assignments from chips
+	_, vars := m.SearchBar.BuildSearchModifiers()
+
+	// Apply variable assignments to runtime vars
+	for k, v := range vars {
+		m.RuntimeVars[k] = v
+	}
+
+	// Replace tab search with chip-based search
+	// Only preserve settings that don't affect filtering
+	if tab.Search != nil {
+		// Keep display/extraction settings from original (not filtering)
+		chipSearch.PrinterOptions = tab.Search.PrinterOptions
+		chipSearch.FieldExtraction = tab.Search.FieldExtraction
+		chipSearch.Size = tab.Search.Size
+		chipSearch.Variables = tab.Search.Variables
+		// Note: Don't preserve NativeQuery or Options as they may contain old filters
+	}
+	tab.Search = chipSearch
+
+	log.Printf("[DEBUG] refreshCurrentTab: chipSearch.Fields=%v, chipSearch.Range=%+v", chipSearch.Fields, chipSearch.Range)
+
+	// Apply inherited searches to the tab
+	var inherits []string
+	for search, active := range m.ActiveSearches {
+		if active {
+			inherits = append(inherits, search)
+		}
+	}
+	// Sort for consistent ordering
+	sort.Strings(inherits)
+	tab.Inherits = inherits
+
+	return m.loadTabLogsCmd(tab)
+}
+
+// cleanup cancels all active goroutines
+func (m *Model) cleanup() {
+	for _, tab := range m.Tabs {
+		if tab.CancelFunc != nil {
+			tab.CancelFunc()
+		}
+	}
+}
+
+// updateViewportSizes recalculates component sizes
+func (m *Model) updateViewportSizes() {
+	headerHeight := 2  // Tab bar
+	statusHeight := 4  // Status bar (2 lines + borders)
+	footerHeight := 3  // Search bar + help (may grow with autocomplete)
+	mainHeight := m.Height - headerHeight - statusHeight - footerHeight
+
+	if mainHeight < 1 {
+		mainHeight = 1
+	}
+
+	// Update status bar width
+	m.StatusBar.Width = m.Width
+	m.SearchBar.Width = m.Width
+
+	if m.DetailsVisible {
+		listWidth := int(float64(m.Width) * m.SplitRatio)
+		sidebarWidth := m.Width - listWidth - 1 // -1 for border
+
+		m.Viewport.Width = listWidth
+		m.Viewport.Height = mainHeight
+
+		m.SidebarVP.Width = sidebarWidth
+		m.SidebarVP.Height = mainHeight
+	} else {
+		m.Viewport.Width = m.Width
+		m.Viewport.Height = mainHeight
+	}
+}
+
+// updateViewportContent refreshes the log list content
+func (m *Model) updateViewportContent() {
+	tab := m.CurrentTab()
+	if tab == nil {
+		m.Viewport.SetContent("No tabs open. Press Ctrl+T to create a new tab.")
+		return
+	}
+
+	if tab.Loading {
+		m.Viewport.SetContent("Loading...")
+		return
+	}
+
+	if tab.Error != nil {
+		m.Viewport.SetContent(fmt.Sprintf("Error: %v", tab.Error))
+		return
+	}
+
+	if len(tab.Entries) == 0 {
+		m.Viewport.SetContent("No log entries found.")
+		return
+	}
+
+	// Filter entries using SearchBar (chips + free text)
+	entries := tab.Entries
+	filter := m.SearchBar.BuildFilter()
+	if filter != nil {
+		filtered := make([]client.LogEntry, 0)
+		for _, entry := range entries {
+			if filter.Match(entry) {
+				filtered = append(filtered, entry)
+			}
+		}
+		entries = filtered
+	} else {
+		// Fallback to simple text search for current input
+		searchTerm := strings.ToLower(m.SearchBar.GetFreeTextSearch())
+		if searchTerm != "" {
+			filtered := make([]client.LogEntry, 0)
+			for _, entry := range entries {
+				if strings.Contains(strings.ToLower(entry.Message), searchTerm) ||
+					strings.Contains(strings.ToLower(entry.Level), searchTerm) {
+					filtered = append(filtered, entry)
+				}
+			}
+			entries = filtered
+		}
+	}
+
+	// Update status bar with filtered count
+	m.StatusBar.SetFilteredCount(len(entries))
+
+	// Ensure cursor is within bounds
+	if tab.Cursor >= len(entries) {
+		tab.Cursor = len(entries) - 1
+	}
+	if tab.Cursor < 0 {
+		tab.Cursor = 0
+	}
+
+	// Calculate visible window
+	visibleLines := m.Viewport.Height
+	if visibleLines < 1 {
+		visibleLines = 1
+	}
+
+	// Adjust ViewOffset to keep cursor visible
+	if tab.Cursor < tab.ViewOffset {
+		tab.ViewOffset = tab.Cursor
+	} else if tab.Cursor >= tab.ViewOffset+visibleLines {
+		tab.ViewOffset = tab.Cursor - visibleLines + 1
+	}
+
+	// Clamp ViewOffset
+	maxOffset := len(entries) - visibleLines
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	if tab.ViewOffset > maxOffset {
+		tab.ViewOffset = maxOffset
+	}
+	if tab.ViewOffset < 0 {
+		tab.ViewOffset = 0
+	}
+
+	// Build content - only render visible lines
+	var lines []string
+	endIdx := tab.ViewOffset + visibleLines
+	if endIdx > len(entries) {
+		endIdx = len(entries)
+	}
+
+	for i := tab.ViewOffset; i < endIdx; i++ {
+		entry := entries[i]
+		isSelected := i == tab.Cursor
+		line := m.renderLogEntry(entry, isSelected, m.Viewport.Width, tab)
+		lines = append(lines, line)
+	}
+
+	// Pad with empty lines if needed
+	for len(lines) < visibleLines {
+		lines = append(lines, "")
+	}
+
+	m.Viewport.SetContent(strings.Join(lines, "\n"))
+}
+
+// updateSidebarContent refreshes the sidebar content
+func (m *Model) updateSidebarContent() {
+	if !m.DetailsVisible {
+		return
+	}
+
+	tab := m.CurrentTab()
+	if tab == nil {
+		m.SidebarVP.SetContent("No tab selected")
+		return
+	}
+
+	// Render based on sidebar mode
+	if m.SidebarMode == SidebarModeFields {
+		m.SidebarVP.SetContent(m.renderGlobalFields())
+		return
+	}
+
+	// Entry details mode
+	if len(tab.Entries) == 0 {
+		m.SidebarVP.SetContent("No entry selected")
+		return
+	}
+
+	if tab.Cursor >= len(tab.Entries) {
+		return
+	}
+
+	entry := tab.Entries[tab.Cursor]
+	m.SidebarVP.SetContent(m.renderEntryDetails(entry))
+}
+
+// renderLogEntry renders a single log entry line using the tab's printer template
+func (m *Model) renderLogEntry(entry client.LogEntry, selected bool, maxWidth int, tab *Tab) string {
+	if maxWidth < 20 {
+		maxWidth = 20
+	}
+
+	var line string
+
+	// Use the tab's template if available
+	if tab != nil && tab.Template != nil {
+		var buf bytes.Buffer
+		if err := tab.Template.Execute(&buf, entry); err != nil {
+			// Fallback to format with message on template error
+			line = fmt.Sprintf("[%s] %s %s", entry.Timestamp.Format("15:04:05"), entry.Level, entry.Message)
+		} else {
+			line = buf.String()
+		}
+	} else {
+		// Default format with message if no template
+		line = fmt.Sprintf("[%s] [%s] %s %s", entry.Timestamp.Format("15:04:05"), entry.ContextID, entry.Level, entry.Message)
+	}
+
+	// Clean up the line: replace newlines and tabs with spaces
+	line = strings.ReplaceAll(line, "\n", " ")
+	line = strings.ReplaceAll(line, "\r", "")
+	line = strings.ReplaceAll(line, "\t", " ")
+
+	// Truncate line to fit maxWidth (before styling to preserve ANSI codes)
+	lineRunes := []rune(line)
+	if len(lineRunes) > maxWidth {
+		if maxWidth > 3 {
+			line = string(lineRunes[:maxWidth-3]) + "..."
+		} else {
+			line = string(lineRunes[:maxWidth])
+		}
+	}
+
+	// Apply selection or normal style
+	if selected {
+		return m.Styles.LogSelected.Width(maxWidth).Render(line)
+	}
+	return m.Styles.LogEntry.Width(maxWidth).Render(line)
+}
+
+// renderEntryDetails renders the sidebar content for an entry
+func (m *Model) renderEntryDetails(entry client.LogEntry) string {
+	var b strings.Builder
+
+	// Title
+	b.WriteString(m.Styles.SidebarTitle.Render("Entry Details"))
+	b.WriteString("\n\n")
+
+	// Core fields
+	writeField := func(key, value string) {
+		b.WriteString(m.Styles.SidebarKey.Render(key + ": "))
+		b.WriteString(m.Styles.SidebarValue.Render(value))
+		b.WriteString("\n")
+	}
+
+	writeField("Timestamp", entry.Timestamp.Format(time.RFC3339))
+	writeField("Level", entry.Level)
+	if entry.ContextID != "" {
+		writeField("Context", entry.ContextID)
+	}
+
+	// Fields (sorted alphabetically)
+	if len(entry.Fields) > 0 {
+		b.WriteString("\n")
+		b.WriteString(m.Styles.SidebarTitle.Render("Fields"))
+		b.WriteString("\n")
+
+		// Sort field keys alphabetically
+		fieldKeys := make([]string, 0, len(entry.Fields))
+		for key := range entry.Fields {
+			fieldKeys = append(fieldKeys, key)
+		}
+		sort.Strings(fieldKeys)
+
+		// Render fields in sorted order
+		for _, key := range fieldKeys {
+			val := entry.Fields[key]
+			valStr := fmt.Sprintf("%v", val)
+			// Check if it's a nested object
+			if nested, ok := val.(map[string]interface{}); ok {
+				jsonBytes, err := json.MarshalIndent(nested, "  ", "  ")
+				if err == nil {
+					valStr = string(jsonBytes)
+				}
+			}
+			b.WriteString(m.Styles.SidebarKey.Render(key + ":"))
+			b.WriteString("\n  ")
+			b.WriteString(m.Styles.SidebarValue.Render(valStr))
+			b.WriteString("\n")
+		}
+	}
+
+	return b.String()
+}
+
+// renderGlobalFields renders the sidebar content for global fields view
+func (m *Model) renderGlobalFields() string {
+	tab := m.CurrentTab()
+	if tab == nil || len(tab.Fields) == 0 {
+		return m.Styles.SidebarValue.Render("No fields available.\nFields are populated from the\nlog source's field discovery.")
+	}
+
+	var b strings.Builder
+
+	// Title
+	b.WriteString(m.Styles.SidebarTitle.Render("Global Fields"))
+	b.WriteString("\n\n")
+
+	// Sort field names for consistent display
+	fieldNames := make([]string, 0, len(tab.Fields))
+	for field := range tab.Fields {
+		fieldNames = append(fieldNames, field)
+	}
+	sort.Strings(fieldNames)
+
+	// Render each field with its top values
+	maxValues := 5 // Show top 5 values per field
+	for _, field := range fieldNames {
+		values := tab.Fields[field]
+
+		// Field name header
+		b.WriteString(m.Styles.SidebarKey.Render(field + ":"))
+		b.WriteString("\n")
+
+		// Show top N values
+		displayCount := len(values)
+		if displayCount > maxValues {
+			displayCount = maxValues
+		}
+
+		for i := 0; i < displayCount; i++ {
+			b.WriteString("  ")
+			b.WriteString(m.Styles.SidebarValue.Render("• " + values[i]))
+			b.WriteString("\n")
+		}
+
+		// Show "more" indicator if there are additional values
+		if len(values) > maxValues {
+			remaining := len(values) - maxValues
+			b.WriteString("  ")
+			b.WriteString(m.Styles.SidebarValue.Foreground(ColorMuted).Render(
+				fmt.Sprintf("... +%d more", remaining)))
+			b.WriteString("\n")
+		}
+
+		b.WriteString("\n")
+	}
+
+	return b.String()
+}
+
+// View renders the TUI
+func (m Model) View() string {
+	if m.Width == 0 || m.Height == 0 {
+		return "Loading..."
+	}
+
+	// Render context selection overlay if active
+	if m.Focus == FocusContextSelect {
+		return m.renderContextSelectOverlay()
+	}
+
+	// Render inherit selection overlay if active
+	if m.Focus == FocusInheritSelect {
+		return m.renderInheritSelectOverlay()
+	}
+
+	var sections []string
+
+	// Header (tabs)
+	sections = append(sections, m.renderTabs())
+
+	// Main content area
+	mainContent := m.renderMainArea()
+	sections = append(sections, mainContent)
+
+	// Status bar (between viewport and search)
+	sections = append(sections, m.StatusBar.View())
+
+	// Search bar and help
+	sections = append(sections, m.renderSearchFooter())
+
+	return lipgloss.JoinVertical(lipgloss.Left, sections...)
+}
+
+// renderContextSelectOverlay renders the context selection modal
+func (m Model) renderContextSelectOverlay() string {
+	// Title
+	title := m.Styles.SidebarTitle.Render("Select Context for New Tab")
+
+	// Context list
+	var items []string
+	for i, ctx := range m.AvailableContexts {
+		style := m.Styles.LogEntry
+		if i == m.ContextCursor {
+			style = m.Styles.LogSelected
+		}
+
+		// Add description if available
+		desc := ""
+		if m.Config != nil {
+			if ctxCfg, ok := m.Config.Contexts[ctx]; ok && ctxCfg.Description != "" {
+				desc = " - " + ctxCfg.Description
+			}
+		}
+
+		items = append(items, style.Render(fmt.Sprintf("  %s%s", ctx, desc)))
+	}
+
+	list := strings.Join(items, "\n")
+
+	// Help text
+	help := m.Styles.HelpBar.Render("↑↓/jk navigate • Enter select • Esc cancel")
+
+	// Build the modal
+	content := lipgloss.JoinVertical(lipgloss.Left,
+		title,
+		"",
+		list,
+		"",
+		help,
+	)
+
+	// Center the modal
+	modalStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ColorPrimary).
+		Padding(1, 2).
+		Width(m.Width / 2).
+		Align(lipgloss.Left)
+
+	modal := modalStyle.Render(content)
+
+	// Center on screen
+	return lipgloss.Place(
+		m.Width,
+		m.Height,
+		lipgloss.Center,
+		lipgloss.Center,
+		modal,
+	)
+}
+
+// renderInheritSelectOverlay renders the inherited search selection modal
+func (m Model) renderInheritSelectOverlay() string {
+	// Title
+	title := m.Styles.SidebarTitle.Render("Select Inherited Searches")
+	subtitle := lipgloss.NewStyle().Foreground(ColorMuted).Render("Toggle search templates to inherit")
+
+	// Search list with checkboxes
+	var items []string
+	for i, search := range m.AvailableSearches {
+		style := m.Styles.LogEntry
+		if i == m.InheritCursor {
+			style = m.Styles.LogSelected
+		}
+
+		// Checkbox indicator
+		checkbox := "[ ]"
+		if m.ActiveSearches[search] {
+			checkbox = "[✓]"
+		}
+
+		items = append(items, style.Render(fmt.Sprintf("  %s %s", checkbox, search)))
+	}
+
+	list := strings.Join(items, "\n")
+
+	// Help text
+	help := m.Styles.HelpBar.Render("↑↓/jk navigate • Space toggle • Enter confirm • Esc cancel")
+
+	// Build the modal
+	content := lipgloss.JoinVertical(lipgloss.Left,
+		title,
+		subtitle,
+		"",
+		list,
+		"",
+		help,
+	)
+
+	// Center the modal
+	modalStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ColorPrimary).
+		Padding(1, 2).
+		Width(m.Width / 2).
+		Align(lipgloss.Left)
+
+	modal := modalStyle.Render(content)
+
+	// Center on screen
+	return lipgloss.Place(
+		m.Width,
+		m.Height,
+		lipgloss.Center,
+		lipgloss.Center,
+		modal,
+	)
+}
+
+// renderTabs renders the tab bar
+func (m Model) renderTabs() string {
+	if len(m.Tabs) == 0 {
+		return m.Styles.TabBar.Width(m.Width).Render("No tabs")
+	}
+
+	var tabs []string
+	for i, tab := range m.Tabs {
+		name := tab.Name
+		if tab.Loading {
+			name += " ⏳"
+		}
+		if tab.Error != nil {
+			name += " ❌"
+		}
+
+		if i == m.ActiveTab {
+			tabs = append(tabs, m.Styles.TabActive.Render(name))
+		} else {
+			tabs = append(tabs, m.Styles.TabInactive.Render(name))
+		}
+	}
+
+	tabRow := lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
+	return m.Styles.TabBar.Width(m.Width).Render(tabRow)
+}
+
+// renderMainArea renders the log list and optional sidebar
+func (m Model) renderMainArea() string {
+	if !m.DetailsVisible {
+		return m.Viewport.View()
+	}
+
+	// Split view
+	listView := m.Viewport.View()
+
+	// Render sidebar with tab-style header
+	sidebarContent := m.renderSidebarWithTabs()
+	sidebarView := m.Styles.Sidebar.Height(m.Viewport.Height).Render(sidebarContent)
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, listView, sidebarView)
+}
+
+// renderSidebarWithTabs renders the sidebar with tab-style mode selector
+func (m Model) renderSidebarWithTabs() string {
+	// Tab header styles
+	activeTab := lipgloss.NewStyle().
+		Foreground(ColorText).
+		Background(ColorPrimary).
+		Padding(0, 1).
+		Bold(true)
+	inactiveTab := lipgloss.NewStyle().
+		Foreground(ColorMuted).
+		Padding(0, 1)
+
+	// Render tabs
+	var entryTab, fieldsTab string
+	if m.SidebarMode == SidebarModeEntry {
+		entryTab = activeTab.Render("Entry")
+		fieldsTab = inactiveTab.Render("Fields")
+	} else {
+		entryTab = inactiveTab.Render("Entry")
+		fieldsTab = activeTab.Render("Fields")
+	}
+
+	// Tab bar with help hint
+	tabBar := lipgloss.JoinHorizontal(lipgloss.Center, entryTab, " ", fieldsTab)
+	tabHint := lipgloss.NewStyle().Foreground(ColorMuted).Render(" (F)")
+	header := tabBar + tabHint
+
+	// Content
+	content := m.SidebarVP.View()
+
+	return lipgloss.JoinVertical(lipgloss.Left, header, "", content)
+}
+
+// renderSearchFooter renders the chip-based search bar and help text
+func (m Model) renderSearchFooter() string {
+	var parts []string
+
+	// Search bar (chip-based)
+	parts = append(parts, m.SearchBar.View())
+
+	// Help text
+	helpText := "↑↓ navigate • / search • I inherits • Tab autocomplete • Enter sidebar • F fields • ? help • q quit"
+	if m.ShowHelp {
+		helpText = "↑↓/jk nav • PgUp/PgDn scroll • Tab/Shift+Tab tabs • Ctrl+T new • Ctrl+W close • I inherits • [ ] resize • Enter sidebar • F fields • Esc clear • q quit"
+	}
+	parts = append(parts, m.Styles.HelpBar.Render(helpText))
+
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+}

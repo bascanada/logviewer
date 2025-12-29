@@ -274,6 +274,9 @@ func (cc ContextConfig) GetSearchContext(contextId string, inherits []string, lo
 		return SearchContext{}, fmt.Errorf("%w: %s", ErrContextNotFound, contextId)
 	}
 
+	// Deep copy the search to avoid mutating the original config's maps
+	searchContext.Search = deepCopyLogSearch(searchContext.Search)
+
 	// Combine inherits from context and the call
 	allInherits := append(searchContext.SearchInherit, inherits...)
 	if len(allInherits) > 0 {
@@ -330,4 +333,66 @@ func (cc ContextConfig) GetSearchContext(contextId string, inherits []string, lo
 	}
 
 	return searchContext, nil
+}
+
+// deepCopyLogSearch creates a deep copy of a LogSearch to avoid mutating the original config.
+// This is critical because maps are reference types - without deep copy, merging operations
+// would permanently modify the original config's maps.
+func deepCopyLogSearch(src client.LogSearch) client.LogSearch {
+	dst := src // Copy all value types
+
+	// Deep copy Fields (ty.MS = map[string]string)
+	if src.Fields != nil {
+		dst.Fields = make(ty.MS, len(src.Fields))
+		for k, v := range src.Fields {
+			dst.Fields[k] = v
+		}
+	}
+
+	// Deep copy FieldsCondition (ty.MS = map[string]string)
+	if src.FieldsCondition != nil {
+		dst.FieldsCondition = make(ty.MS, len(src.FieldsCondition))
+		for k, v := range src.FieldsCondition {
+			dst.FieldsCondition[k] = v
+		}
+	}
+
+	// Deep copy Options (ty.MI = map[string]interface{})
+	if src.Options != nil {
+		dst.Options = make(ty.MI, len(src.Options))
+		for k, v := range src.Options {
+			dst.Options[k] = v
+		}
+	}
+
+	// Deep copy Variables (map[string]VariableDefinition)
+	if src.Variables != nil {
+		dst.Variables = make(map[string]client.VariableDefinition, len(src.Variables))
+		for k, v := range src.Variables {
+			dst.Variables[k] = v
+		}
+	}
+
+	// Deep copy Filter (recursive structure)
+	if src.Filter != nil {
+		copied := deepCopyFilter(*src.Filter)
+		dst.Filter = &copied
+	}
+
+	return dst
+}
+
+// deepCopyFilter creates a deep copy of a Filter (recursive AST).
+func deepCopyFilter(src client.Filter) client.Filter {
+	dst := src // Copy value fields
+
+	// Deep copy nested Filters slice
+	if src.Filters != nil {
+		dst.Filters = make([]client.Filter, len(src.Filters))
+		for i, f := range src.Filters {
+			dst.Filters[i] = deepCopyFilter(f)
+		}
+	}
+
+	return dst
 }

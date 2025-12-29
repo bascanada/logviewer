@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"regexp"
 	"strings"
 	"time"
@@ -131,9 +130,6 @@ func (lr *ReaderLogResult) parseBlock(block string) (*client.LogEntry, bool) {
 	// if hl actually ran on the remote until after reading all output.
 	// For hybrid SSH mode, we always filter client-side to ensure correctness.
 	isPreFiltered := lr.search.Options.GetBool("__preFiltered__")
-
-	// DEBUG: Log preFiltered status
-	slog.Debug("parseBlock", "preFiltered", isPreFiltered, "jsonExtract", lr.search.FieldExtraction.Json.Value)
 
 	// Apply filter using the new recursive filter system
 	// Skip filtering only if explicitly pre-filtered (local hl mode)
