@@ -174,5 +174,9 @@ func (lr *LogSearch) MergeInto(logSeach *LogSearch) error {
 	lr.PageToken.Merge(&logSeach.PageToken)
 	lr.NativeQuery.Merge(&logSeach.NativeQuery)
 
+	if logSeach.Follow {
+		lr.Follow = true
+	}
+
 	return nil
 }

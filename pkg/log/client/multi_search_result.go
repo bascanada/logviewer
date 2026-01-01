@@ -65,12 +65,14 @@ func (m *MultiLogSearchResult) GetEntries(ctx context.Context) ([]LogEntry, chan
 	var allEntries []LogEntry
 	var mutex sync.Mutex
 	var wg sync.WaitGroup
+	var subChannels []chan []LogEntry
+	var subChannelsResults []LogSearchResult
 
 	for _, result := range m.Results {
 		wg.Add(1)
 		go func(r LogSearchResult) {
 			defer wg.Done()
-			entries, _, err := r.GetEntries(ctx)
+			entries, ch, err := r.GetEntries(ctx)
 			if err != nil {
 				// In a real-world scenario, you might want to handle this error more gracefully.
 				// For now, we'll just skip the results from this source.
@@ -93,6 +95,10 @@ func (m *MultiLogSearchResult) GetEntries(ctx context.Context) ([]LogEntry, chan
 
 			mutex.Lock()
 			allEntries = append(allEntries, entries...)
+			if ch != nil {
+				subChannels = append(subChannels, ch)
+				subChannelsResults = append(subChannelsResults, r)
+			}
 			mutex.Unlock()
 		}(result)
 	}
@@ -104,7 +110,36 @@ func (m *MultiLogSearchResult) GetEntries(ctx context.Context) ([]LogEntry, chan
 		return allEntries[i].Timestamp.Before(allEntries[j].Timestamp)
 	})
 
-	return allEntries, nil, nil
+	var mergedChannel chan []LogEntry
+	if len(subChannels) > 0 {
+		mergedChannel = make(chan []LogEntry)
+
+		go func() {
+			var wgCh sync.WaitGroup
+			for i, ch := range subChannels {
+				wgCh.Add(1)
+				go func(c chan []LogEntry, r LogSearchResult) {
+					defer wgCh.Done()
+					for entries := range c {
+						resultSearch := r.GetSearch()
+						contextID, ok := resultSearch.Options["__context_id__"].(string)
+						if !ok {
+							contextID = "unknown"
+						}
+						for k := range entries {
+							entries[k].ContextID = contextID
+							ExtractJSONFromEntry(&entries[k], resultSearch)
+						}
+						mergedChannel <- entries
+					}
+				}(ch, subChannelsResults[i])
+			}
+			wgCh.Wait()
+			close(mergedChannel)
+		}()
+	}
+
+	return allEntries, mergedChannel, nil
 }
 
 // GetFields is not implemented for MultiLogSearchResult as it's ambiguous

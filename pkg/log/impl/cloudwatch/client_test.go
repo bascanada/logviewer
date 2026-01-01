@@ -253,3 +253,204 @@ func TestCloudWatchLogSearchResult_GetPaginationInfo(t *testing.T) {
 		assert.Equal(t, lastTimestamp.Format(time.RFC3339Nano), info.NextPageToken)
 	})
 }
+
+// TestCloudWatchLogSearchResult_NoStreamingSupport documents that CloudWatch
+// does not support streaming/Follow mode - it always returns nil for the channel.
+// This is expected behavior since CloudWatch Logs Insights is query-based.
+func TestCloudWatchLogSearchResult_NoStreamingSupport(t *testing.T) {
+	t.Run("GetEntries returns nil channel - no streaming support", func(t *testing.T) {
+		mockClient := &mockCWClient{
+			GetQueryResultsFunc: func(ctx context.Context, params *cloudwatchlogs.GetQueryResultsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error) {
+				return &cloudwatchlogs.GetQueryResultsOutput{
+					Status:  types.QueryStatusComplete,
+					Results: [][]types.ResultField{},
+				}, nil
+			},
+		}
+
+		// Even with Follow=true, CloudWatch should not return a streaming channel
+		search := &client.LogSearch{
+			Follow: true, // This should be ignored by CloudWatch
+			Options: ty.MI{
+				"logGroupName": "test-group",
+			},
+		}
+
+		result := &CloudWatchLogSearchResult{
+			client:  mockClient,
+			queryId: "test-query-id",
+			search:  search,
+		}
+
+		entries, ch, err := result.GetEntries(context.Background())
+		assert.NoError(t, err)
+		// entries may be nil or empty slice, both are acceptable
+		assert.Empty(t, entries)
+		assert.Nil(t, ch, "CloudWatch should not return a streaming channel (no Follow support)")
+	})
+
+	t.Run("Err returns nil - no async error channel", func(t *testing.T) {
+		result := &CloudWatchLogSearchResult{
+			search: &client.LogSearch{},
+		}
+		assert.Nil(t, result.Err(), "CloudWatch should return nil error channel")
+	})
+}
+
+func TestCloudWatchLogSearchResult_PollingMechanism(t *testing.T) {
+	t.Run("Polls until Complete status", func(t *testing.T) {
+		pollCount := 0
+		mockClient := &mockCWClient{
+			GetQueryResultsFunc: func(ctx context.Context, params *cloudwatchlogs.GetQueryResultsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error) {
+				pollCount++
+				// Return Running for first 2 calls, then Complete
+				if pollCount < 3 {
+					return &cloudwatchlogs.GetQueryResultsOutput{
+						Status: types.QueryStatusRunning,
+					}, nil
+				}
+				return &cloudwatchlogs.GetQueryResultsOutput{
+					Status: types.QueryStatusComplete,
+					Results: [][]types.ResultField{
+						{
+							{Field: aws.String("@timestamp"), Value: aws.String("2025-01-01 00:00:00.000")},
+							{Field: aws.String("@message"), Value: aws.String("test")},
+						},
+					},
+				}, nil
+			},
+		}
+
+		search := &client.LogSearch{
+			Options: ty.MI{
+				"logGroupName":           "test-group",
+				"cloudwatchPollInterval": "1ms", // Fast polling for test
+			},
+		}
+
+		result := &CloudWatchLogSearchResult{
+			client:  mockClient,
+			queryId: "test-query-id",
+			search:  search,
+		}
+
+		entries, _, err := result.GetEntries(context.Background())
+		assert.NoError(t, err)
+		assert.Len(t, entries, 1)
+		assert.GreaterOrEqual(t, pollCount, 3, "Should have polled at least 3 times")
+	})
+
+	t.Run("Context cancellation stops polling", func(t *testing.T) {
+		pollCount := 0
+		mockClient := &mockCWClient{
+			GetQueryResultsFunc: func(ctx context.Context, params *cloudwatchlogs.GetQueryResultsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error) {
+				pollCount++
+				// Always return Running to force continuous polling
+				return &cloudwatchlogs.GetQueryResultsOutput{
+					Status: types.QueryStatusRunning,
+				}, nil
+			},
+		}
+
+		search := &client.LogSearch{
+			Options: ty.MI{
+				"logGroupName":           "test-group",
+				"cloudwatchPollInterval": "1ms",
+			},
+		}
+
+		result := &CloudWatchLogSearchResult{
+			client:  mockClient,
+			queryId: "test-query-id",
+			search:  search,
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer cancel()
+
+		_, _, err := result.GetEntries(ctx)
+		assert.Error(t, err, "Should return error when context is cancelled")
+		assert.True(t, pollCount >= 1, "Should have polled at least once")
+	})
+
+	t.Run("Handles Failed status", func(t *testing.T) {
+		mockClient := &mockCWClient{
+			GetQueryResultsFunc: func(ctx context.Context, params *cloudwatchlogs.GetQueryResultsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error) {
+				return &cloudwatchlogs.GetQueryResultsOutput{
+					Status: types.QueryStatusFailed,
+				}, nil
+			},
+		}
+
+		result := &CloudWatchLogSearchResult{
+			client:  mockClient,
+			queryId: "test-query-id",
+			search:  &client.LogSearch{Options: ty.MI{}},
+		}
+
+		entries, _, err := result.GetEntries(context.Background())
+		assert.NoError(t, err) // Failed status is handled, no error returned
+		assert.Empty(t, entries)
+	})
+
+	t.Run("Handles Cancelled status", func(t *testing.T) {
+		mockClient := &mockCWClient{
+			GetQueryResultsFunc: func(ctx context.Context, params *cloudwatchlogs.GetQueryResultsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error) {
+				return &cloudwatchlogs.GetQueryResultsOutput{
+					Status: types.QueryStatusCancelled,
+				}, nil
+			},
+		}
+
+		result := &CloudWatchLogSearchResult{
+			client:  mockClient,
+			queryId: "test-query-id",
+			search:  &client.LogSearch{Options: ty.MI{}},
+		}
+
+		entries, _, err := result.GetEntries(context.Background())
+		assert.NoError(t, err)
+		assert.Empty(t, entries)
+	})
+}
+
+func TestCloudWatchLogSearchResult_GetSearch(t *testing.T) {
+	search := &client.LogSearch{Follow: true}
+	result := &CloudWatchLogSearchResult{search: search}
+
+	assert.Equal(t, search, result.GetSearch())
+}
+
+func TestParseCloudWatchTimestamp(t *testing.T) {
+	t.Run("Parses Insights format", func(t *testing.T) {
+		ts, ok := parseCloudWatchTimestamp("2025-01-15 10:30:45.123")
+		assert.True(t, ok)
+		assert.Equal(t, 2025, ts.Year())
+		assert.Equal(t, time.January, ts.Month())
+		assert.Equal(t, 15, ts.Day())
+	})
+
+	t.Run("Parses RFC3339 format", func(t *testing.T) {
+		ts, ok := parseCloudWatchTimestamp("2025-01-15T10:30:45Z")
+		assert.True(t, ok)
+		assert.Equal(t, 2025, ts.Year())
+	})
+
+	t.Run("Parses RFC3339Nano format", func(t *testing.T) {
+		ts, ok := parseCloudWatchTimestamp("2025-01-15T10:30:45.123456789Z")
+		assert.True(t, ok)
+		assert.Equal(t, 2025, ts.Year())
+	})
+
+	t.Run("Parses epoch milliseconds", func(t *testing.T) {
+		// 1705315845123 = 2024-01-15T10:30:45.123Z
+		ts, ok := parseCloudWatchTimestamp("1705315845123")
+		assert.True(t, ok)
+		assert.False(t, ts.IsZero())
+	})
+
+	t.Run("Returns false for invalid format", func(t *testing.T) {
+		_, ok := parseCloudWatchTimestamp("not-a-timestamp")
+		assert.False(t, ok)
+	})
+}

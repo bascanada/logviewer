@@ -32,3 +32,17 @@ func TestMerging(t *testing.T) {
 	//assert.Equal(t, searchParent)
 
 }
+
+func TestMergingFollow(t *testing.T) {
+	searchParent := LogSearch{
+		Follow: false,
+	}
+
+	searchChild := LogSearch{
+		Follow: true,
+	}
+
+	searchParent.MergeInto(&searchChild)
+
+	assert.True(t, searchParent.Follow, "Follow should be true after merge")
+}

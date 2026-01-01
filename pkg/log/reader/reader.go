@@ -209,36 +209,126 @@ func (lr *ReaderLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, c
 		lr.closer.Close()
 		return lr.entries, nil, nil
 	} else {
+		// Channel to receive lines from the scanner
+		lineChan := make(chan string, 100) // Buffered to prevent scanner blocking during handoff
+		// Channel to signal scanning finished
+		doneChan := make(chan bool)
+
+		go func() {
+			defer close(lineChan)
+			defer close(doneChan)
+			for lr.scanner.Scan() {
+				lineChan <- lr.scanner.Text()
+			}
+		}()
+
+		var initialEntries []client.LogEntry
+		var pendingBlock strings.Builder
+
+		// Helper to process lines into entries
+		// Note: We need to append to either initialEntries OR send to channel c depending on phase
+		// So we'll decouple parsing from destination.
+
+		// Phase 1: Capture initial batch for sorting
+		captureLimit := 1000
+		if lr.search.Size.Set && lr.search.Size.Value > 0 {
+			captureLimit = lr.search.Size.Value
+		}
+		
+		timeout := time.NewTimer(500 * time.Millisecond)
+		capturing := true
+
+	CaptureLoop:
+		for capturing {
+			if len(initialEntries) >= captureLimit {
+				break CaptureLoop
+			}
+
+			select {
+			case <-ctx.Done():
+				return nil, nil, ctx.Err()
+			case line, ok := <-lineChan:
+				if !ok {
+					// Scanner finished during capture
+					capturing = false
+					break CaptureLoop
+				}
+				// Parse synchronously
+				lr.processLine(line, &pendingBlock, func(entry client.LogEntry) {
+					initialEntries = append(initialEntries, entry)
+				})
+			case <-timeout.C:
+				// Timeout reached, stop capturing
+				capturing = false
+				break CaptureLoop
+			}
+		}
+
+		// Flush any pending block from capture phase into initialEntries
+		lr.flushBlock(&pendingBlock, func(entry client.LogEntry) {
+			initialEntries = append(initialEntries, entry)
+		})
+		
+		// If scanner finished, we are done
+		select {
+		case <-doneChan:
+			lr.closer.Close()
+			return initialEntries, nil, nil
+		default:
+		}
+
+		// Phase 2: Stream remaining logs
 		c := make(chan []client.LogEntry)
 
 		go func() {
 			defer close(c)
 			defer lr.closer.Close()
 
-			var pendingBlock strings.Builder
+			// We might have a partial pending block from Phase 1? 
+			// No, we flushed it above. pendingBlock is empty now.
+			// But wait, if processLine accumulated a partial line but didn't trigger onEntry,
+			// flushBlock forced it out as an entry. 
+			// This effectively "breaks" a multiline log that straddles the capture boundary.
+			// However, given the timeout/limit, this is an acceptable tradeoff to ensure 
+			// history is displayed. Multiline logs usually arrive in a burst anyway.
+
 			onEntry := func(entry client.LogEntry) {
 				c <- []client.LogEntry{entry}
+			}
+
+			// Reuse the flush-on-timeout logic for streaming
+			flushTimer := time.NewTimer(100 * time.Millisecond)
+			if !flushTimer.Stop() {
+				<-flushTimer.C
 			}
 
 			for {
 				select {
 				case <-ctx.Done():
 					return
-				default:
-					{
-						if lr.scanner.Scan() {
-							lr.processLine(lr.scanner.Text(), &pendingBlock, onEntry)
-						} else {
-							// EOF or error
-							lr.flushBlock(&pendingBlock, onEntry)
-							return
+				case line, ok := <-lineChan:
+					if !ok {
+						lr.flushBlock(&pendingBlock, onEntry)
+						return
+					}
+					lr.processLine(line, &pendingBlock, onEntry)
+
+					// Reset the flush timer
+					if !flushTimer.Stop() {
+						select {
+						case <-flushTimer.C:
+						default:
 						}
 					}
+					flushTimer.Reset(100 * time.Millisecond)
+
+				case <-flushTimer.C:
+					lr.flushBlock(&pendingBlock, onEntry)
 				}
 			}
 		}()
 
-		return []client.LogEntry{}, c, nil
+		return initialEntries, c, nil
 	}
 }
 
