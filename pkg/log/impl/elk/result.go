@@ -158,11 +158,22 @@ func (sr ElkSearchResult) onChange(ctx context.Context) (chan []client.LogEntry,
 	go func() {
 		// Initialize lastLte from current search or use time.Now() as fallback
 		var lastLte time.Time
+		var err error
+
+		customFormat := sr.search.Options.GetString("timestampFormat")
+
 		if sr.search.Range.Lte.Value != "" {
-			parsed, err := time.Parse(time.RFC3339, sr.search.Range.Lte.Value)
-			if err == nil {
-				lastLte = parsed
+			if customFormat != "" {
+				lastLte, err = time.Parse(customFormat, sr.search.Range.Lte.Value)
 			} else {
+				// Try parsing with nanoseconds first, then without.
+				lastLte, err = time.Parse(time.RFC3339Nano, sr.search.Range.Lte.Value)
+				if err != nil {
+					lastLte, err = time.Parse(time.RFC3339, sr.search.Range.Lte.Value)
+				}
+			}
+
+			if err != nil {
 				lastLte = time.Now()
 			}
 		} else {
@@ -173,10 +184,15 @@ func (sr ElkSearchResult) onChange(ctx context.Context) (chan []client.LogEntry,
 			select {
 			case <-time.After(duration):
 				{
+					format := time.RFC3339
+					if customFormat != "" {
+						format = customFormat
+					}
+
 					// Use the last Lte + 1 second as the new Gte (sliding window)
-					sr.search.Range.Gte.Value = lastLte.Add(time.Second * 1).Format(time.RFC3339)
+					sr.search.Range.Gte.Value = lastLte.Add(time.Second * 1).Format(format)
 					newLte := time.Now()
-					sr.search.Range.Lte.Value = newLte.Format(time.RFC3339)
+					sr.search.Range.Lte.Value = newLte.Format(format)
 					// Clear Last to avoid conflict with Gte/Lte
 					sr.search.Range.Last.Value = ""
 					sr.search.Range.Last.Set = false

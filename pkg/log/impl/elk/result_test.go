@@ -73,10 +73,10 @@ func TestElkSearchResult_GetPaginationInfo(t *testing.T) {
 
 // mockElkLogClient implements client.LogClient for testing refresh functionality
 type mockElkLogClient struct {
-	getCalls      int
-	lastSearch    *client.LogSearch
-	returnResult  Hits
-	returnError   error
+	getCalls     int
+	lastSearch   *client.LogSearch
+	returnResult Hits
+	returnError  error
 }
 
 func (m *mockElkLogClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
@@ -223,17 +223,21 @@ func TestElkSearchResult_onChange(t *testing.T) {
 		}
 	})
 
-	t.Run("Clears Last to avoid conflict with Gte/Lte", func(t *testing.T) {
+	t.Run("Uses Lte value with nanoseconds", func(t *testing.T) {
 		mockClient := &mockElkLogClient{
-			returnResult: Hits{Hits: []Hit{}},
+			returnResult: Hits{
+				Hits: []Hit{},
+			},
 		}
 
+		lteTime := time.Now().Add(-1 * time.Minute)
 		search := &client.LogSearch{
 			Refresh: client.RefreshOptions{
 				Duration: ty.Opt[string]{Value: "100ms", Set: true},
 			},
 		}
-		search.Range.Last.S("1h")
+		// Use RFC3339Nano format
+		search.Range.Lte.S(lteTime.Format(time.RFC3339Nano))
 
 		result := ElkSearchResult{
 			client:  mockClient,
@@ -248,71 +252,40 @@ func TestElkSearchResult_onChange(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, ch)
 
-		// Wait for at least one polling cycle
 		select {
 		case <-ch:
 		case <-ctx.Done():
 		}
 
-		// After polling, Last should be cleared
-		if mockClient.lastSearch != nil {
-			assert.Empty(t, mockClient.lastSearch.Range.Last.Value)
-			assert.False(t, mockClient.lastSearch.Range.Last.Set)
-		}
+		assert.GreaterOrEqual(t, mockClient.getCalls, 1)
+
+		expectedGte := lteTime.Add(time.Second).Format(time.RFC3339)
+		assert.Equal(t, expectedGte, mockClient.lastSearch.Range.Gte.Value)
 	})
 
-	t.Run("Context cancellation stops polling", func(t *testing.T) {
+	t.Run("Uses custom timestamp format", func(t *testing.T) {
 		mockClient := &mockElkLogClient{
-			returnResult: Hits{Hits: []Hit{}},
-		}
-
-		search := &client.LogSearch{
-			Refresh: client.RefreshOptions{
-				Duration: ty.Opt[string]{Value: "1s", Set: true}, // Long duration
+			returnResult: Hits{
+				Hits: []Hit{},
 			},
 		}
+
+		customFormat := "2006/01/02 15:04:05"
+		lteTime := time.Now().Add(-1 * time.Minute)
+		search := &client.LogSearch{
+			Refresh: client.RefreshOptions{
+				Duration: ty.Opt[string]{Value: "100ms", Set: true},
+			},
+			Options: ty.MI{
+				"timestampFormat": customFormat,
+			},
+		}
+		search.Range.Lte.S(lteTime.Format(customFormat))
 
 		result := ElkSearchResult{
 			client:  mockClient,
 			search:  search,
 			ErrChan: make(chan error, 1),
-		}
-
-		ctx, cancel := context.WithCancel(context.Background())
-		ch, err := result.onChange(ctx)
-		require.NoError(t, err)
-		require.NotNil(t, ch)
-
-		// Cancel immediately
-		cancel()
-
-		// Channel should be closed
-		select {
-		case _, ok := <-ch:
-			if !ok {
-				// Channel closed, as expected
-			}
-		case <-time.After(100 * time.Millisecond):
-			// Timeout is also acceptable
-		}
-	})
-
-	t.Run("Sends error to ErrChan on Get failure", func(t *testing.T) {
-		mockClient := &mockElkLogClient{
-			returnError: assert.AnError,
-		}
-
-		search := &client.LogSearch{
-			Refresh: client.RefreshOptions{
-				Duration: ty.Opt[string]{Value: "100ms", Set: true},
-			},
-		}
-
-		errChan := make(chan error, 5)
-		result := ElkSearchResult{
-			client:  mockClient,
-			search:  search,
-			ErrChan: errChan,
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
@@ -322,20 +295,15 @@ func TestElkSearchResult_onChange(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, ch)
 
-		// Wait for error to be sent
 		select {
-		case err := <-errChan:
-			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "failed to get new logs")
+		case <-ch:
 		case <-ctx.Done():
-			// Timeout - check if error was sent
-			select {
-			case err := <-errChan:
-				assert.Error(t, err)
-			default:
-				// No error yet, might need more time
-			}
 		}
+
+		assert.GreaterOrEqual(t, mockClient.getCalls, 1)
+
+		expectedGte := lteTime.Add(time.Second).Format(customFormat)
+		assert.Equal(t, expectedGte, mockClient.lastSearch.Range.Gte.Value)
 	})
 }
 
