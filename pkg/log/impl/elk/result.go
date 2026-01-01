@@ -156,22 +156,53 @@ func (sr ElkSearchResult) onChange(ctx context.Context) (chan []client.LogEntry,
 
 	c := make(chan []client.LogEntry, 5)
 	go func() {
+		// Initialize lastLte from current search or use time.Now() as fallback
+		var lastLte time.Time
+		var err error
+
+		customFormat := sr.search.Options.GetString("timestampFormat")
+
+		if sr.search.Range.Lte.Value != "" {
+			if customFormat != "" {
+				lastLte, err = time.Parse(customFormat, sr.search.Range.Lte.Value)
+			} else {
+				// Try parsing with nanoseconds first, then without.
+				lastLte, err = time.Parse(time.RFC3339Nano, sr.search.Range.Lte.Value)
+				if err != nil {
+					lastLte, err = time.Parse(time.RFC3339, sr.search.Range.Lte.Value)
+				}
+			}
+
+			if err != nil {
+				lastLte = time.Now()
+			}
+		} else {
+			lastLte = time.Now()
+		}
+
 		for {
 			select {
 			case <-time.After(duration):
 				{
-					date, err := time.Parse(time.RFC3339, sr.search.Range.Lte.Value)
+					format := time.RFC3339
+					if customFormat != "" {
+						format = customFormat
+					}
+
+					// Use the last Lte + 1 second as the new Gte (sliding window)
+					sr.search.Range.Gte.Value = lastLte.Add(time.Second * 1).Format(format)
+					newLte := time.Now()
+					sr.search.Range.Lte.Value = newLte.Format(format)
+					// Clear Last to avoid conflict with Gte/Lte
+					sr.search.Range.Last.Value = ""
+					sr.search.Range.Last.Set = false
+
+					result, err := sr.client.Get(ctx, sr.search)
 					if err != nil {
-						sr.ErrChan <- fmt.Errorf("error parsing Gte.Value: %w", err)
+						sr.ErrChan <- fmt.Errorf("failed to get new logs: %w", err)
 						continue
 					}
-					date = date.Add(time.Second * 1)
-					sr.search.Range.Gte.Value = date.Format(time.RFC3339)
-					sr.search.Range.Lte.Value = time.Now().Format(time.RFC3339)
-					result, err1 := sr.client.Get(ctx, sr.search)
-					if err1 != nil {
-						sr.ErrChan <- fmt.Errorf("failed to get new logs: %w", err1)
-					}
+					lastLte = newLte
 					c <- result.(ElkSearchResult).parseResults()
 				}
 			case <-ctx.Done():

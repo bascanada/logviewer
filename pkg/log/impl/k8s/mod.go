@@ -59,7 +59,7 @@ func (lc k8sLogClient) Get(ctx context.Context, search *client.LogSearch) (clien
 	previous := search.Options.GetBool(FieldPrevious)
 	timestamp := search.Options.GetBool(OptionsTimestamp)
 
-	follow := search.Refresh.Duration.Value != ""
+	follow := search.Follow
 
 	// Handle tailLines: if size is not set, use nil to get all logs
 	var tailLines *int64

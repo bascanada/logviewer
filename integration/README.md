@@ -1,223 +1,511 @@
-# Integration Test Environment - Transaction Simulator
+# Integration Testing Environment
 
-This directory contains a realistic transaction simulator that demonstrates LogViewer's capabilities across multiple log sources.
+Complete guide for testing LogViewer across all supported backends.
 
-## Overview
+## Table of Contents
 
-The transaction simulator mimics a microservices architecture with the following components:
+- [Quick Reference](#quick-reference)
+- [Starting Infrastructure](#starting-infrastructure)
+- [Pushing Logs to Backends](#pushing-logs-to-backends)
+- [Testing Live Follow/Refresh](#testing-live-followrefresh)
+- [Running Integration Tests](#running-integration-tests)
+- [Configuration Contexts](#configuration-contexts)
+- [Troubleshooting](#troubleshooting)
+- [MCP Agent Tests](#mcp-agent-tests)
 
-- **Frontend Service** (Nginx-style logs → K8s stdout)
-- **Order Service** (JSON logs → OpenSearch)
-- **Payment Service** (Structured logs → Splunk)
-- **Database** (Error logs → K8s stdout)
-- **LocalStack DynamoDB** (Transaction metadata storage)
+---
 
-The simulator automatically generates realistic traffic with:
-- 10% payment failures (timeout errors)
-- 5% database deadlocks
-- Variable latency (0-500ms normal, occasional >1s slow requests)
-- Distributed tracing via `trace_id` across all services
+## Quick Reference
 
-## Quick Start
+### Ports & Services
 
-### 1. Start Infrastructure
+| Service | Port | UI/API | Credentials |
+|---------|------|--------|-------------|
+| **Splunk** | 8000 | Web UI | admin/changeme |
+| **Splunk HEC** | 8088 | Log ingestion | Token in `splunk/.hec_token` |
+| **Splunk API** | 8089 | REST API | admin/changeme |
+| **OpenSearch** | 9200 | REST API | - |
+| **OpenSearch Dashboards** | 5601 | Web UI | - |
+| **K3s** | 6443 | Kubernetes API | kubeconfig: `k8s/k3s.yaml` |
+| **SSH** | 2222 | SSH access | user: `testuser`, key: `ssh/id_rsa` |
+| **LocalStack** | 4566 | AWS emulation | - |
+
+### Essential Commands
+
+```bash
+# Start/stop everything
+make integration/start
+make integration/stop
+
+# Build logviewer
+make build
+
+# Run all integration tests
+make integration/tests
+
+# Query with config
+LOGVIEWER_CONFIG="integration/config.yaml" ./build/logviewer query log -i <context> --last 5m
+```
+
+---
+
+## Starting Infrastructure
+
+### Start All Services
 
 ```bash
 make integration/start
 ```
 
-This starts:
-- Splunk Enterprise (port 8000, 8088)
-- OpenSearch + Dashboards (ports 9200, 5601)
-- K3s Kubernetes cluster
-- LocalStack (DynamoDB on port 4566)
-- SSH server for log testing
-
-### 2. Deploy Transaction Simulator
+### Start Individual Services
 
 ```bash
+make integration/start/splunk       # Splunk only
+make integration/start/opensearch   # OpenSearch only
+make integration/start/k8s          # K3s Kubernetes cluster
+make integration/start/ssh          # SSH server
+```
+
+### Or Use Docker Compose Directly
+
+```bash
+cd integration
+docker-compose up -d                           # All services
+docker-compose up -d splunk                    # Splunk only
+docker-compose up -d opensearch opensearch-dashboards  # OpenSearch only
+docker-compose up -d k3s-server                # K3s only
+docker-compose up -d ssh-server                # SSH only
+```
+
+### Verify Services Are Running
+
+```bash
+# Check all containers
+docker-compose -f integration/docker-compose.yml ps
+
+# Test Splunk
+curl -s http://localhost:8089/services/server/health | head -5
+
+# Test OpenSearch
+curl -s http://localhost:9200/_cluster/health | jq .
+
+# Test K3s
+kubectl --kubeconfig=integration/k8s/k3s.yaml get nodes
+
+# Test SSH
+ssh -i integration/ssh/id_rsa -p 2222 testuser@localhost "echo OK"
+```
+
+---
+
+## Pushing Logs to Backends
+
+### 1. Splunk (via HEC)
+
+```bash
+# Option A: Use the send-logs script
+./integration/splunk/send-logs.sh
+
+# Option B: Send manually via curl
+HEC_TOKEN=$(cat integration/splunk/.hec_token)
+curl -k "http://localhost:8088/services/collector/event" \
+  -H "Authorization: Splunk $HEC_TOKEN" \
+  -d '{"event": {"message": "test log", "level": "INFO"}, "sourcetype": "json"}'
+
+# Option C: Send a JSON file
+cat mylog.json | while read line; do
+  curl -k "http://localhost:8088/services/collector/event" \
+    -H "Authorization: Splunk $HEC_TOKEN" \
+    -d "{\"event\": $line}"
+done
+```
+
+### 2. OpenSearch
+
+```bash
+# Option A: Use the send-logs script
+./integration/opensearch/send-logs.sh
+
+# Option B: Send manually
+curl -X POST "http://localhost:9200/logs-test/_doc" \
+  -H "Content-Type: application/json" \
+  -d '{"@timestamp": "2024-01-15T10:30:00Z", "message": "test log", "level": "INFO"}'
+
+# Option C: Bulk insert
+curl -X POST "http://localhost:9200/_bulk" \
+  -H "Content-Type: application/x-ndjson" \
+  --data-binary @- << 'EOF'
+{"index": {"_index": "logs-test"}}
+{"@timestamp": "2024-01-15T10:30:00Z", "message": "log 1", "level": "INFO"}
+{"index": {"_index": "logs-test"}}
+{"@timestamp": "2024-01-15T10:30:01Z", "message": "log 2", "level": "ERROR"}
+EOF
+```
+
+### 3. Kubernetes (Pod Logs)
+
+```bash
+# Deploy the transaction simulator (generates logs automatically)
 make integration/deploy-simulation
+
+# Or deploy a simple logging pod
+kubectl --kubeconfig=integration/k8s/k3s.yaml run log-test \
+  --image=busybox \
+  --restart=Never \
+  -- sh -c 'while true; do echo "{\"timestamp\":\"$(date -Iseconds)\",\"level\":\"INFO\",\"message\":\"test\"}"; sleep 1; done'
+
+# View pod logs
+kubectl --kubeconfig=integration/k8s/k3s.yaml logs -f log-test
 ```
 
-This will:
-1. Build the Go application as a Docker image
-2. Import the image into the K3s cluster
-3. Deploy the simulator as a Kubernetes pod
-4. Automatically start generating transaction logs
+### 4. Docker Container Logs
 
-The simulator runs on port 8081 inside the cluster and generates background traffic automatically.
-
-### 3. Query Logs with LogViewer
-
-#### View all logs across all sources (last 5 minutes)
 ```bash
-logviewer query log -c ./config.yaml -i k3s-payment -i splunk-prod -i opensearch-prod --last 5m
+# Start the log generator container
+docker-compose -f integration/docker-compose-log-generator.yml up -d
+
+# Or run any container with logging
+docker run -d --name log-test alpine sh -c \
+  'while true; do echo "{\"level\":\"INFO\",\"message\":\"test $(date)\"}"; sleep 1; done'
+
+# View logs
+docker logs -f log-test
 ```
 
-#### Filter by a specific trace ID to follow a transaction
+### 5. SSH (Remote Files)
+
 ```bash
-# Pick a trace_id from the output above
-logviewer query log -c ./config.yaml -i k3s-payment -i splunk-prod -i opensearch-prod \
-  --field trace_id=abc-def-ghi-123 --last 10m
+# Generate test logs on the SSH server
+./integration/ssh/generate-logs.sh
+
+# Or upload existing logs
+./integration/ssh/upload-log.sh
+
+# Or manually copy logs
+scp -i integration/ssh/id_rsa -P 2222 mylog.json testuser@localhost:/home/testuser/logs/
+
+# Verify logs exist
+ssh -i integration/ssh/id_rsa -p 2222 testuser@localhost "ls -la /home/testuser/logs/"
 ```
 
-#### Find all payment errors
-```bash
-logviewer query log -c ./config.yaml -i splunk-prod \
-  --field level=ERROR --field app=payment-service --last 5m
-```
+### 6. Continuous Log Generation (Transaction Simulator)
 
-#### Find slow requests
-```bash
-logviewer query log -c ./config.yaml -i opensearch-prod \
-  --field app=api-gateway --field level=WARN --last 5m
-```
-
-## Manual Testing
-
-You can also trigger individual transactions via HTTP:
+The transaction simulator generates realistic microservice logs across multiple backends:
 
 ```bash
-# Get the service IP (if testing from host machine, use kubectl port-forward)
-kubectl --kubeconfig=integration/k8s/k3s.yaml port-forward svc/payment-processor 8081:80
+# Deploy to K8s (recommended)
+make integration/deploy-simulation
 
-# Trigger a transaction
+# Or run locally
+cd integration/log-generator
+SPLUNK_HEC_URL=http://localhost:8088 \
+SPLUNK_HEC_TOKEN=$(cat ../splunk/.hec_token) \
+OPENSEARCH_URL=http://localhost:9200 \
+go run main.go
+
+# Trigger manual transactions
 curl http://localhost:8081/checkout
 ```
 
-## Configuration
+**Log Distribution:**
+- Frontend logs → K8s stdout
+- Order logs → OpenSearch (`orders` index)
+- Payment logs → Splunk (HEC)
+- Database logs → K8s stdout
 
-The simulator uses these environment variables (automatically configured in Kubernetes):
+---
 
-- `SPLUNK_HEC_URL`: Splunk HTTP Event Collector endpoint
-- `SPLUNK_HEC_TOKEN`: HEC authentication token
-- `OPENSEARCH_URL`: OpenSearch index endpoint
-- `LOCALSTACK_URL`: LocalStack endpoint for DynamoDB
+## Testing Live Follow/Refresh
 
-## Simulated Scenarios
+### Understanding Refresh Types
 
-### Normal Transaction Flow
-1. Frontend receives checkout request → K8s logs
-2. Order service processes order → OpenSearch
-3. Payment service authorizes payment → Splunk
-4. Transaction complete (~100-500ms)
+| Backend | Refresh Type | Flag | How It Works |
+|---------|--------------|------|--------------|
+| Local, SSH, Docker, K8s | **Streaming** | `--refresh` | Real-time tail/follow |
+| Splunk, OpenSearch | **Polling** | `--refresh-rate <duration>` | Periodic re-query |
+| CloudWatch | No refresh | N/A | Query-only |
 
-### Slow Checkout Incident (10% of requests)
-1. Frontend receives checkout request → K8s logs
-2. Order service processes order → OpenSearch
-3. Payment service TIMEOUT (30s) → Splunk ERROR
-4. API gateway logs slow request warning → OpenSearch
-5. DynamoDB records FAILED status
+### Test Commands
 
-### Database Deadlock (5% of requests)
-1. Normal transaction flow starts
-2. Database deadlock occurs → K8s ERROR logs
-3. Transaction may succeed or fail depending on retry logic
+```bash
+# Build first
+make build
 
-## Architecture
+# ─────────────────────────────────────────────────────────
+# SPLUNK - Uses polling refresh
+# ─────────────────────────────────────────────────────────
+LOGVIEWER_CONFIG="integration/config.yaml" ./build/logviewer query log \
+  -i payment-service --last 5m --refresh-rate 5s
+
+# ─────────────────────────────────────────────────────────
+# OPENSEARCH - Uses polling refresh
+# ─────────────────────────────────────────────────────────
+LOGVIEWER_CONFIG="integration/config.yaml" ./build/logviewer query log \
+  -i order-service --last 5m --refresh-rate 5s
+
+# ─────────────────────────────────────────────────────────
+# KUBERNETES - Uses streaming refresh
+# ─────────────────────────────────────────────────────────
+LOGVIEWER_CONFIG="integration/config.yaml" ./build/logviewer query log \
+  -i payment-processor-pod --last 5m --refresh
+
+# ─────────────────────────────────────────────────────────
+# DOCKER - Uses streaming refresh
+# ─────────────────────────────────────────────────────────
+LOGVIEWER_CONFIG="integration/config.yaml" ./build/logviewer query log \
+  -i docker-test --refresh
+
+# ─────────────────────────────────────────────────────────
+# SSH - Uses streaming refresh (with HL support)
+# ─────────────────────────────────────────────────────────
+LOGVIEWER_CONFIG="integration/config.yaml:integration/config.hl.yaml" \
+  ./build/logviewer query log -i ssh-json --last 5m --refresh
+
+# ─────────────────────────────────────────────────────────
+# LOCAL FILES - Uses streaming refresh
+# ─────────────────────────────────────────────────────────
+LOGVIEWER_CONFIG="integration/config.yaml" ./build/logviewer query log \
+  -i local-json --refresh
+```
+
+### Test Follow with Filters
+
+```bash
+# Follow only ERROR logs in Splunk
+LOGVIEWER_CONFIG="integration/config.yaml" ./build/logviewer query log \
+  -i payment-service -f level=ERROR --refresh-rate 3s
+
+# Follow a specific trace across backends
+LOGVIEWER_CONFIG="integration/config.yaml" ./build/logviewer query log \
+  -i payment-service -i order-service \
+  -f trace_id=abc-123 --refresh-rate 5s
+```
+
+---
+
+## Running Integration Tests
+
+### Run All Tests
+
+```bash
+make integration/tests
+# or
+./integration/test-all.sh all
+```
+
+### Run Specific Test Suites
+
+```bash
+# Basic log querying
+./integration/test-all.sh log
+
+# Field extraction
+./integration/test-all.sh field
+
+# Field value enumeration
+./integration/test-all.sh values
+
+# Complex nested filters
+./integration/test-all.sh filters
+
+# Native query syntax (SPL, Lucene)
+./integration/test-all.sh native
+
+# HL-compatible queries
+./integration/test-all.sh hl
+```
+
+### Individual Test Scripts
+
+```bash
+./integration/test-query-log.sh        # Basic queries
+./integration/test-query-field.sh      # Field filtering
+./integration/test-query-values.sh     # Value enumeration
+./integration/test-recursive-filters.sh # Complex filters
+./integration/test-native-queries.sh   # Native syntax
+./integration/test-hl-queries.sh       # HL syntax
+./integration/test-ssh-hl.sh           # SSH with HL
+./integration/test-hl-vs-native.sh     # Engine comparison
+```
+
+### Run Benchmarks
+
+```bash
+./integration/benchmark/run-benchmark.sh \
+  --sizes "1000,10000" \
+  --filters "simple,complex" \
+  --iterations 5
+```
+
+---
+
+## Configuration Contexts
+
+### Available Contexts (in `config.yaml`)
+
+| Context | Backend | Index/Source | Description |
+|---------|---------|--------------|-------------|
+| `payment-service` | Splunk | main | Payment processor logs |
+| `order-service` | OpenSearch | orders | Order service logs |
+| `api-gateway` | OpenSearch | api-logs | API gateway logs |
+| `payment-processor-pod` | K8s | - | Pod logs in K3s |
+| `cloudwatch-test` | CloudWatch | /aws/test | LocalStack CloudWatch |
+| `ssh-json` | SSH | ~/logs/app.log | Remote JSON logs |
+| `local-json` | Local | logs/app.log | Local JSON logs |
+
+### Using Multiple Configs
+
+```bash
+# Combine multiple config files
+LOGVIEWER_CONFIG="integration/config.yaml:integration/config.extra.yaml"
+
+# With HL support
+LOGVIEWER_CONFIG="integration/config.yaml:integration/config.hl.yaml"
+```
+
+### Config File Locations
 
 ```
-┌─────────────────────────────────────────────┐
-│          Kubernetes (K3s)                   │
-│  ┌───────────────────────────────────────┐ │
-│  │  payment-processor Pod                │ │
-│  │  (Transaction Simulator)              │ │
-│  │                                       │ │
-│  │  - Generates traffic automatically   │ │
-│  │  - Distributes logs to:              │ │
-│  │    • stdout (frontend/db logs)       │ │
-│  │    • Splunk (payment logs)           │ │
-│  │    • OpenSearch (order logs)         │ │
-│  │    • DynamoDB (transaction metadata) │ │
-│  └───────────────────────────────────────┘ │
-└─────────────────────────────────────────────┘
-            │           │           │
-            ▼           ▼           ▼
-    ┌──────────┐ ┌──────────┐ ┌──────────┐
-    │  K8s     │ │  Splunk  │ │OpenSearch│
-    │  Logs    │ │  HEC     │ │  Index   │
-    └──────────┘ └──────────┘ └──────────┘
-                      │
-                      ▼
-                ┌──────────┐
-                │LocalStack│
-                │ DynamoDB │
-                └──────────┘
+integration/
+├── config.yaml           # Main configuration
+├── config.extra.yaml     # Additional contexts
+├── config.hl.yaml        # HL-specific configs
+└── config.hl-benchmark.yaml  # Benchmark configs
 ```
+
+---
 
 ## Troubleshooting
 
-### Simulator not generating logs
+### Splunk Issues
+
 ```bash
-# Check pod status
-kubectl --kubeconfig=integration/k8s/k3s.yaml get pods
+# Check if Splunk is healthy
+curl -s http://localhost:8089/services/server/health
+
+# Get HEC token
+cat integration/splunk/.hec_token
+
+# Test HEC endpoint
+curl -k "http://localhost:8088/services/collector/health"
+
+# View Splunk container logs
+docker logs splunk
+```
+
+### OpenSearch Issues
+
+```bash
+# Check cluster health
+curl -s http://localhost:9200/_cluster/health | jq .
+
+# List indices
+curl -s http://localhost:9200/_cat/indices?v
+
+# Check index exists
+curl -s http://localhost:9200/orders/_count
+
+# View container logs
+docker logs opensearch
+```
+
+### Kubernetes Issues
+
+```bash
+# Check nodes
+kubectl --kubeconfig=integration/k8s/k3s.yaml get nodes
+
+# Check pods
+kubectl --kubeconfig=integration/k8s/k3s.yaml get pods -A
 
 # View pod logs
 kubectl --kubeconfig=integration/k8s/k3s.yaml logs -l app=payment-processor -f
+
+# Describe failing pod
+kubectl --kubeconfig=integration/k8s/k3s.yaml describe pod <pod-name>
+
+# Reconfigure kubeconfig
+./integration/k8s/configure-kubeconfig.sh
 ```
 
-### Can't connect to Splunk/OpenSearch
-```bash
-# Verify services are running
-docker ps
+### SSH Issues
 
-# Check if services are accessible from K3s network
-docker exec k3s-server wget -O- http://splunk:8088/services/collector/health
-docker exec k3s-server wget -O- http://opensearch:9200
+```bash
+# Test SSH connection
+ssh -v -i integration/ssh/id_rsa -p 2222 testuser@localhost "echo OK"
+
+# Check SSH server logs
+docker logs ssh-server
+
+# Regenerate logs on server
+./integration/ssh/generate-logs.sh
 ```
 
-### Image not found in K3s
+### Docker Issues
+
 ```bash
+# List containers
+docker-compose -f integration/docker-compose.yml ps
+
+# Restart a service
+docker-compose -f integration/docker-compose.yml restart splunk
+
+# View all logs
+docker-compose -f integration/docker-compose.yml logs -f
+
+# Full reset
+make integration/stop
+docker-compose -f integration/docker-compose.yml down -v
+make integration/start
+```
+
+### Log Generator Issues
+
+```bash
+# Check if image exists in K3s
+docker exec k3s-server ctr images ls | grep log-generator
+
 # Manually import image
 docker save log-generator:latest | docker exec -i k3s-server ctr images import -
 
-# Verify image is available
-docker exec k3s-server ctr images ls | grep log-generator
+# Rebuild and redeploy
+make integration/deploy-simulation
+
+# Check pod status
+kubectl --kubeconfig=integration/k8s/k3s.yaml get pods -l app=payment-processor
+kubectl --kubeconfig=integration/k8s/k3s.yaml logs -l app=payment-processor
 ```
 
-## Cleanup
+---
 
-```bash
-# Stop simulator
-kubectl --kubeconfig=integration/k8s/k3s.yaml delete -f integration/k8s/app.yaml
+## MCP Agent Tests
 
-# Stop all infrastructure
-make integration/stop
-```
-
-## MCP Agent Integration Tests
-
-The logviewer includes LLM-driven integration tests that use a local Ollama instance to test the MCP server with an actual AI agent. These tests validate that an LLM can effectively discover contexts, query logs, and investigate issues.
+LLM-driven integration tests using local Ollama.
 
 ### Prerequisites
 
-1. **Install Ollama**: https://ollama.ai/download
-2. **Pull a model with tool-calling support**:
-   ```bash
-   ollama pull mistral  # Recommended for tool calling
-   # or
-   ollama pull llama3
-   ```
-3. **Start Ollama**:
-   ```bash
-   ollama serve
-   ```
+```bash
+# Install Ollama
+# https://ollama.ai/download
 
-### Running LLM Integration Tests
+# Pull a model
+ollama pull llama3.1   # Recommended
+ollama pull mistral    # Alternative
+
+# Start Ollama
+ollama serve
+```
+
+### Run MCP Tests
 
 ```bash
-# Run all MCP agent tests (requires Ollama running)
+# All MCP tests
 go test ./cmd/... -run TestMCPAgent -v
 
-# Run specific test scenarios
+# Specific scenarios
 go test ./cmd/... -run TestMCPAgent_DiscoveryWorkflow -v
 go test ./cmd/... -run TestMCPAgent_ErrorInvestigation -v
 go test ./cmd/... -run TestMCPAgent_MultiStepReasoning -v
-go test ./cmd/... -run TestMCPAgent_ContextNotFound -v
-go test ./cmd/... -run TestMCPAgent_DynamicPrompts -v
-
-# Run benchmarks
-go test ./cmd/... -run=^$ -bench=BenchmarkMCPToolCall -v
 ```
 
 ### Environment Variables
@@ -225,67 +513,62 @@ go test ./cmd/... -run=^$ -bench=BenchmarkMCPToolCall -v
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `OLLAMA_HOST` | `http://localhost:11434` | Ollama API endpoint |
-| `OLLAMA_MODEL` | `llama3.1` | Model to use for testing |
+| `OLLAMA_MODEL` | `llama3.1` | Model for testing |
 
-### Recommended Models
+---
 
-Tool-calling capability varies by model. Recommended models in order of reliability:
+## Directory Structure
 
-1. **llama3.1** (8B) - Good balance of speed and tool-calling
-2. **qwen2.5** - Excellent tool-calling support
-3. **mistral** - Works but sometimes describes instead of calling tools
-4. **llama3.1:70b** - Best accuracy but requires more resources
+```
+integration/
+├── config.yaml              # Main config
+├── config.extra.yaml        # Extra contexts
+├── config.hl.yaml           # HL configs
+├── docker-compose.yml       # Infrastructure
+├── docker-compose-log-generator.yml
+│
+├── benchmark/               # Performance tests
+│   ├── run-benchmark.sh
+│   └── generate-logs.go
+│
+├── k8s/                     # Kubernetes
+│   ├── app.yaml             # Simulator deployment
+│   ├── k3s.yaml             # Kubeconfig
+│   └── configure-kubeconfig.sh
+│
+├── log-generator/           # Transaction simulator
+│   ├── main.go
+│   └── Dockerfile
+│
+├── logs/                    # Sample log files
+│   └── app.log
+│
+├── opensearch/              # OpenSearch scripts
+│   └── send-logs.sh
+│
+├── splunk/                  # Splunk scripts
+│   ├── send-logs.sh
+│   └── .hec_token
+│
+├── ssh/                     # SSH testing
+│   ├── id_rsa / id_rsa.pub
+│   ├── generate-logs.sh
+│   └── upload-log.sh
+│
+└── test-*.sh                # Test scripts
+```
+
+---
+
+## Cleanup
 
 ```bash
-# Pull recommended model
-ollama pull llama3.1
+# Stop all services
+make integration/stop
 
-# Or for better accuracy (requires ~40GB RAM)
-ollama pull llama3.1:70b
+# Full cleanup (remove volumes)
+docker-compose -f integration/docker-compose.yml down -v
+
+# Remove generated logs
+rm -f integration/logs/*.log
 ```
-
-### Test Scenarios
-
-1. **Discovery Workflow**: Agent lists available contexts and fields
-2. **Error Investigation**: Agent finds ERROR logs using appropriate filters
-3. **Multi-Step Reasoning**: Complex queries requiring multiple tool calls
-4. **Context Not Found**: Error handling when context doesn't exist
-5. **Dynamic Prompts**: Validates context-specific prompt generation
-
-### Test Architecture
-
-```
-┌─────────────────────────────────────────────────────┐
-│                   Test Harness                      │
-│  ┌───────────────────┐    ┌─────────────────────┐  │
-│  │   OllamaClient    │    │   MCP In-Process    │  │
-│  │  (LLM Interface)  │◄──►│      Client         │  │
-│  └───────────────────┘    └─────────────────────┘  │
-│           │                         │               │
-│           ▼                         ▼               │
-│  ┌───────────────────┐    ┌─────────────────────┐  │
-│  │  Local Ollama     │    │   MCP Server        │  │
-│  │  (llama3.1)       │    │   (logviewer)       │  │
-│  └───────────────────┘    └─────────────────────┘  │
-└─────────────────────────────────────────────────────┘
-```
-
-The test harness:
-1. Starts an in-process MCP server
-2. Connects to local Ollama
-3. Sends prompts to the LLM with MCP tools available
-4. Executes tool calls and feeds results back to LLM
-5. Validates the agent's tool usage and final response
-
-## Development
-
-To modify the simulator:
-
-1. Edit `integration/log-generator/main.go`
-2. Rebuild and redeploy: `make integration/deploy-simulation`
-
-Key functions:
-- `simulateTransaction()`: Core transaction logic
-- `startLoadGenerator()`: Background traffic generator
-- `sendToSplunk()`, `sendToOpenSearch()`: Log shipping
-- `logToDynamo()`: Metadata storage
