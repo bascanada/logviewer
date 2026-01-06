@@ -668,7 +668,8 @@ func TestContainsTransformingCommand(t *testing.T) {
 		{"top command", "index=main | top limit=10 uri", true},
 		{"rare command", "index=main | rare src_ip", true},
 		{"table command", "index=main | table host, source, _time", true},
-		{"fields command", "index=main | fields host, source", true},
+		{"fields command without modifier", "index=main | fields host, source", true},
+		{"fields - command", "index=main | fields - host, source", true},
 		{"transaction command", "index=main | transaction session_id", true},
 		{"tstats command", "| tstats count where index=main by host", true},
 		{"eventstats command", "index=main | eventstats avg(duration) by host", true},
@@ -689,6 +690,8 @@ func TestContainsTransformingCommand(t *testing.T) {
 		{"search with tail", "index=main | tail 100", false},
 		{"search with sort", "index=main | sort -_time", false},
 		{"search with dedup", "index=main | dedup host", false},
+		{"fields + command (NOT transforming)", "index=main | fields + host, source, _time", false},
+		{"fields + with application", "index=checkout-nonprod | fields + application_name, environment, region", false},
 
 		// Edge cases
 		{"empty query", "", false},

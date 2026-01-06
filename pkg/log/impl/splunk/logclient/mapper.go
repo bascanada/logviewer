@@ -20,23 +20,39 @@ var transformingCommands = []string{
 	"predict", "trendline",
 	"geostats", "sichart", "sitimechart",
 	"mstats", "tstats",
-	"table", "fields",
+	"table",
 }
 
 // transformingCommandPattern matches pipe followed by a transforming command.
 // Uses word boundary to avoid matching partial words (e.g., "topaz" shouldn't match "top").
 var transformingCommandPattern *regexp.Regexp
 
+// fieldsCommandPattern matches | fields without the + modifier
+// "| fields +" is NOT transforming (just selects fields from events)
+// "| fields" or "| fields -" IS transforming (changes event structure)
+var fieldsCommandPattern *regexp.Regexp
+
 func init() {
 	// Build pattern: | followed by optional whitespace, then one of the commands as a word
 	pattern := `\|\s*(` + strings.Join(transformingCommands, "|") + `)(?:\s|$)`
 	transformingCommandPattern = regexp.MustCompile("(?i)" + pattern)
+
+	// Match "| fields" not followed by "+"
+	// This catches "| fields" or "| fields -" but not "| fields +"
+	fieldsCommandPattern = regexp.MustCompile(`(?i)\|\s*fields(?:\s+[^+\s]|\s*$)`)
 }
 
 // ContainsTransformingCommand checks if a Splunk query contains transforming commands
 // that require results to be fetched from the /results endpoint instead of /events.
 func ContainsTransformingCommand(query string) bool {
-	return transformingCommandPattern.MatchString(query)
+	// Check standard transforming commands
+	if transformingCommandPattern.MatchString(query) {
+		return true
+	}
+
+	// Check for "| fields" without "+" modifier (which IS transforming)
+	// "| fields +" is NOT transforming, so we exclude it
+	return fieldsCommandPattern.MatchString(query)
 }
 
 func escapeSplunkValue(value string) string {

@@ -169,6 +169,12 @@ func (s SplunkLogSearchResult) parseResults(searchResponse *restapi.SearchResult
 		}
 	}
 
+	// Sort entries by timestamp in ascending order (oldest first)
+	// This ensures consistent ordering with multi-context queries
+	sort.SliceStable(entries, func(i, j int) bool {
+		return entries[i].Timestamp.Before(entries[j].Timestamp)
+	})
+
 	return entries
 
 }

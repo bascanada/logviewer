@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
+	"github.com/bascanada/logviewer/pkg/log/impl/splunk/restapi"
 	"github.com/bascanada/logviewer/pkg/ty"
 	"github.com/h2non/gock"
 	"github.com/stretchr/testify/assert"
@@ -82,4 +83,94 @@ func TestSplunkLogSearchResult_Close(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.True(t, gock.IsDone())
+}
+
+func TestSplunkLogSearchResult_parseResults_SortsAscending(t *testing.T) {
+	// Test that parseResults sorts entries by timestamp in ascending order (oldest first)
+	searchResult := SplunkLogSearchResult{
+		useResultsEndpoint: false,
+	}
+
+	// Create search response with timestamps in descending order (newest first - Splunk default)
+	searchResponse := &restapi.SearchResultsResponse{
+		Results: []ty.MI{
+			{
+				"_time": "2026-01-06T11:11:45.714-08:00",
+				"_raw":  "newest log entry",
+			},
+			{
+				"_time": "2026-01-06T11:11:45.711-08:00",
+				"_raw":  "middle log entry",
+			},
+			{
+				"_time": "2026-01-06T11:11:34.209-08:00",
+				"_raw":  "oldest log entry",
+			},
+		},
+	}
+
+	entries := searchResult.parseResults(searchResponse)
+
+	// Verify entries are sorted oldest first
+	assert.Len(t, entries, 3)
+	assert.Equal(t, "oldest log entry", entries[0].Message)
+	assert.Equal(t, "middle log entry", entries[1].Message)
+	assert.Equal(t, "newest log entry", entries[2].Message)
+
+	// Verify timestamps are in ascending order
+	assert.True(t, entries[0].Timestamp.Before(entries[1].Timestamp))
+	assert.True(t, entries[1].Timestamp.Before(entries[2].Timestamp))
+}
+
+func TestSplunkLogSearchResult_parseResults_StandardEvents(t *testing.T) {
+	// Test standard event parsing (useResultsEndpoint = false)
+	searchResult := SplunkLogSearchResult{
+		useResultsEndpoint: false,
+	}
+
+	searchResponse := &restapi.SearchResultsResponse{
+		Results: []ty.MI{
+			{
+				"_time":            "2026-01-06T11:11:45.714-08:00",
+				"_raw":             "application log message here",
+				"application_name": "checkout",
+				"level":            "ERROR",
+			},
+		},
+	}
+
+	entries := searchResult.parseResults(searchResponse)
+
+	assert.Len(t, entries, 1)
+	assert.Equal(t, "application log message here", entries[0].Message)
+	assert.Equal(t, "checkout", entries[0].Fields["application_name"])
+	assert.Equal(t, "ERROR", entries[0].Fields["level"])
+	assert.NotContains(t, entries[0].Fields, "_raw")
+	assert.NotContains(t, entries[0].Fields, "_time")
+}
+
+func TestSplunkLogSearchResult_parseResults_TransformingCommands(t *testing.T) {
+	// Test transforming command results (useResultsEndpoint = true)
+	searchResult := SplunkLogSearchResult{
+		useResultsEndpoint: true,
+	}
+
+	searchResponse := &restapi.SearchResultsResponse{
+		Results: []ty.MI{
+			{
+				"_time":  "2026-01-06T11:11:45.714-08:00",
+				"count":  "150",
+				"status": "500",
+			},
+		},
+	}
+
+	entries := searchResult.parseResults(searchResponse)
+
+	assert.Len(t, entries, 1)
+	// Message should be formatted as key=value pairs
+	assert.Contains(t, entries[0].Message, "count=150")
+	assert.Contains(t, entries[0].Message, "status=500")
+	assert.Equal(t, "150", entries[0].Fields["count"])
+	assert.Equal(t, "500", entries[0].Fields["status"])
 }
