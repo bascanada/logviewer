@@ -182,6 +182,21 @@ func buildSearchRequest() client.LogSearch {
 	if template != "" {
 		searchRequest.PrinterOptions.Template.S(template)
 	}
+
+	// Handle color flag
+	if colorOutput != "" {
+		switch colorOutput {
+		case "always":
+			searchRequest.PrinterOptions.Color.S(true)
+		case "never":
+			searchRequest.PrinterOptions.Color.S(false)
+		case "auto":
+			// Don't set - will auto-detect TTY
+		default:
+			fmt.Fprintf(os.Stderr, "warning: invalid --color value '%s', using 'auto'\n", colorOutput)
+		}
+	}
+
 	if dockerContainer != "" {
 		searchRequest.Options["container"] = dockerContainer
 	}

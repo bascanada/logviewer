@@ -85,8 +85,9 @@ var (
 	myLog     bool
 	debugHttp bool
 
-	pageToken  string
-	jsonOutput bool
+	pageToken   string
+	jsonOutput  bool
+	colorOutput string
 )
 
 func onCommandStart(cmd *cobra.Command, args []string) {
@@ -289,6 +290,12 @@ func init() {
 		"format",
 		"", "Format for the log entry")
 	queryCommand.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output logs in JSON format (NDJSON)")
+	queryCommand.PersistentFlags().StringVar(&colorOutput, "color", "auto", "Color output mode: auto (detect TTY), always, never")
+
+	// Register completion function for the --color flag
+	_ = queryCommand.RegisterFlagCompletionFunc("color", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"auto", "always", "never"}, cobra.ShellCompDirectiveNoFileComp
+	})
 
 	queryCommand.PersistentFlags().StringArrayVar(&inherits, "inherits", []string{}, "When using config , list of inherits to execute on top of the one configure for the search")
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/TylerBrock/colorjson"
 	"github.com/bascanada/logviewer/pkg/ty"
+	"github.com/fatih/color"
 )
 
 const (
@@ -97,6 +98,91 @@ func Trim(s string) string {
 	return strings.TrimSpace(s)
 }
 
+// ColorLevel applies color based on log level.
+// Usage in template: {{ColorLevel .Level}}
+// Color mapping: ERROR/FATAL/CRITICAL=red, WARN/WARNING=yellow, INFO=cyan, DEBUG=blue, TRACE=dim
+func ColorLevel(level string) string {
+	if !IsColorEnabled() {
+		return level
+	}
+
+	levelUpper := strings.ToUpper(strings.TrimSpace(level))
+
+	switch levelUpper {
+	case "ERROR", "FATAL", "CRITICAL":
+		return color.RedString(level)
+	case "WARN", "WARNING":
+		return color.YellowString(level)
+	case "INFO":
+		return color.CyanString(level)
+	case "DEBUG":
+		return color.BlueString(level)
+	case "TRACE":
+		return color.New(color.FgHiBlack).Sprint(level)
+	default:
+		return level
+	}
+}
+
+// ColorTimestamp colors timestamp in dim gray.
+// Usage in template: {{ColorTimestamp (FormatTimestamp .Timestamp "15:04:05")}}
+func ColorTimestamp(timestamp string) string {
+	if !IsColorEnabled() {
+		return timestamp
+	}
+	return color.New(color.FgHiBlack).Sprint(timestamp)
+}
+
+// ColorContext colors context ID in magenta.
+// Usage in template: {{ColorContext .ContextID}}
+func ColorContext(contextID string) string {
+	if !IsColorEnabled() {
+		return contextID
+	}
+	return color.MagentaString(contextID)
+}
+
+// ColorString applies a named color to text.
+// Usage in template: {{ColorString "red" "ERROR"}} or {{ColorString "green" .Message}}
+// Available colors: red, green, yellow, blue, magenta, cyan, white, black, dim/gray/grey
+func ColorString(colorName, text string) string {
+	if !IsColorEnabled() {
+		return text
+	}
+
+	switch strings.ToLower(colorName) {
+	case "red":
+		return color.RedString(text)
+	case "green":
+		return color.GreenString(text)
+	case "yellow":
+		return color.YellowString(text)
+	case "blue":
+		return color.BlueString(text)
+	case "magenta":
+		return color.MagentaString(text)
+	case "cyan":
+		return color.CyanString(text)
+	case "white":
+		return color.WhiteString(text)
+	case "black":
+		return color.BlackString(text)
+	case "dim", "gray", "grey":
+		return color.New(color.FgHiBlack).Sprint(text)
+	default:
+		return text
+	}
+}
+
+// Bold makes text bold.
+// Usage in template: {{Bold "Important Message"}} or {{Bold .Level}}
+func Bold(text string) string {
+	if !IsColorEnabled() {
+		return text
+	}
+	return color.New(color.Bold).Sprint(text)
+}
+
 func GetTemplateFunctionsMap() template.FuncMap {
 	return template.FuncMap{
 		"Format":          FormatDate,
@@ -106,5 +192,11 @@ func GetTemplateFunctionsMap() template.FuncMap {
 		"Field":           GetField,
 		"KV":              KV,
 		"Trim":            Trim,
+		// Color functions
+		"ColorLevel":     ColorLevel,
+		"ColorTimestamp": ColorTimestamp,
+		"ColorContext":   ColorContext,
+		"ColorString":    ColorString,
+		"Bold":           Bold,
 	}
 }

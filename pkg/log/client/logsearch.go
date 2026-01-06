@@ -38,6 +38,7 @@ type FieldExtraction struct {
 type PrinterOptions struct {
 	Template     ty.Opt[string] `json:"template,omitempty" yaml:"template,omitempty"`
 	MessageRegex ty.Opt[string] `json:"messageRegex,omitempty" yaml:"messageRegex,omitempty"`
+	Color        ty.Opt[bool]   `json:"color,omitempty" yaml:"color,omitempty"`
 }
 
 type LogSearch struct {
