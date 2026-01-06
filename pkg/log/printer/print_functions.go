@@ -198,6 +198,84 @@ func ExpandJsonLimit(value string, maxLines int) string {
 	return truncated + "\n  ... (truncated, " + fmt.Sprintf("%d", len(lines)-maxLines-1) + " more lines)"
 }
 
+// ExpandJsonLimitDepth detects and formats JSON with a maximum depth limit.
+// Nested objects/arrays beyond maxDepth are replaced with "..." indicator.
+// Useful for preventing deeply nested JSON from cluttering output.
+// Usage in template: {{ExpandJsonLimitDepth .Message 3}}
+func ExpandJsonLimitDepth(value string, maxDepth int) string {
+	jsonStrings := findJSON(value)
+	if len(jsonStrings) == 0 {
+		return ""
+	}
+
+	var result strings.Builder
+	for _, jsonStr := range jsonStrings {
+		var obj interface{}
+		if err := json.Unmarshal([]byte(jsonStr), &obj); err != nil {
+			continue
+		}
+
+		// Truncate to max depth
+		truncated := truncateDepth(obj, maxDepth, 0)
+
+		// Format with indentation and color (if enabled)
+		if IsColorEnabled() {
+			f := colorjson.NewFormatter()
+			f.Indent = 2
+			formatted, err := f.Marshal(truncated)
+			if err != nil {
+				continue
+			}
+			result.WriteString("\n")
+			result.Write(formatted)
+		} else {
+			// Plain formatting without colors
+			formatted, err := json.MarshalIndent(truncated, "", "  ")
+			if err != nil {
+				continue
+			}
+			result.WriteString("\n")
+			result.Write(formatted)
+		}
+	}
+
+	return result.String()
+}
+
+// truncateDepth recursively truncates JSON structures beyond maxDepth.
+// Returns a new structure with deep nesting replaced by "..." strings.
+func truncateDepth(obj interface{}, maxDepth, currentDepth int) interface{} {
+	if currentDepth >= maxDepth {
+		return "..."
+	}
+
+	switch v := obj.(type) {
+	case map[string]interface{}:
+		if len(v) == 0 {
+			return v
+		}
+		truncated := make(map[string]interface{}, len(v))
+		for key, val := range v {
+			truncated[key] = truncateDepth(val, maxDepth, currentDepth+1)
+		}
+		return truncated
+
+	case []interface{}:
+		if len(v) == 0 {
+			return v
+		}
+		truncated := make([]interface{}, len(v))
+		for i, val := range v {
+			truncated[i] = truncateDepth(val, maxDepth, currentDepth+1)
+		}
+		return truncated
+
+	default:
+		// Primitive types (string, number, bool, null) - return as-is
+		return v
+	}
+}
+
 // ExpandJsonCompact detects and formats JSON on a single line (no indentation).
 // Useful for short JSON payloads where vertical space is limited.
 // Usage in template: {{ExpandJsonCompact .Message}}
@@ -341,6 +419,7 @@ func GetTemplateFunctionsMap() template.FuncMap {
 		"MultiLine":       MultlineFields,
 		"ExpandJson":      ExpandJson,
 		"ExpandJsonLimit": ExpandJsonLimit,
+		"ExpandJsonLimitDepth": ExpandJsonLimitDepth,
 		"ExpandJsonCompact": ExpandJsonCompact,
 		"Field":           GetField,
 		"KV":              KV,

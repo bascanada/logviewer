@@ -140,6 +140,89 @@ func TestExpandJsonCompact(t *testing.T) {
 	})
 }
 
+func TestExpandJsonLimitDepth(t *testing.T) {
+	t.Run("limits depth to 1 level", func(t *testing.T) {
+		input := `Data: {"level1": {"level2": {"level3": "deep"}}}`
+		result := printer.ExpandJsonLimitDepth(input, 1)
+
+		assert.NotEmpty(t, result)
+		assert.Contains(t, result, "level1")
+		assert.Contains(t, result, "...")
+		assert.NotContains(t, result, "level3")
+	})
+
+	t.Run("limits depth to 2 levels", func(t *testing.T) {
+		input := `Data: {"a": {"b": {"c": {"d": "value"}}}}`
+		result := printer.ExpandJsonLimitDepth(input, 2)
+
+		assert.NotEmpty(t, result)
+		assert.Contains(t, result, "a")
+		assert.Contains(t, result, "b")
+		assert.Contains(t, result, "...")
+		assert.NotContains(t, result, "d")
+	})
+
+	t.Run("handles arrays with depth limit", func(t *testing.T) {
+		input := `Data: {"items": [{"nested": {"deep": "value"}}]}`
+		result := printer.ExpandJsonLimitDepth(input, 3)
+
+		assert.NotEmpty(t, result)
+		assert.Contains(t, result, "items")
+		assert.Contains(t, result, "nested")
+		assert.Contains(t, result, "...")
+		// With depth=3: root(0) -> items(1) -> array_object(2) -> nested(3) -> deep(4, truncated)
+	})
+
+	t.Run("preserves shallow JSON", func(t *testing.T) {
+		input := `Data: {"key1": "value1", "key2": "value2"}`
+		result := printer.ExpandJsonLimitDepth(input, 3)
+
+		assert.NotEmpty(t, result)
+		assert.Contains(t, result, "key1")
+		assert.Contains(t, result, "value1")
+		assert.Contains(t, result, "key2")
+		assert.NotContains(t, result, "...")
+	})
+
+	t.Run("depth 0 replaces everything with ...", func(t *testing.T) {
+		input := `Data: {"key": "value"}`
+		result := printer.ExpandJsonLimitDepth(input, 0)
+
+		assert.NotEmpty(t, result)
+		assert.Contains(t, result, "...")
+		assert.NotContains(t, result, "key")
+	})
+
+	t.Run("handles complex nested structure", func(t *testing.T) {
+		input := `Response: {"user": {"name": "John", "profile": {"age": 30, "address": {"city": "NYC"}}}}`
+		result := printer.ExpandJsonLimitDepth(input, 2)
+
+		assert.NotEmpty(t, result)
+		assert.Contains(t, result, "user")
+		assert.Contains(t, result, "name")
+		assert.Contains(t, result, "profile")
+		assert.Contains(t, result, "...")
+		assert.NotContains(t, result, "city")
+	})
+
+	t.Run("returns empty for no JSON", func(t *testing.T) {
+		input := "No JSON here"
+		result := printer.ExpandJsonLimitDepth(input, 2)
+		assert.Empty(t, result)
+	})
+
+	t.Run("handles real-world nested payload", func(t *testing.T) {
+		input := `Outbound: {"redirectUrl":"https://example.com","paymentSessionId":"ABC","details":{"amount":100,"currency":"USD","items":[{"id":1,"name":"ticket"}]}}`
+		result := printer.ExpandJsonLimitDepth(input, 2)
+
+		assert.NotEmpty(t, result)
+		assert.Contains(t, result, "redirectUrl")
+		assert.Contains(t, result, "details")
+		assert.Contains(t, result, "...")
+		// Items array at depth 3 should be truncated
+	})
+}
+
 func TestFormatTimestamp(t *testing.T) {
 	t.Run("formats valid timestamp in local time", func(t *testing.T) {
 		// Use local time to ensure test works regardless of timezone
