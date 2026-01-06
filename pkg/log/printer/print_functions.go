@@ -3,8 +3,6 @@ package printer
 import (
 	"encoding/json"
 	"fmt"
-	"log"
-	"regexp"
 	"strings"
 	"text/template"
 	"time"
@@ -14,9 +12,94 @@ import (
 	"github.com/fatih/color"
 )
 
-const (
-	regexJsonExtraction = "{(?:[^{}]|(?P<recurse>{[^{}]*}))*}"
-)
+// findJSON finds all valid JSON objects and arrays in a string.
+// Returns slices of JSON strings found in the input.
+func findJSON(s string) []string {
+	var results []string
+	runes := []rune(s)
+
+	for i := 0; i < len(runes); i++ {
+		if runes[i] != '{' && runes[i] != '[' {
+			continue
+		}
+
+		// Try to extract JSON starting at this position
+		if jsonStr := extractJSON(runes, i); jsonStr != "" {
+			// Validate it's actually valid JSON
+			var testObj interface{}
+			if err := json.Unmarshal([]byte(jsonStr), &testObj); err == nil {
+				// Check it's not empty
+				switch v := testObj.(type) {
+				case map[string]interface{}:
+					if len(v) > 0 {
+						results = append(results, jsonStr)
+					}
+				case []interface{}:
+					if len(v) > 0 {
+						results = append(results, jsonStr)
+					}
+				default:
+					results = append(results, jsonStr)
+				}
+			}
+			// Skip past this JSON to avoid finding nested objects
+			i += len([]rune(jsonStr)) - 1
+		}
+	}
+
+	return results
+}
+
+// extractJSON attempts to extract a complete JSON object or array starting at position start.
+// Returns the JSON string if valid, or empty string if not.
+func extractJSON(runes []rune, start int) string {
+	if start >= len(runes) {
+		return ""
+	}
+
+	openChar := runes[start]
+	if openChar != '{' && openChar != '[' {
+		return ""
+	}
+
+	depth := 0
+	inString := false
+	escape := false
+
+	for i := start; i < len(runes); i++ {
+		r := runes[i]
+
+		if escape {
+			escape = false
+			continue
+		}
+
+		if r == '\\' {
+			escape = true
+			continue
+		}
+
+		if r == '"' {
+			inString = !inString
+			continue
+		}
+
+		if inString {
+			continue
+		}
+
+		if r == '{' || r == '[' {
+			depth++
+		} else if r == '}' || r == ']' {
+			depth--
+			if depth == 0 {
+				return string(runes[start : i+1])
+			}
+		}
+	}
+
+	return ""
+}
 
 func FormatDate(layout string, t time.Time) string {
 	return t.Format(layout)
@@ -56,23 +139,91 @@ func KV(values ty.MI) string {
 	return strings.Join(items, " ")
 }
 
+// ExpandJson detects and formats all JSON objects and arrays in the message.
+// Outputs formatted, indented (and colored if enabled) JSON on new lines.
+// Usage in template: {{.Message}}{{ExpandJson .Message}}
 func ExpandJson(value string) string {
-	reg := regexp.MustCompile(regexJsonExtraction)
-	f := colorjson.NewFormatter()
-	f.Indent = 2
-	str := ""
-	for _, jsonStr := range reg.FindStringSubmatch(value) {
-		var obj map[string]interface{}
-
-		json.Unmarshal([]byte(jsonStr), &obj)
-		s, err := f.Marshal(obj)
-		if err != nil {
-			log.Println("failed to unmarshal json " + jsonStr)
-			return ""
-		}
-		str += "\n" + string(s)
+	jsonStrings := findJSON(value)
+	if len(jsonStrings) == 0 {
+		return ""
 	}
-	return str
+
+	var result strings.Builder
+	for _, jsonStr := range jsonStrings {
+		var obj interface{}
+		if err := json.Unmarshal([]byte(jsonStr), &obj); err != nil {
+			continue
+		}
+
+		// Format with indentation and color (if enabled)
+		if IsColorEnabled() {
+			f := colorjson.NewFormatter()
+			f.Indent = 2
+			formatted, err := f.Marshal(obj)
+			if err != nil {
+				continue
+			}
+			result.WriteString("\n")
+			result.Write(formatted)
+		} else {
+			// Plain formatting without colors
+			formatted, err := json.MarshalIndent(obj, "", "  ")
+			if err != nil {
+				continue
+			}
+			result.WriteString("\n")
+			result.Write(formatted)
+		}
+	}
+
+	return result.String()
+}
+
+// ExpandJsonLimit detects and formats JSON with a maximum line limit.
+// If the formatted JSON exceeds maxLines, it's truncated with "... (truncated)" indicator.
+// Usage in template: {{ExpandJsonLimit .Message 10}}
+func ExpandJsonLimit(value string, maxLines int) string {
+	fullExpanded := ExpandJson(value)
+	if fullExpanded == "" {
+		return ""
+	}
+
+	lines := strings.Split(fullExpanded, "\n")
+	if len(lines) <= maxLines+1 { // +1 because first line is empty
+		return fullExpanded
+	}
+
+	// Truncate and add indicator
+	truncated := strings.Join(lines[:maxLines+1], "\n")
+	return truncated + "\n  ... (truncated, " + fmt.Sprintf("%d", len(lines)-maxLines-1) + " more lines)"
+}
+
+// ExpandJsonCompact detects and formats JSON on a single line (no indentation).
+// Useful for short JSON payloads where vertical space is limited.
+// Usage in template: {{ExpandJsonCompact .Message}}
+func ExpandJsonCompact(value string) string {
+	jsonStrings := findJSON(value)
+	if len(jsonStrings) == 0 {
+		return ""
+	}
+
+	var result strings.Builder
+	for _, jsonStr := range jsonStrings {
+		var obj interface{}
+		if err := json.Unmarshal([]byte(jsonStr), &obj); err != nil {
+			continue
+		}
+
+		// Format on single line
+		formatted, err := json.Marshal(obj)
+		if err != nil {
+			continue
+		}
+		result.WriteString("\n")
+		result.Write(formatted)
+	}
+
+	return result.String()
 }
 
 // GetField provides case-insensitive field access for templates.
@@ -189,6 +340,8 @@ func GetTemplateFunctionsMap() template.FuncMap {
 		"FormatTimestamp": FormatTimestamp,
 		"MultiLine":       MultlineFields,
 		"ExpandJson":      ExpandJson,
+		"ExpandJsonLimit": ExpandJsonLimit,
+		"ExpandJsonCompact": ExpandJsonCompact,
 		"Field":           GetField,
 		"KV":              KV,
 		"Trim":            Trim,
