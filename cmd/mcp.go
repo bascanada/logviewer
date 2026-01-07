@@ -516,24 +516,57 @@ You may skip this and directly call query_logs. If a query returns no results, c
 	queryLogsTool := mcp.NewTool("query_logs",
 		mcp.WithDescription(`Query log entries for a context with optional filters and time window.
 
-Usage: query_logs contextId=<context> [last=15m] [size=100] [fields={"level":"ERROR"}]
+Usage Examples:
+  - Simple field filter: query_logs contextId=prod-api fields={"level":"ERROR"}
+  - Text pattern search: query_logs contextId=prod-api nativeQuery="_~=.*Exception.*"
+  - Combined: query_logs contextId=prod-api nativeQuery="level=ERROR AND _~=.*timeout.*"
 
 Parameters:
 	contextId (string, required): Context identifier.
-	last (string, optional): Relative duration window (e.g. 15m, 2h, 1d).
+	last (string, optional): Relative duration window (e.g. 15m, 2h, 1d). Defaults to 15m.
 	start_time (string, optional): Absolute start time (RFC3339).
 	end_time (string, optional): Absolute end time (RFC3339).
-	pageToken (string, optional): Token for pagination to fetch older logs (returned in previous response meta).
+	pageToken (string, optional): Token for pagination to fetch older logs.
 	size (number, optional): Max number of log entries.
-	fields (object, optional): Exact-match key/value filters.
-	nativeQuery (string, optional): Raw query in the backend's native syntax (e.g. Splunk SPL, OpenSearch Lucene).
-		Use this for advanced queries that leverage backend-specific features.
-		The nativeQuery acts as the base search; fields filters are appended to refine results.
-		Examples:
-		- Splunk: "index=main sourcetype=httpevent | eval severity=if(level==\"ERROR\", \"HIGH\", \"LOW\")"
-		- OpenSearch: "level:ERROR AND message:*timeout*"
 
-Behavior improvements:
+	fields (object, optional): STRUCTURED FIELD FILTERS for exact key/value matching.
+		Use this when filtering by specific field values like level, service, status code.
+		Example: {"level":"ERROR","service":"payment-api"}
+		Note: This performs exact equality matching on structured log fields.
+
+	nativeQuery (string, optional): ADVANCED QUERY EXPRESSION for complex filtering.
+		Use this for:
+		  1. Text pattern matching anywhere in logs (field-less search)
+		  2. Complex logical expressions (AND/OR/NOT)
+		  3. Regex patterns
+		  4. Combining field filters with text search
+
+		Query Expression Syntax:
+		  - Field equality: level=ERROR, service=api
+		  - Field-less search: _=substring or _~=regex
+		  - Operators: =, !=, ~= (regex), !~= (not regex), >, >=, <, <=
+		  - Logic: AND, OR, NOT
+		  - Grouping: ( )
+		  - Functions: exists(fieldname)
+
+		Field-less Search (searching text anywhere in log messages):
+		  - Substring match: _=Exception (finds logs containing "Exception")
+		  - Regex match: _~=.*Exception.* (regex pattern match)
+		  - Case matters: Use appropriate regex for case-insensitive: _~=(?i)exception
+
+		Examples:
+		  - Find any log with "Exception": nativeQuery="_~=.*Exception.*"
+		  - Find errors with timeout: nativeQuery="level=ERROR AND _~=.*timeout.*"
+		  - Complex: nativeQuery="(level=ERROR OR level=WARN) AND service=api AND _~=.*retry.*"
+		  - Check field exists: nativeQuery="exists(trace_id) AND level=ERROR"
+
+		Backend Translation:
+		  The "_" field is automatically translated to backend-specific full-text fields:
+		  - Splunk: _raw field
+		  - OpenSearch/Elasticsearch: _all field
+		  - Other backends: message field
+
+Behavior:
 	- If contextId is invalid, the response includes suggestions (no need to pre-call list_contexts).
 	- If results are empty, meta.hints will recommend next actions (e.g. broaden last, call get_fields).
 	- If more results are available, meta.nextPageToken will be included for pagination.
@@ -1113,7 +1146,31 @@ func generatePromptContent(
 		sb.WriteString("\n")
 	}
 
-	// Section 6: Investigation Workflow
+	// Section 6: Query Syntax Guide
+	sb.WriteString("## Query Syntax Guide\n\n")
+	sb.WriteString("### Structured Field Filtering (fields parameter)\n")
+	sb.WriteString("Use for exact field value matching:\n")
+	sb.WriteString("```\n")
+	sb.WriteString(fmt.Sprintf("query_logs contextId=%s fields={\"level\":\"ERROR\"}\n", contextId))
+	sb.WriteString(fmt.Sprintf("query_logs contextId=%s fields={\"level\":\"ERROR\",\"service\":\"api\"}\n", contextId))
+	sb.WriteString("```\n\n")
+
+	sb.WriteString("### Text Pattern Search (nativeQuery with _)\n")
+	sb.WriteString("Use for finding text anywhere in log messages:\n")
+	sb.WriteString("```\n")
+	sb.WriteString(fmt.Sprintf("query_logs contextId=%s nativeQuery=\"_~=.*Exception.*\"\n", contextId))
+	sb.WriteString(fmt.Sprintf("query_logs contextId=%s nativeQuery=\"_~=.*timeout.*\"\n", contextId))
+	sb.WriteString(fmt.Sprintf("query_logs contextId=%s nativeQuery=\"_=ConnectionError\"\n", contextId))
+	sb.WriteString("```\n\n")
+
+	sb.WriteString("### Combined Filtering (nativeQuery with field filters)\n")
+	sb.WriteString("Use for complex queries:\n")
+	sb.WriteString("```\n")
+	sb.WriteString(fmt.Sprintf("query_logs contextId=%s nativeQuery=\"level=ERROR AND _~=.*Exception.*\"\n", contextId))
+	sb.WriteString(fmt.Sprintf("query_logs contextId=%s nativeQuery=\"(level=ERROR OR level=WARN) AND _~=.*retry.*\"\n", contextId))
+	sb.WriteString("```\n\n")
+
+	// Section 7: Investigation Workflow
 	sb.WriteString("## Investigation Workflow\n")
 	sb.WriteString(fmt.Sprintf(`1. **Start broad:** query_logs contextId=%s last=%s size=50
 2. **Review results:** Look for patterns, errors, anomalies
@@ -1123,7 +1180,7 @@ func generatePromptContent(
 
 `, contextId, timeRange, contextId))
 
-	// Section 7: Quick Start Command
+	// Section 8: Quick Start Command
 	sb.WriteString("## Quick Start\n")
 	sb.WriteString("```\n")
 	sb.WriteString(fmt.Sprintf("query_logs contextId=%s last=%s", contextId, timeRange))

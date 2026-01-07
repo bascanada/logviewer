@@ -49,6 +49,7 @@ brews:
       owner: bascanada
       name: homebrew-tap
       token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    directory: Formula
 
 scoops:
   - repository:

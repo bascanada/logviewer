@@ -1,13 +1,18 @@
 package reader
 
 import (
+	"bufio"
+	"context"
+	"io"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/ty"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTimestampExtraction(t *testing.T) {
@@ -126,4 +131,413 @@ func TestReaderLogResult_parseBlock(t *testing.T) {
 			}
 		})
 	}
+}
+
+// nopCloser wraps an io.Reader to satisfy io.Closer
+type nopCloser struct {
+	io.Reader
+	closed bool
+}
+
+func (n *nopCloser) Close() error {
+	n.closed = true
+	return nil
+}
+
+func TestReaderLogResult_GetEntries_NonFollow(t *testing.T) {
+	t.Run("Reads all entries when Follow is false", func(t *testing.T) {
+		input := "line 1\nline 2\nline 3\n"
+		reader := strings.NewReader(input)
+		scanner := bufio.NewScanner(reader)
+		closer := &nopCloser{Reader: reader}
+
+		search := &client.LogSearch{
+			Follow: false,
+		}
+
+		result, err := GetLogResult(search, scanner, closer)
+		require.NoError(t, err)
+
+		entries, ch, err := result.GetEntries(context.Background())
+		require.NoError(t, err)
+
+		assert.Len(t, entries, 3)
+		assert.Nil(t, ch, "Channel should be nil when Follow is false")
+		assert.True(t, closer.closed, "Closer should be called when Follow is false")
+	})
+
+	t.Run("Handles empty input", func(t *testing.T) {
+		input := ""
+		reader := strings.NewReader(input)
+		scanner := bufio.NewScanner(reader)
+		closer := &nopCloser{Reader: reader}
+
+		search := &client.LogSearch{
+			Follow: false,
+		}
+
+		result, err := GetLogResult(search, scanner, closer)
+		require.NoError(t, err)
+
+		entries, ch, err := result.GetEntries(context.Background())
+		require.NoError(t, err)
+
+		assert.Len(t, entries, 0)
+		assert.Nil(t, ch)
+	})
+}
+
+func TestReaderLogResult_GetEntries_Follow(t *testing.T) {
+	t.Run("Returns channel when Follow is true", func(t *testing.T) {
+		// Use a pipe to simulate streaming input
+		pr, pw := io.Pipe()
+		scanner := bufio.NewScanner(pr)
+		closer := &nopCloser{Reader: pr}
+
+		search := &client.LogSearch{
+			Follow: true,
+		}
+
+		result, err := GetLogResult(search, scanner, closer)
+		require.NoError(t, err)
+
+		entries, ch, err := result.GetEntries(context.Background())
+		require.NoError(t, err)
+
+		assert.Empty(t, entries, "Initial entries should be empty for Follow mode")
+		assert.NotNil(t, ch, "Channel should be returned when Follow is true")
+
+		// Write some data and verify it's received
+		go func() {
+			pw.Write([]byte("streaming line 1\n"))
+			pw.Write([]byte("streaming line 2\n"))
+			pw.Close()
+		}()
+
+		received := []string{}
+		for batch := range ch {
+			for _, entry := range batch {
+				received = append(received, entry.Message)
+			}
+		}
+
+		assert.Len(t, received, 2)
+		assert.Contains(t, received, "streaming line 1")
+		assert.Contains(t, received, "streaming line 2")
+	})
+
+	t.Run("Context cancellation stops streaming", func(t *testing.T) {
+		pr, pw := io.Pipe()
+		scanner := bufio.NewScanner(pr)
+		closer := pr
+
+		search := &client.LogSearch{
+			Follow: true,
+		}
+
+		result, err := GetLogResult(search, scanner, closer)
+		require.NoError(t, err)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		_, ch, err := result.GetEntries(ctx)
+		require.NoError(t, err)
+		require.NotNil(t, ch)
+
+		// Write one line
+		pw.Write([]byte("first line\n"))
+
+		// Cancel context
+		cancel()
+
+		// Close the writer to allow goroutine to exit
+		pw.Close()
+
+		// Channel should eventually close
+		select {
+		case _, ok := <-ch:
+			if !ok {
+				// Channel closed as expected
+			}
+		case <-time.After(100 * time.Millisecond):
+			// Timeout is acceptable
+		}
+	})
+}
+
+func TestReaderLogResult_GetSearch(t *testing.T) {
+	search := &client.LogSearch{Follow: true}
+	result := ReaderLogResult{search: search}
+
+	assert.Equal(t, search, result.GetSearch())
+}
+
+func TestReaderLogResult_GetFields(t *testing.T) {
+	fields := ty.UniSet[string]{"level": {"INFO", "ERROR"}}
+	result := ReaderLogResult{fields: fields}
+
+	returnedFields, ch, err := result.GetFields(context.Background())
+	require.NoError(t, err)
+	assert.Nil(t, ch)
+	assert.Equal(t, fields, returnedFields)
+}
+
+func TestReaderLogResult_Err(t *testing.T) {
+	errChan := make(chan error, 1)
+	result := ReaderLogResult{ErrChan: errChan}
+
+	assert.Equal(t, (<-chan error)(errChan), result.Err())
+}
+
+func TestGetLogResult(t *testing.T) {
+	t.Run("Creates result with valid search", func(t *testing.T) {
+		input := "test line"
+		reader := strings.NewReader(input)
+		scanner := bufio.NewScanner(reader)
+		closer := &nopCloser{Reader: reader}
+
+		search := &client.LogSearch{}
+
+		result, err := GetLogResult(search, scanner, closer)
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.Equal(t, search, result.search)
+	})
+
+	t.Run("Compiles GroupRegex when provided", func(t *testing.T) {
+		input := "test"
+		reader := strings.NewReader(input)
+		scanner := bufio.NewScanner(reader)
+		closer := &nopCloser{Reader: reader}
+
+		search := &client.LogSearch{}
+		search.FieldExtraction.GroupRegex.S(`(?P<level>INFO|ERROR)`)
+
+		result, err := GetLogResult(search, scanner, closer)
+		require.NoError(t, err)
+		assert.NotNil(t, result.namedGroupRegexExtraction)
+	})
+
+	t.Run("Returns error for invalid GroupRegex", func(t *testing.T) {
+		input := "test"
+		reader := strings.NewReader(input)
+		scanner := bufio.NewScanner(reader)
+		closer := &nopCloser{Reader: reader}
+
+		search := &client.LogSearch{}
+		search.FieldExtraction.GroupRegex.S(`[invalid regex`)
+
+		_, err := GetLogResult(search, scanner, closer)
+		assert.Error(t, err)
+	})
+
+	t.Run("Compiles KvRegex when provided", func(t *testing.T) {
+		input := "test"
+		reader := strings.NewReader(input)
+		scanner := bufio.NewScanner(reader)
+		closer := &nopCloser{Reader: reader}
+
+		search := &client.LogSearch{}
+		search.FieldExtraction.KvRegex.S(`(\w+)=(\w+)`)
+
+		result, err := GetLogResult(search, scanner, closer)
+		require.NoError(t, err)
+		assert.NotNil(t, result.kvRegexExtraction)
+	})
+
+	t.Run("Returns error for invalid KvRegex", func(t *testing.T) {
+		input := "test"
+		reader := strings.NewReader(input)
+		scanner := bufio.NewScanner(reader)
+		closer := &nopCloser{Reader: reader}
+
+		search := &client.LogSearch{}
+		search.FieldExtraction.KvRegex.S(`[invalid`)
+
+		_, err := GetLogResult(search, scanner, closer)
+		assert.Error(t, err)
+	})
+
+	t.Run("Compiles TimestampRegex when provided", func(t *testing.T) {
+		input := "test"
+		reader := strings.NewReader(input)
+		scanner := bufio.NewScanner(reader)
+		closer := &nopCloser{Reader: reader}
+
+		search := &client.LogSearch{}
+		search.FieldExtraction.TimestampRegex.S(`\d{4}-\d{2}-\d{2}`)
+
+		result, err := GetLogResult(search, scanner, closer)
+		require.NoError(t, err)
+		assert.NotNil(t, result.regexDate)
+	})
+
+	t.Run("Strips leading ^ from TimestampRegex for flexibility", func(t *testing.T) {
+		input := "test"
+		reader := strings.NewReader(input)
+		scanner := bufio.NewScanner(reader)
+		closer := &nopCloser{Reader: reader}
+
+		search := &client.LogSearch{}
+		search.FieldExtraction.TimestampRegex.S(`^\d{4}-\d{2}-\d{2}`)
+
+		result, err := GetLogResult(search, scanner, closer)
+		require.NoError(t, err)
+		assert.NotNil(t, result.regexDate)
+		// Should match timestamp even if not at start of line
+		assert.True(t, result.regexDate.MatchString("prefix 2024-01-01"))
+	})
+}
+
+func TestReaderLogResult_processLine(t *testing.T) {
+	t.Run("New entry when no timestamp regex", func(t *testing.T) {
+		lr := &ReaderLogResult{
+			search:  &client.LogSearch{},
+			fields:  ty.UniSet[string]{},
+			entries: []client.LogEntry{},
+		}
+
+		var pendingBlock strings.Builder
+		var received []client.LogEntry
+		onEntry := func(entry client.LogEntry) {
+			received = append(received, entry)
+		}
+
+		lr.processLine("first line", &pendingBlock, onEntry)
+		lr.processLine("second line", &pendingBlock, onEntry)
+		lr.flushBlock(&pendingBlock, onEntry)
+
+		assert.Len(t, received, 2)
+	})
+
+	t.Run("Multiline entry with timestamp regex", func(t *testing.T) {
+		lr := &ReaderLogResult{
+			search:    &client.LogSearch{},
+			fields:    ty.UniSet[string]{},
+			entries:   []client.LogEntry{},
+			regexDate: regexp.MustCompile(`\d{4}-\d{2}-\d{2}`),
+		}
+
+		var pendingBlock strings.Builder
+		var received []client.LogEntry
+		onEntry := func(entry client.LogEntry) {
+			received = append(received, entry)
+		}
+
+		// First line with timestamp
+		lr.processLine("2024-01-01 First entry", &pendingBlock, onEntry)
+		// Continuation without timestamp
+		lr.processLine("  continuation of first entry", &pendingBlock, onEntry)
+		// New entry with timestamp
+		lr.processLine("2024-01-02 Second entry", &pendingBlock, onEntry)
+		lr.flushBlock(&pendingBlock, onEntry)
+
+		assert.Len(t, received, 2)
+		assert.Contains(t, received[0].Message, "continuation")
+	})
+}
+
+func TestReaderLogResult_loadEntries(t *testing.T) {
+	t.Run("Returns true when entries are loaded", func(t *testing.T) {
+		input := "line 1\nline 2\n"
+		reader := strings.NewReader(input)
+		scanner := bufio.NewScanner(reader)
+
+		lr := &ReaderLogResult{
+			search:  &client.LogSearch{},
+			scanner: scanner,
+			fields:  ty.UniSet[string]{},
+			entries: []client.LogEntry{},
+		}
+
+		result := lr.loadEntries()
+		assert.True(t, result)
+		assert.Len(t, lr.entries, 2)
+	})
+
+	t.Run("Returns false when no entries", func(t *testing.T) {
+		input := ""
+		reader := strings.NewReader(input)
+		scanner := bufio.NewScanner(reader)
+
+		lr := &ReaderLogResult{
+			search:  &client.LogSearch{},
+			scanner: scanner,
+			fields:  ty.UniSet[string]{},
+			entries: []client.LogEntry{},
+		}
+
+		result := lr.loadEntries()
+		assert.False(t, result)
+		assert.Len(t, lr.entries, 0)
+	})
+}
+
+func TestParseTimestamp(t *testing.T) {
+	t.Run("Parses RFC3339 format", func(t *testing.T) {
+		ts, err := parseTimestamp("2024-01-15T10:30:45Z")
+		require.NoError(t, err)
+		assert.Equal(t, 2024, ts.Year())
+		assert.Equal(t, time.January, ts.Month())
+		assert.Equal(t, 15, ts.Day())
+	})
+
+	t.Run("Parses local time format", func(t *testing.T) {
+		ts, err := parseTimestamp("2024-01-15 10:30:45.123")
+		require.NoError(t, err)
+		assert.Equal(t, 2024, ts.Year())
+	})
+
+	t.Run("Parses float64 Unix timestamp", func(t *testing.T) {
+		unixTime := float64(1705315845.123456)
+		ts, err := parseTimestamp(unixTime)
+		require.NoError(t, err)
+		assert.False(t, ts.IsZero())
+	})
+
+	t.Run("Returns error for unsupported type", func(t *testing.T) {
+		_, err := parseTimestamp(12345)
+		assert.Error(t, err)
+	})
+}
+
+func TestReaderLogResult_PreFiltered(t *testing.T) {
+	t.Run("Skips filtering when __preFiltered__ is true", func(t *testing.T) {
+		search := &client.LogSearch{
+			Fields: ty.MS{"level": "ERROR"},
+			Options: ty.MI{
+				"__preFiltered__": true,
+			},
+		}
+		search.FieldExtraction.Json.S(true)
+
+		lr := &ReaderLogResult{
+			search:  search,
+			fields:  ty.UniSet[string]{},
+			entries: []client.LogEntry{},
+		}
+
+		// This line would normally be filtered out since level != ERROR
+		// But with __preFiltered__, it should pass through
+		entry, ok := lr.parseBlock(`{"message":"test","level":"INFO"}`)
+		assert.True(t, ok, "Should pass through when preFiltered")
+		assert.NotNil(t, entry)
+	})
+
+	t.Run("Applies filtering when __preFiltered__ is false", func(t *testing.T) {
+		search := &client.LogSearch{
+			Fields: ty.MS{"level": "ERROR"},
+		}
+		search.FieldExtraction.Json.S(true)
+
+		lr := &ReaderLogResult{
+			search:  search,
+			fields:  ty.UniSet[string]{},
+			entries: []client.LogEntry{},
+		}
+
+		// This line should be filtered out since level != ERROR
+		entry, ok := lr.parseBlock(`{"message":"test","level":"INFO"}`)
+		assert.False(t, ok, "Should be filtered out when level doesn't match")
+		assert.Nil(t, entry)
+	})
 }

@@ -19,6 +19,13 @@ func WrapIoWritter(ctx context.Context, result client.LogSearchResult, writer io
 
 	printerOptions := result.GetSearch().PrinterOptions
 
+	// Initialize color state based on configuration and TTY detection
+	var colorEnabled *bool
+	if printerOptions.Color.Set {
+		colorEnabled = &printerOptions.Color.Value
+	}
+	InitColorState(colorEnabled, writer)
+
 	templateConfig := printerOptions.Template
 
 	if templateConfig.Value == "" {

@@ -334,7 +334,11 @@ components:
         options:
           type: object
           additionalProperties: true
-          description: Backend-specific options
+          description: |
+            Backend-specific options.
+            Common options:
+            - timestampFormat: Custom time layout (e.g. "2006-01-02 15:04:05") for parsing/formatting timestamps
+
         fieldExtraction:
           type: object
           properties:
