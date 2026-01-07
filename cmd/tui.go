@@ -4,7 +4,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/factory"
@@ -41,11 +40,6 @@ Examples:
   logviewer tui -i prod-logs -q "level=ERROR AND service=api"`,
 	PreRun: onCommandStart,
 	Run:    runTUI,
-}
-
-func init() {
-	// TUI uses the same flags as query
-	// These are already defined on queryCommand, so we just need to add this as a subcommand
 }
 
 func runTUI(cmd *cobra.Command, args []string) {
@@ -98,7 +92,8 @@ func runTUI(cmd *cobra.Command, args []string) {
 	model := tui.New(cfg, clientFactory, searchFactory)
 	model.RuntimeVars = runtimeVars
 	model.InitialContexts = resolvedContextIds
-	model.InitialSearch = copySearchRequest(&searchRequest)
+	searchCopy := deepCopyLogSearch(searchRequest)
+	model.InitialSearch = &searchCopy
 
 	// Create the bubbletea program
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
@@ -120,66 +115,63 @@ func runTUI(cmd *cobra.Command, args []string) {
 	}
 }
 
-// copySearchRequest creates a deep copy of a LogSearch
-func copySearchRequest(src *client.LogSearch) *client.LogSearch {
-	dst := &client.LogSearch{
-		Fields:          make(map[string]string),
-		FieldsCondition: make(map[string]string),
-		Options:         make(map[string]interface{}),
-		Follow:          src.Follow,
+// deepCopyLogSearch creates a deep copy of a LogSearch to avoid shared references.
+// Based on config.deepCopyLogSearch but adapted to avoid circular dependencies.
+func deepCopyLogSearch(src client.LogSearch) client.LogSearch {
+	dst := src // Copy all value types
+
+	// Deep copy Fields
+	if src.Fields != nil {
+		dst.Fields = make(map[string]string, len(src.Fields))
+		for k, v := range src.Fields {
+			dst.Fields[k] = v
+		}
 	}
 
-	// Copy simple fields
-	dst.Size = src.Size
-	dst.PageToken = src.PageToken
-	dst.Range = src.Range
-	dst.Refresh = src.Refresh
-	dst.FieldExtraction = src.FieldExtraction
-	dst.PrinterOptions = src.PrinterOptions
-	dst.NativeQuery = src.NativeQuery
-
-	// Copy filter if present
-	if src.Filter != nil {
-		filterCopy := *src.Filter
-		dst.Filter = &filterCopy
+	// Deep copy FieldsCondition
+	if src.FieldsCondition != nil {
+		dst.FieldsCondition = make(map[string]string, len(src.FieldsCondition))
+		for k, v := range src.FieldsCondition {
+			dst.FieldsCondition[k] = v
+		}
 	}
 
-	// Copy maps
-	for k, v := range src.Fields {
-		dst.Fields[k] = v
-	}
-	for k, v := range src.FieldsCondition {
-		dst.FieldsCondition[k] = v
-	}
-	for k, v := range src.Options {
-		dst.Options[k] = v
+	// Deep copy Options
+	if src.Options != nil {
+		dst.Options = make(map[string]interface{}, len(src.Options))
+		for k, v := range src.Options {
+			dst.Options[k] = v
+		}
 	}
 
-	// Copy variables if present
+	// Deep copy Variables
 	if src.Variables != nil {
-		dst.Variables = make(map[string]client.VariableDefinition)
+		dst.Variables = make(map[string]client.VariableDefinition, len(src.Variables))
 		for k, v := range src.Variables {
 			dst.Variables[k] = v
 		}
 	}
 
+	// Deep copy Filter (recursive structure)
+	if src.Filter != nil {
+		copied := deepCopyFilter(*src.Filter)
+		dst.Filter = &copied
+	}
+
 	return dst
 }
 
-// addTUIFlags adds TUI-specific flags
-func addTUIFlags(cmd *cobra.Command) {
-	// TUI currently shares all flags with query command
-	// Future: add TUI-specific flags like --split-ratio, --theme, etc.
-}
+// deepCopyFilter recursively copies a Filter AST to avoid shared slice references
+func deepCopyFilter(src client.Filter) client.Filter {
+	dst := src // Copy value fields
 
-// formatContextList formats a list of contexts for display
-func formatContextList(contexts map[string]interface{}) string {
-	if len(contexts) == 0 {
-		return "  (none)"
+	// Deep copy nested Filters slice (recursive)
+	if src.Filters != nil {
+		dst.Filters = make([]client.Filter, len(src.Filters))
+		for i, f := range src.Filters {
+			dst.Filters[i] = deepCopyFilter(f) // Recursive
+		}
 	}
-	var lines []string
-	for id := range contexts {
-		lines = append(lines, fmt.Sprintf("  - %s", id))
-	}
-	return strings.Join(lines, "\n")
+
+	return dst
 }

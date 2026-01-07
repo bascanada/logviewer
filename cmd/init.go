@@ -113,13 +113,13 @@ func loadConfigForCompletion(cmd *cobra.Command) (*config.ContextConfig, cobra.S
 	return cfg, cobra.ShellCompDirectiveDefault
 }
 
-func init() {
-
+// addSharedQueryFlags adds flags common to both query and tui commands
+func addSharedQueryFlags(cmd *cobra.Command) {
 	// CONFIG
-	queryCommand.PersistentFlags().StringArrayVarP(&contextIds, "id", "i", []string{}, "Context id to execute")
+	cmd.PersistentFlags().StringArrayVarP(&contextIds, "id", "i", []string{}, "Context id to execute")
 
 	// Register completion function for the --id flag
-	_ = queryCommand.RegisterFlagCompletionFunc("id", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	_ = cmd.RegisterFlagCompletionFunc("id", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		cfg, directive := loadConfigForCompletion(cmd)
 		if cfg == nil {
 			return nil, directive
@@ -127,17 +127,113 @@ func init() {
 
 		var suggestions []string
 		for id, ctx := range cfg.Contexts {
-			// Provide a description alongside the completion
-			// Format: "value\tdescription"
 			description := fmt.Sprintf("(%s)", ctx.Client)
 			suggestions = append(suggestions, fmt.Sprintf("%s\t%s", id, description))
 		}
 
-		// ShellCompDirectiveNoFileComp prevents the shell from suggesting local files
 		return suggestions, cobra.ShellCompDirectiveNoFileComp
 	})
 
-	// IMPL SPECIFIQUE
+	// RANGE
+	cmd.PersistentFlags().StringVar(&from, "from", "", "Get entry gte datetime date >= from")
+	cmd.PersistentFlags().StringVar(&to, "to", "", "Get entry lte datetime date <= to")
+	cmd.PersistentFlags().StringVar(&last, "last", "", "Get entry in the last duration")
+
+	// Register completion for --last flag
+	_ = cmd.RegisterFlagCompletionFunc("last", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{
+			"1m\t1 minute",
+			"5m\t5 minutes",
+			"15m\t15 minutes",
+			"30m\t30 minutes",
+			"1h\t1 hour",
+			"2h\t2 hours",
+			"6h\t6 hours",
+			"12h\t12 hours",
+			"24h\t24 hours",
+			"7d\t7 days",
+			"30d\t30 days",
+		}, cobra.ShellCompDirectiveNoFileComp
+	})
+
+	// QUERIES
+	cmd.PersistentFlags().StringVar(&nativeQuery, "native-query", "", "Raw query in backend's native syntax (Splunk SPL, OpenSearch Lucene)")
+	cmd.PersistentFlags().StringVarP(&queryExpr, "query", "q", "", "Complex filter expression with boolean logic (e.g., '(level=error OR status>=500) AND service=api')")
+
+	// SIZE
+	cmd.PersistentFlags().IntVar(&size, "size", 0, "Get entry max size")
+
+	// FIELD validation
+	cmd.PersistentFlags().StringArrayVarP(&fields, "fields", "f", []string{}, "Field for selection field=value")
+
+	// VARS & INHERITS
+	cmd.PersistentFlags().StringArrayVar(&vars, "var", []string{}, "Define a runtime variable for the search context (e.g., --var 'sessionId=abc-123')")
+
+	// Register completion for --var flag
+	_ = cmd.RegisterFlagCompletionFunc("var", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		cfg, directive := loadConfigForCompletion(cmd)
+		if cfg == nil {
+			return nil, directive
+		}
+
+		// Get context IDs to determine which variables to suggest
+		contextIDFlags, _ := cmd.Flags().GetStringArray("id")
+		if len(contextIDFlags) == 0 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+
+		// Get the first context ID
+		contextID := contextIDFlags[0]
+
+		// Get the fully resolved search context to access all variables, including inherited ones
+		resolvedContext, err := cfg.GetSearchContext(contextID, nil, client.LogSearch{}, nil)
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+
+		// Collect variables from the resolved search context
+		var suggestions []string
+		for varName, varDef := range resolvedContext.Search.Variables {
+			description := varDef.Description
+			if description == "" && varDef.Default != nil {
+				description = fmt.Sprintf("default: %v", varDef.Default)
+			}
+			if description != "" {
+				suggestions = append(suggestions, fmt.Sprintf("%s=\t%s", varName, description))
+			} else {
+				suggestions = append(suggestions, varName+"=")
+			}
+		}
+
+		return suggestions, cobra.ShellCompDirectiveNoSpace | cobra.ShellCompDirectiveNoFileComp
+	})
+
+	cmd.PersistentFlags().StringArrayVar(&inherits, "inherits", []string{}, "When using config, list of inherits to execute on top of the one configure for the search")
+
+	// Register completion function for the --inherits flag
+	_ = cmd.RegisterFlagCompletionFunc("inherits", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		cfg, directive := loadConfigForCompletion(cmd)
+		if cfg == nil {
+			return nil, directive
+		}
+
+		var suggestions []string
+		for searchID := range cfg.Searches {
+			suggestions = append(suggestions, searchID)
+		}
+
+		return suggestions, cobra.ShellCompDirectiveNoFileComp
+	})
+
+	// LIVE DATA
+	cmd.PersistentFlags().BoolVar(&refresh, "refresh", false, "If provide activate live data")
+}
+
+func init() {
+	// Add shared flags to query command
+	addSharedQueryFlags(queryCommand)
+
+	// Query-specific backend flags
 
 	// ME
 	queryCommand.PersistentFlags().BoolVar(&myLog, "mylog", false, "read from logviewer logs file")
@@ -187,40 +283,12 @@ func init() {
 	// COMMAND
 	queryCommand.PersistentFlags().StringVar(&cmd, "cmd", "", "If using ssh or local , manual command to run")
 
-	// RANGE
-	queryCommand.PersistentFlags().StringVar(&from, "from", "", "Get entry gte datetime date >= from")
-	queryCommand.PersistentFlags().StringVar(&to, "to", "", "Get entry lte datetime date <= to")
-	queryCommand.PersistentFlags().StringVar(&last, "last", "", "Get entry in the last duration")
+	// Query-specific flags (not shared with TUI)
 
-	// NATIVE QUERY
-	queryCommand.PersistentFlags().StringVar(&nativeQuery, "native-query", "", "Raw query in backend's native syntax (Splunk SPL, OpenSearch Lucene)")
-
-	// HL-COMPATIBLE QUERY
-	queryCommand.PersistentFlags().StringVarP(&queryExpr, "query", "q", "", "Complex filter expression with boolean logic (e.g., '(level=error OR status>=500) AND service=api')")
-
-	// Register completion for --last flag
-	_ = queryCommand.RegisterFlagCompletionFunc("last", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return []string{
-			"1m\t1 minute",
-			"5m\t5 minutes",
-			"15m\t15 minutes",
-			"30m\t30 minutes",
-			"1h\t1 hour",
-			"2h\t2 hours",
-			"6h\t6 hours",
-			"12h\t12 hours",
-			"24h\t24 hours",
-			"7d\t7 days",
-			"30d\t30 days",
-		}, cobra.ShellCompDirectiveNoFileComp
-	})
-
-	// SIZE
-	queryCommand.PersistentFlags().IntVar(&size, "size", 0, "Get entry max size")
+	// PAGINATION
 	queryCommand.PersistentFlags().StringVar(&pageToken, "page-token", "", "Token for fetching the next page of results")
 
-	// FIELD validation
-	queryCommand.PersistentFlags().StringArrayVarP(&fields, "fields", "f", []string{}, "Field for selection field=value")
+	// ADVANCED FIELD FILTERING
 	queryCommand.PersistentFlags().StringArrayVar(
 		&fieldsOps, "fields-condition", []string{}, "Field Ops for selection field=value (match, exists, wildcard, regex)",
 	)
@@ -235,47 +303,7 @@ func init() {
 		}, cobra.ShellCompDirectiveNoFileComp
 	})
 
-	queryCommand.PersistentFlags().StringArrayVar(&vars, "var", []string{}, "Define a runtime variable for the search context (e.g., --var 'sessionId=abc-123')")
-
-	// Register completion for --var flag
-	_ = queryCommand.RegisterFlagCompletionFunc("var", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		cfg, directive := loadConfigForCompletion(cmd)
-		if cfg == nil {
-			return nil, directive
-		}
-
-		// Get context IDs to determine which variables to suggest
-		contextIDFlags, _ := cmd.Flags().GetStringArray("id")
-		if len(contextIDFlags) == 0 {
-			return nil, cobra.ShellCompDirectiveNoFileComp
-		}
-
-		// Get the first context ID
-		contextID := contextIDFlags[0]
-
-		// Get the fully resolved search context to access all variables, including inherited ones
-		resolvedContext, err := cfg.GetSearchContext(contextID, nil, client.LogSearch{}, nil)
-		if err != nil {
-			// If context resolution fails, we can't provide suggestions
-			return nil, cobra.ShellCompDirectiveNoFileComp
-		}
-
-		// Collect variables from the resolved search context
-		var suggestions []string
-		for varName, varDef := range resolvedContext.Search.Variables {
-			description := varDef.Description
-			if description == "" && varDef.Default != nil {
-				description = fmt.Sprintf("default: %v", varDef.Default)
-			}
-			if description != "" {
-				suggestions = append(suggestions, fmt.Sprintf("%s=\t%s", varName, description))
-			} else {
-				suggestions = append(suggestions, varName+"=")
-			}
-		}
-
-		return suggestions, cobra.ShellCompDirectiveNoSpace | cobra.ShellCompDirectiveNoFileComp
-	})
+	// FIELD EXTRACTION
 	queryCommand.PersistentFlags().StringVar(
 		&groupRegex, "fields-group-regex", "",
 		"Regex to extract field from log text using named group, e.g. '.*(?P<Level>INFO|WARN|ERROR).*'")
@@ -283,12 +311,9 @@ func init() {
 		&kvRegex, "fields-kv-regex", "",
 		"Regex to extract key-value fields from log text, e.g. '(\\w+)=([^\\s]+)'")
 
-	// LIVE DATA OPTIONS
+	// OUTPUT FORMATTING (query-specific)
 	queryLogCommand.PersistentFlags().StringVar(
 		&duration, "refresh-rate", "", "If provide refresh log at the rate provide (ex: 30s)")
-	queryLogCommand.PersistentFlags().BoolVar(&refresh, "refresh", false, "If provide activate live data")
-
-	// OUTPUT FORMATTING
 	queryLogCommand.PersistentFlags().StringVar(
 		&template,
 		"format",
@@ -301,90 +326,10 @@ func init() {
 		return []string{"auto", "always", "never"}, cobra.ShellCompDirectiveNoFileComp
 	})
 
-	queryCommand.PersistentFlags().StringArrayVar(&inherits, "inherits", []string{}, "When using config , list of inherits to execute on top of the one configure for the search")
-
-	// Register completion function for the --inherits flag
-	_ = queryCommand.RegisterFlagCompletionFunc("inherits", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		cfg, directive := loadConfigForCompletion(cmd)
-		if cfg == nil {
-			return nil, directive
-		}
-
-		var suggestions []string
-		for searchID := range cfg.Searches {
-			// Provide search IDs for inheritance
-			suggestions = append(suggestions, searchID)
-		}
-
-		// ShellCompDirectiveNoFileComp prevents the shell from suggesting local files
-		return suggestions, cobra.ShellCompDirectiveNoFileComp
-	})
-
 	queryCommand.AddCommand(queryLogCommand)
 	queryCommand.AddCommand(queryFieldCommand)
 	queryCommand.AddCommand(queryValuesCommand)
 
-	// TUI command uses the same flags as query
-	initTUIFlags()
-}
-
-// initTUIFlags adds query-compatible flags to the TUI command
-func initTUIFlags() {
-	// CONFIG
-	tuiCmd.PersistentFlags().StringArrayVarP(&contextIds, "id", "i", []string{}, "Context id to execute")
-
-	// Register completion function for the --id flag
-	_ = tuiCmd.RegisterFlagCompletionFunc("id", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		cfg, directive := loadConfigForCompletion(cmd)
-		if cfg == nil {
-			return nil, directive
-		}
-
-		var suggestions []string
-		for id, ctx := range cfg.Contexts {
-			description := fmt.Sprintf("(%s)", ctx.Client)
-			suggestions = append(suggestions, fmt.Sprintf("%s\t%s", id, description))
-		}
-
-		return suggestions, cobra.ShellCompDirectiveNoFileComp
-	})
-
-	// RANGE
-	tuiCmd.PersistentFlags().StringVar(&from, "from", "", "Get entry gte datetime date >= from")
-	tuiCmd.PersistentFlags().StringVar(&to, "to", "", "Get entry lte datetime date <= to")
-	tuiCmd.PersistentFlags().StringVar(&last, "last", "", "Get entry in the last duration")
-
-	// Register completion for --last flag
-	_ = tuiCmd.RegisterFlagCompletionFunc("last", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return []string{
-			"1m\t1 minute",
-			"5m\t5 minutes",
-			"15m\t15 minutes",
-			"30m\t30 minutes",
-			"1h\t1 hour",
-			"2h\t2 hours",
-			"6h\t6 hours",
-			"12h\t12 hours",
-			"24h\t24 hours",
-			"7d\t7 days",
-			"30d\t30 days",
-		}, cobra.ShellCompDirectiveNoFileComp
-	})
-
-	// NATIVE QUERY
-	tuiCmd.PersistentFlags().StringVar(&nativeQuery, "native-query", "", "Raw query in backend's native syntax (Splunk SPL, OpenSearch Lucene)")
-
-	// HL-COMPATIBLE QUERY
-	tuiCmd.PersistentFlags().StringVarP(&queryExpr, "query", "q", "", "Complex filter expression with boolean logic (e.g., '(level=error OR status>=500) AND service=api')")
-
-	// SIZE
-	tuiCmd.PersistentFlags().IntVar(&size, "size", 0, "Get entry max size")
-
-	// FIELD validation
-	tuiCmd.PersistentFlags().StringArrayVarP(&fields, "fields", "f", []string{}, "Field for selection field=value")
-	tuiCmd.PersistentFlags().StringArrayVar(&vars, "var", []string{}, "Define a runtime variable for the search context (e.g., --var 'sessionId=abc-123')")
-	tuiCmd.PersistentFlags().StringArrayVar(&inherits, "inherits", []string{}, "When using config, list of inherits to execute on top of the one configure for the search")
-
-	// LIVE DATA OPTIONS
-	tuiCmd.PersistentFlags().BoolVar(&refresh, "refresh", false, "If provide activate live data")
+	// TUI command - add shared flags
+	addSharedQueryFlags(tuiCmd)
 }

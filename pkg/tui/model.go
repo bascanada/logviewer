@@ -57,7 +57,7 @@ type Tab struct {
 	Fields      ty.UniSet[string]  // Available fields with their values from GetFields()
 	Loading     bool
 	Error       error
-	StreamChan  chan []LogEntryMsg
+	StreamChan  <-chan []client.LogEntry // For live streaming
 	CancelFunc  context.CancelFunc
 
 	// Per-tab search bar state
@@ -70,11 +70,18 @@ type Tab struct {
 
 // LogEntryMsg is sent when new log entries arrive
 type LogEntryMsg struct {
-	TabID    string
-	Entries  []client.LogEntry
-	Result   client.LogSearchResult // The search result (for printer config)
-	Template *template.Template     // Compiled printer template
-	Fields   ty.UniSet[string]      // Available fields with values from GetFields()
+	TabID      string
+	Entries    []client.LogEntry
+	Result     client.LogSearchResult     // The search result (for printer config)
+	Template   *template.Template         // Compiled printer template
+	Fields     ty.UniSet[string]          // Available fields with values from GetFields()
+	StreamChan <-chan []client.LogEntry   // For live streaming (if applicable)
+}
+
+// StreamBatchMsg delivers streamed log entries
+type StreamBatchMsg struct {
+	TabID   string
+	Entries []client.LogEntry
 }
 
 // ErrorMsg is sent when an error occurs
@@ -369,24 +376,41 @@ func (m *Model) loadTabLogsCmd(tab *Tab) tea.Cmd {
 			log.Printf("[WARN] TUI loadTabLogsCmd: GetFields failed: %v", err)
 		}
 
-		// Return initial entries with template and fields
-		msg := LogEntryMsg{TabID: tabID, Entries: entries, Result: result, Template: tmpl, Fields: fields}
-
-		// If streaming, start a goroutine to forward new entries
-		if entryChan != nil {
-			go func() {
-				for newEntries := range entryChan {
-					// Extract JSON fields from new entries too
-					for i := range newEntries {
-						client.ExtractJSONFromEntry(&newEntries[i], searchConfig)
-					}
-					// Send via program - we'll need to handle this differently
-					tab.Entries = append(tab.Entries, newEntries...)
-				}
-			}()
+		// Return initial entries with template, fields, and streaming channel
+		msg := LogEntryMsg{
+			TabID:      tabID,
+			Entries:    entries,
+			Result:     result,
+			Template:   tmpl,
+			Fields:     fields,
+			StreamChan: entryChan, // Will be handled by Update loop via subscription
 		}
 
 		return msg
+	}
+}
+
+// waitForStreamBatch subscribes to a streaming channel and returns the next batch
+// This follows the Bubble Tea message-passing pattern for safe concurrent updates
+func waitForStreamBatch(tab *Tab) tea.Cmd {
+	return func() tea.Msg {
+		if tab.StreamChan == nil {
+			return nil
+		}
+
+		entries, ok := <-tab.StreamChan
+		if !ok {
+			// Channel closed - stop streaming
+			return LoadingMsg{TabID: tab.ID, Loading: false}
+		}
+
+		// Extract JSON fields from streamed entries
+		searchConfig := tab.Result.GetSearch()
+		for i := range entries {
+			client.ExtractJSONFromEntry(&entries[i], searchConfig)
+		}
+
+		return StreamBatchMsg{TabID: tab.ID, Entries: entries}
 	}
 }
 
@@ -489,6 +513,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.StatusBar.UpdateTimeRangeFromChips(m.SearchBar.State.Chips)
 				}
 
+				// Start streaming subscription if channel is present
+				if msg.StreamChan != nil {
+					tab.StreamChan = msg.StreamChan
+					cmds = append(cmds, waitForStreamBatch(tab))
+					log.Printf("[DEBUG] TUI LogEntryMsg: started streaming subscription for tabID=%s", tab.ID)
+				}
+
 				m.updateViewportContent()
 				found = true
 				break
@@ -511,6 +542,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, tab := range m.Tabs {
 			if tab.ID == msg.TabID {
 				tab.Loading = msg.Loading
+				break
+			}
+		}
+
+	case StreamBatchMsg:
+		// Handle streamed log entries (live streaming)
+		for _, tab := range m.Tabs {
+			if tab.ID == msg.TabID {
+				// Append new entries
+				tab.Entries = append(tab.Entries, msg.Entries...)
+				log.Printf("[DEBUG] TUI StreamBatchMsg: appended %d entries, total=%d", len(msg.Entries), len(tab.Entries))
+
+				// Update display if this is the active tab
+				if m.Tabs[m.ActiveTab].ID == tab.ID {
+					m.updateViewportContent()
+				}
+
+				// Continue subscription (recursive command pattern)
+				cmds = append(cmds, waitForStreamBatch(tab))
 				break
 			}
 		}
