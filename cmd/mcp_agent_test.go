@@ -730,7 +730,7 @@ func TestMCPAgent_TextPatternSearch(t *testing.T) {
 
 			// Check if nativeQuery is used (correct approach)
 			if nq, ok := call.Arguments["nativeQuery"].(string); ok {
-				if strings.Contains(nq, "_") && strings.Contains(strings.ToLower(nq), "exception") {
+				if (strings.Contains(nq, "_=") || strings.Contains(nq, "_~=")) && strings.Contains(strings.ToLower(nq), "exception") {
 					foundCorrectQuery = true
 					t.Logf("SUCCESS: Agent correctly used nativeQuery with field-less search: %s", nq)
 				}

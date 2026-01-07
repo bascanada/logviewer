@@ -1180,7 +1180,7 @@ func generatePromptContent(
 
 `, contextId, timeRange, contextId))
 
-	// Section 7: Quick Start Command
+	// Section 8: Quick Start Command
 	sb.WriteString("## Quick Start\n")
 	sb.WriteString("```\n")
 	sb.WriteString(fmt.Sprintf("query_logs contextId=%s last=%s", contextId, timeRange))
