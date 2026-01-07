@@ -362,6 +362,38 @@ IMPORTANT RULES:
 3. Never explain how to use a tool - just use it directly
 4. After getting tool results, summarize what you found
 
+QUERY CONSTRUCTION GUIDELINES:
+
+When calling query_logs, choose the right parameter:
+
+A. Use "fields" parameter for STRUCTURED FILTERING:
+   - When filtering by specific field values (level, service, status, etc.)
+   - Example: fields={"level":"ERROR"}
+   - Example: fields={"level":"ERROR","service":"payment-api"}
+
+B. Use "nativeQuery" parameter for TEXT PATTERN MATCHING:
+   - When searching for text/patterns anywhere in log messages
+   - When user asks to "find", "look for", "search for" specific text/errors/exceptions
+   - Syntax: _~=.*pattern.* for regex match, _=text for substring
+
+   Examples:
+   - Find "Exception": nativeQuery="_~=.*Exception.*"
+   - Find "timeout": nativeQuery="_~=.*timeout.*"
+   - Find "NullPointerException": nativeQuery="_~=.*NullPointerException.*"
+
+C. Use "nativeQuery" for COMPLEX QUERIES:
+   - Combine field filters with text search
+   - Use logical operators (AND, OR, NOT)
+
+   Examples:
+   - Error logs with "Exception": nativeQuery="level=ERROR AND _~=.*Exception.*"
+   - Errors or warnings with "retry": nativeQuery="(level=ERROR OR level=WARN) AND _~=.*retry.*"
+
+KEY PATTERNS:
+  - "Find all Exception" → nativeQuery="_~=.*Exception.*"
+  - "Show ERROR logs" → fields={"level":"ERROR"}
+  - "Find errors with timeout" → nativeQuery="level=ERROR AND _~=.*timeout.*"
+
 You have access to these tools:
 - list_contexts: List available log contexts
 - query_logs: Query logs from a context with filters
@@ -648,6 +680,84 @@ func TestMCPAgent_ErrorInvestigation(t *testing.T) {
 
 	if !foundQueryLogs {
 		t.Errorf("expected agent to call query_logs, tool calls: %+v", result.ToolCallSequence)
+	}
+
+	t.Logf("Agent completed in %d turns", result.TotalTurns)
+	t.Logf("Final response: %s", result.FinalResponse)
+}
+
+// TestMCPAgent_TextPatternSearch tests the agent's ability to use field-less search for text pattern matching.
+func TestMCPAgent_TextPatternSearch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping LLM integration test in short mode")
+	}
+
+	ollama := skipIfNoOllama(t)
+
+	cfg := createTestConfig()
+	cm, err := NewConfigManagerForTest(cfg)
+	if err != nil {
+		t.Fatalf("failed to create config manager: %v", err)
+	}
+
+	bundle, err := buildMCPServerWithManager(cm)
+	if err != nil {
+		t.Fatalf("failed to build MCP server: %v", err)
+	}
+
+	harness, err := NewMCPAgentTestHarness(bundle, ollama)
+	if err != nil {
+		t.Fatalf("failed to create test harness: %v", err)
+	}
+	defer harness.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	// Test the exact scenario from the user's issue
+	result := harness.RunAgentLoop(ctx, "Look at all Exception in the payment-service context")
+
+	if result.Error != nil {
+		t.Fatalf("agent loop failed: %v", result.Error)
+	}
+
+	// Verify that query_logs was called with nativeQuery parameter
+	foundCorrectQuery := false
+	usedFieldsIncorrectly := false
+	for _, call := range result.ToolCallSequence {
+		if call.ToolName == "query_logs" {
+			t.Logf("query_logs called with args: %+v", call.Arguments)
+
+			// Check if nativeQuery is used (correct approach)
+			if nq, ok := call.Arguments["nativeQuery"].(string); ok {
+				if (strings.Contains(nq, "_=") || strings.Contains(nq, "_~=")) && strings.Contains(strings.ToLower(nq), "exception") {
+					foundCorrectQuery = true
+					t.Logf("SUCCESS: Agent correctly used nativeQuery with field-less search: %s", nq)
+				}
+			}
+
+			// Check if fields is used incorrectly (checking for level=ERROR when searching for Exception)
+			if fields, ok := call.Arguments["fields"]; ok {
+				if fieldMap, ok := fields.(map[string]interface{}); ok {
+					if level, exists := fieldMap["level"]; exists && level == "ERROR" {
+						// If only using fields={"level":"ERROR"} without nativeQuery for text search
+						if _, hasNativeQuery := call.Arguments["nativeQuery"]; !hasNativeQuery {
+							usedFieldsIncorrectly = true
+							t.Logf("WARNING: Agent used only fields parameter with level=%v instead of nativeQuery for text pattern", level)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if !foundCorrectQuery {
+		t.Errorf("Expected agent to use nativeQuery with field-less search (_~=.*Exception.* or _=Exception), but it didn't")
+		t.Logf("Tool call sequence: %+v", result.ToolCallSequence)
+	}
+
+	if usedFieldsIncorrectly {
+		t.Errorf("Agent incorrectly used only fields parameter for text pattern search instead of nativeQuery")
 	}
 
 	t.Logf("Agent completed in %d turns", result.TotalTurns)
