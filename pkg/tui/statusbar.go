@@ -140,6 +140,12 @@ func (s *StatusBar) UpdateTimeRangeFromChips(chips []Chip) {
 			case "to":
 				timeRange.Lte.S(chip.Value)
 			}
+		} else if chip.Type == ChipTypeSize {
+			// Also extract size from chips
+			var sizeVal int
+			if _, err := fmt.Sscanf(chip.Value, "%d", &sizeVal); err == nil && sizeVal > 0 {
+				s.Size = sizeVal
+			}
 		}
 	}
 

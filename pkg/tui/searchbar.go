@@ -2,6 +2,7 @@
 package tui
 
 import (
+	"fmt"
 	"log"
 	"regexp"
 	"sort"
@@ -25,6 +26,7 @@ type SearchBarStyles struct {
 	ChipVarAssign    lipgloss.Style
 	ChipNativeQuery  lipgloss.Style
 	ChipFilterGroup  lipgloss.Style
+	ChipSize         lipgloss.Style
 	ChipSelected     lipgloss.Style
 	InputActive      lipgloss.Style
 	InputInactive    lipgloss.Style
@@ -77,6 +79,11 @@ func DefaultSearchBarStyles() SearchBarStyles {
 			Padding(0, 1).
 			MarginRight(1).
 			Italic(true), // Indicates grouped/complex
+		ChipSize: lipgloss.NewStyle().
+			Background(lipgloss.Color("33")). // Blue
+			Foreground(ColorBg).
+			Padding(0, 1).
+			MarginRight(1),
 		ChipSelected: lipgloss.NewStyle().
 			Background(ColorPrimary).
 			Foreground(ColorBg).
@@ -356,6 +363,8 @@ func (s SearchBar) getChipStyle(chipType ChipType) lipgloss.Style {
 		return s.Styles.ChipNativeQuery
 	case ChipTypeFilterGroup:
 		return s.Styles.ChipFilterGroup
+	case ChipTypeSize:
+		return s.Styles.ChipSize
 	default:
 		return s.Styles.ChipField
 	}
@@ -375,10 +384,22 @@ func (s *SearchBar) generateSuggestions() []Suggestion {
 		return s.suggestTimeValues(input)
 	}
 
+	// Size suggestions when prefix is typed
+	if strings.HasPrefix(input, "size:") {
+		return s.suggestSizeValues(input)
+	}
+
 	// Suggest native query prefix when typing 'q'
 	if input == "q" || input == "qu" || input == "que" || input == "quer" || input == "query" {
 		return []Suggestion{
 			{Text: "query:", Description: "native query (SPL, Lucene, etc.)", Context: AutocompleteContextField},
+		}
+	}
+
+	// Suggest size prefix when typing 's'
+	if input == "s" || input == "si" || input == "siz" || input == "size" {
+		return []Suggestion{
+			{Text: "size:", Description: "result limit (e.g., 100, 500, 1000)", Context: AutocompleteContextField},
 		}
 	}
 
@@ -422,11 +443,12 @@ func (s *SearchBar) generateSuggestions() []Suggestion {
 		return s.suggestFields(input)
 	}
 
-	// Default: show time range options, native query, and fields
+	// Default: show time range options, size, native query, and fields
 	suggestions := []Suggestion{
 		{Text: "last:", Description: "relative time (e.g., 1h, 24h)", Context: AutocompleteContextField},
 		{Text: "from:", Description: "start time", Context: AutocompleteContextField},
 		{Text: "to:", Description: "end time", Context: AutocompleteContextField},
+		{Text: "size:", Description: "result limit (e.g., 100, 500)", Context: AutocompleteContextField},
 		{Text: "query:", Description: "native query (SPL, Lucene)", Context: AutocompleteContextField},
 	}
 	fieldSuggestions := s.suggestFields("")
@@ -555,6 +577,31 @@ func (s *SearchBar) suggestTimeValues(input string) []Suggestion {
 	return suggestions
 }
 
+// suggestSizeValues suggests size presets
+func (s *SearchBar) suggestSizeValues(input string) []Suggestion {
+	var suggestions []Suggestion
+
+	// Extract the value part after "size:"
+	currentValue := strings.TrimPrefix(input, "size:")
+
+	// Size presets
+	presets := []string{"10", "50", "100", "500", "1000", "5000"}
+
+	// Filter presets by current value
+	currentValue = strings.ToLower(currentValue)
+	for _, preset := range presets {
+		if currentValue == "" || strings.HasPrefix(preset, currentValue) {
+			suggestions = append(suggestions, Suggestion{
+				Text:        "size:" + preset,
+				Description: "",
+				Context:     AutocompleteContextValue,
+			})
+		}
+	}
+
+	return suggestions
+}
+
 // acceptSuggestion applies a selected suggestion to the input
 func (s *SearchBar) acceptSuggestion(suggestion Suggestion) {
 	switch suggestion.Context {
@@ -576,11 +623,12 @@ func (s *SearchBar) acceptSuggestion(suggestion Suggestion) {
 		s.State.CurrentInput = s.TextInput.Value()
 
 	case AutocompleteContextValue:
-		// Check if it's a complete time range (last:1h, from:now, etc.)
+		// Check if it's a complete time range (last:1h, from:now, etc.) or size (size:100)
 		if strings.HasPrefix(suggestion.Text, "last:") ||
 			strings.HasPrefix(suggestion.Text, "from:") ||
-			strings.HasPrefix(suggestion.Text, "to:") {
-			// Time range: set full value and commit
+			strings.HasPrefix(suggestion.Text, "to:") ||
+			strings.HasPrefix(suggestion.Text, "size:") {
+			// Time range or size: set full value and commit
 			s.TextInput.SetValue(suggestion.Text)
 			s.State.CurrentInput = s.TextInput.Value()
 			s.commitCurrentInput()
@@ -651,6 +699,16 @@ func (s *SearchBar) parseInput(input string) Chip {
 			Type:    ChipTypeTimeRange,
 			Field:   "to",
 			Value:   strings.TrimPrefix(input, "to:"),
+			Display: input,
+		}
+	}
+
+	// Size limit: size:100
+	if strings.HasPrefix(input, "size:") {
+		return Chip{
+			Type:    ChipTypeSize,
+			Field:   "size",
+			Value:   strings.TrimPrefix(input, "size:"),
 			Display: input,
 		}
 	}
@@ -1101,6 +1159,17 @@ func (s *SearchBar) PopulateFromSearch(search *client.LogSearch) {
 		})
 	}
 
+	// Add size chip
+	if search.Size.Set && search.Size.Value > 0 {
+		sizeStr := fmt.Sprintf("%d", search.Size.Value)
+		s.State.Chips = append(s.State.Chips, Chip{
+			Type:    ChipTypeSize,
+			Field:   "size",
+			Value:   sizeStr,
+			Display: "size:" + sizeStr,
+		})
+	}
+
 	// Add field filter chips (legacy Fields map)
 	for field, value := range search.Fields {
 		op := "="
@@ -1179,6 +1248,13 @@ func (s *SearchBar) BuildSearchFromChips() *client.LogSearch {
 				search.Range.Gte.S(chip.Value)
 			case "to":
 				search.Range.Lte.S(chip.Value)
+			}
+
+		case ChipTypeSize:
+			// Parse size value to int
+			var sizeVal int
+			if _, err := fmt.Sscanf(chip.Value, "%d", &sizeVal); err == nil && sizeVal > 0 {
+				search.Size.S(sizeVal)
 			}
 
 		case ChipTypeNativeQuery:

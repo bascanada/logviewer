@@ -21,6 +21,8 @@ const (
 	ChipTypeNativeQuery
 	// ChipTypeFilterGroup represents an OR/AND/NOT group of filters
 	ChipTypeFilterGroup
+	// ChipTypeSize represents result size limit (e.g., size:100)
+	ChipTypeSize
 )
 
 // Chip represents a single search component in the chip-based search bar
