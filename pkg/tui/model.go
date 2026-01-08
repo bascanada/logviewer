@@ -17,6 +17,8 @@ import (
 	"github.com/bascanada/logviewer/pkg/log/factory"
 	"github.com/bascanada/logviewer/pkg/log/printer"
 	"github.com/bascanada/logviewer/pkg/ty"
+	"github.com/TylerBrock/colorjson"
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -40,6 +42,7 @@ type SidebarMode int
 const (
 	SidebarModeEntry  SidebarMode = iota // Show selected entry details
 	SidebarModeFields                    // Show global fields with values
+	SidebarModeJSON                      // Show formatted JSON from selected entry
 )
 
 // Tab represents an open context/query tab
@@ -66,6 +69,9 @@ type Tab struct {
 	AvailableVariables []string            // Variables from config
 	VariableMetadata   map[string]string   // Variable name -> description
 	FieldValues        map[string][]string // Field -> possible values (cached)
+
+	// JSON detection cache
+	JSONCache          map[string][]string // Maps message hash -> detected JSON strings
 }
 
 // LogEntryMsg is sent when new log entries arrive
@@ -105,8 +111,11 @@ type AddTabMsg struct {
 // InitMsg is sent to trigger initial tab loading
 type InitMsg struct{}
 
+// ClearStatusMsg is sent to clear status messages
+type ClearStatusMsg struct{}
+
 // Model is the main TUI state
-type Model struct {
+type Model struct{
 	// Window dimensions
 	Width  int
 	Height int
@@ -233,6 +242,7 @@ func (m *Model) addTabCmd(contextID string, search *client.LogSearch) tea.Cmd {
 		AvailableVariables: make([]string, 0),
 		VariableMetadata:   make(map[string]string),
 		FieldValues:        make(map[string][]string),
+		JSONCache:          make(map[string][]string),
 	}
 
 	m.Tabs = append(m.Tabs, tab)
@@ -494,8 +504,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// Populate search bar from context config on first load
 					// Only if the search state is empty (not already populated from CLI args)
 					if tab.SearchState.IsEmpty() && search != nil {
+						// Create a UI-specific copy of search to sanitize fields
+						// This prevents config options like "json" or "format" from appearing as filters
+						uiSearch := *search
+						uiSearch.Fields = make(ty.MS)
+						for k, v := range search.Fields {
+							if k != "json" && k != "format" {
+								uiSearch.Fields[k] = v
+							}
+						}
+						
 						tempBar := NewSearchBar()
-						tempBar.PopulateFromSearch(search)
+						tempBar.PopulateFromSearch(&uiSearch)
 						tab.SearchState = tempBar.State
 						log.Printf("[DEBUG] TUI LogEntryMsg: populated search bar from context config, chips=%d", len(tab.SearchState.Chips))
 					}
@@ -520,7 +540,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					log.Printf("[DEBUG] TUI LogEntryMsg: started streaming subscription for tabID=%s", tab.ID)
 				}
 
+				// Always update viewport sizes before content
+				// Viewport has default dimensions (80x20) even before WindowSizeMsg
+				m.updateViewportSizes()
 				m.updateViewportContent()
+				m.updateSidebarContent()
 				found = true
 				break
 			}
@@ -564,6 +588,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
+
+	case ClearStatusMsg:
+		m.StatusBar.ClearMessage()
+		return m, nil
 
 	case InitMsg:
 		// Load initial contexts
@@ -694,13 +722,20 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.SearchBar.Clear()
 		m.updateViewportContent()
 		return m, nil
+
+	case key.Matches(msg, m.Keys.Copy):
+		return m, m.copyJSONToClipboard()
 	}
 
 	// Handle F key for sidebar mode toggle (not captured by Keys)
 	if msg.String() == "F" && m.DetailsVisible {
-		if m.SidebarMode == SidebarModeEntry {
+		// Cycle through modes: Entry → JSON → Fields → Entry
+		switch m.SidebarMode {
+		case SidebarModeEntry:
+			m.SidebarMode = SidebarModeJSON
+		case SidebarModeJSON:
 			m.SidebarMode = SidebarModeFields
-		} else {
+		case SidebarModeFields:
 			m.SidebarMode = SidebarModeEntry
 		}
 		m.updateSidebarContent()
@@ -928,6 +963,9 @@ func (m *Model) refreshCurrentTab() tea.Cmd {
 	tab.Loading = true
 	tab.Error = nil
 
+	// Clear JSON cache since entries will be reloaded
+	tab.JSONCache = nil
+
 	// Rebuild search entirely from chips (time range, fields, etc.)
 	// This ensures removed chips are not included in the search
 	chipSearch := m.SearchBar.BuildSearchFromChips()
@@ -966,6 +1004,72 @@ func (m *Model) refreshCurrentTab() tea.Cmd {
 	tab.Inherits = inherits
 
 	return m.loadTabLogsCmd(tab)
+}
+
+// copyJSONToClipboard copies JSON from the selected entry to the system clipboard
+func (m *Model) copyJSONToClipboard() tea.Cmd {
+	tab := m.CurrentTab()
+	if tab == nil || len(tab.Entries) == 0 {
+		return m.showStatusMessage("No entry selected")
+	}
+
+	if tab.Cursor >= len(tab.Entries) {
+		return m.showStatusMessage("Invalid cursor position")
+	}
+
+	entry := tab.Entries[tab.Cursor]
+
+	// Detect JSON in message
+	jsonStrings, found := m.detectAndCacheJSON(tab, entry.Message)
+	if !found || len(jsonStrings) == 0 {
+		return m.showStatusMessage("No JSON found in this entry")
+	}
+
+	// Format JSON for clipboard (all detected JSON objects)
+	var clipboardContent strings.Builder
+	for i, jsonStr := range jsonStrings {
+		// Parse and re-format for clean output
+		var obj interface{}
+		if err := json.Unmarshal([]byte(jsonStr), &obj); err != nil {
+			continue
+		}
+
+		// Pretty-print JSON
+		formatted, err := json.MarshalIndent(obj, "", "  ")
+		if err != nil {
+			continue
+		}
+
+		if i > 0 {
+			clipboardContent.WriteString("\n\n")
+		}
+		clipboardContent.Write(formatted)
+	}
+
+	if clipboardContent.Len() == 0 {
+		return m.showStatusMessage("Failed to format JSON")
+	}
+
+	// Copy to clipboard
+	if err := clipboard.WriteAll(clipboardContent.String()); err != nil {
+		return m.showStatusMessage(fmt.Sprintf("Clipboard error: %v", err))
+	}
+
+	// Show success message
+	count := len(jsonStrings)
+	if count == 1 {
+		return m.showStatusMessage("JSON copied to clipboard")
+	}
+	return m.showStatusMessage(fmt.Sprintf("%d JSON objects copied to clipboard", count))
+}
+
+// showStatusMessage temporarily shows a message in the status bar
+// Returns a command that will clear the message after a delay
+func (m *Model) showStatusMessage(message string) tea.Cmd {
+	m.StatusBar.SetMessage(message)
+	return tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+		return ClearStatusMsg{}
+	})
 }
 
 // cleanup cancels all active goroutines
@@ -1127,23 +1231,31 @@ func (m *Model) updateSidebarContent() {
 	}
 
 	// Render based on sidebar mode
-	if m.SidebarMode == SidebarModeFields {
+	switch m.SidebarMode {
+	case SidebarModeFields:
 		m.SidebarVP.SetContent(m.renderGlobalFields())
 		return
-	}
-
-	// Entry details mode
-	if len(tab.Entries) == 0 {
-		m.SidebarVP.SetContent("No entry selected")
+	case SidebarModeJSON:
+		if len(tab.Entries) == 0 || tab.Cursor >= len(tab.Entries) {
+			m.SidebarVP.SetContent("No entry selected")
+			return
+		}
+		entry := tab.Entries[tab.Cursor]
+		m.SidebarVP.SetContent(m.renderEntryJSON(entry))
+		return
+	case SidebarModeEntry:
+		// Entry details mode (default)
+		if len(tab.Entries) == 0 {
+			m.SidebarVP.SetContent("No entry selected")
+			return
+		}
+		if tab.Cursor >= len(tab.Entries) {
+			return
+		}
+		entry := tab.Entries[tab.Cursor]
+		m.SidebarVP.SetContent(m.renderEntryDetails(entry))
 		return
 	}
-
-	if tab.Cursor >= len(tab.Entries) {
-		return
-	}
-
-	entry := tab.Entries[tab.Cursor]
-	m.SidebarVP.SetContent(m.renderEntryDetails(entry))
 }
 
 // renderLogEntry renders a single log entry line using the tab's printer template
@@ -1153,6 +1265,8 @@ func (m *Model) renderLogEntry(entry client.LogEntry, selected bool, maxWidth in
 	}
 
 	var line string
+	var hasJSON bool
+	var jsonSummary string
 
 	// Use the tab's template if available
 	if tab != nil && tab.Template != nil {
@@ -1168,18 +1282,69 @@ func (m *Model) renderLogEntry(entry client.LogEntry, selected bool, maxWidth in
 		line = fmt.Sprintf("[%s] [%s] %s %s", entry.Timestamp.Format("15:04:05"), entry.ContextID, entry.Level, entry.Message)
 	}
 
+	// Detect JSON in the message (check cache or detect)
+	jsonStrings, found := m.detectAndCacheJSON(tab, entry.Message)
+	if found {
+		hasJSON = true
+		// Create summary for first JSON object/array
+		count, isObject := countJSONKeys(jsonStrings[0])
+		if isObject {
+			jsonSummary = fmt.Sprintf("[JSON: %d keys]", count)
+		} else {
+			jsonSummary = fmt.Sprintf("[JSON Array: %d items]", count)
+		}
+
+		if len(jsonStrings) > 1 {
+			jsonSummary += fmt.Sprintf(" +%d more", len(jsonStrings)-1)
+		}
+	}
+
+	// Replace multi-line ExpandJson output with compact summary
+	// Look for patterns like "\n{" or "\n[" which indicate expanded JSON
+	if strings.Contains(line, "\n{") || strings.Contains(line, "\n[") {
+		// Find where JSON expansion starts
+		if idx := strings.Index(line, "\n"); idx != -1 {
+			// Keep everything before the newline, replace JSON with summary
+			line = line[:idx]
+			if jsonSummary != "" {
+				line += " " + jsonSummary
+			}
+		}
+	}
+
 	// Clean up the line: replace newlines and tabs with spaces
 	line = strings.ReplaceAll(line, "\n", " ")
 	line = strings.ReplaceAll(line, "\r", "")
 	line = strings.ReplaceAll(line, "\t", " ")
 
-	// Truncate line to fit maxWidth (before styling to preserve ANSI codes)
-	lineRunes := []rune(line)
-	if len(lineRunes) > maxWidth {
-		if maxWidth > 3 {
-			line = string(lineRunes[:maxWidth-3]) + "..."
-		} else {
-			line = string(lineRunes[:maxWidth])
+	// Add JSON indicator at the end if present and not already shown
+	if hasJSON && jsonSummary != "" && !strings.Contains(line, "[JSON") {
+		// Reserve space for indicator
+		indicatorSpace := len(jsonSummary) + 1
+		maxLineWidth := maxWidth - indicatorSpace
+
+		// Truncate main line if needed
+		lineRunes := []rune(line)
+		if len(lineRunes) > maxLineWidth {
+			if maxLineWidth > 3 {
+				line = string(lineRunes[:maxLineWidth-3]) + "..."
+			} else {
+				line = string(lineRunes[:maxLineWidth])
+			}
+		}
+
+		// Append JSON indicator with styling
+		indicator := m.Styles.SidebarKey.Render(jsonSummary)
+		line = line + " " + indicator
+	} else {
+		// Truncate line to fit maxWidth (before styling to preserve ANSI codes)
+		lineRunes := []rune(line)
+		if len(lineRunes) > maxWidth {
+			if maxWidth > 3 {
+				line = string(lineRunes[:maxWidth-3]) + "..."
+			} else {
+				line = string(lineRunes[:maxWidth])
+			}
 		}
 	}
 
@@ -1188,6 +1353,45 @@ func (m *Model) renderLogEntry(entry client.LogEntry, selected bool, maxWidth in
 		return m.Styles.LogSelected.Width(maxWidth).Render(line)
 	}
 	return m.Styles.LogEntry.Width(maxWidth).Render(line)
+}
+
+// detectAndCacheJSON detects JSON in a log entry and caches the result.
+// Returns the cached JSON strings and whether JSON was found.
+func (m *Model) detectAndCacheJSON(tab *Tab, message string) ([]string, bool) {
+	if tab.JSONCache == nil {
+		tab.JSONCache = make(map[string][]string)
+	}
+
+	// Check cache first
+	if cached, ok := tab.JSONCache[message]; ok {
+		return cached, len(cached) > 0
+	}
+
+	// Use existing FindJSON function from printer package
+	jsonStrings := printer.FindJSON(message)
+
+	// Cache the result (even if empty, to avoid re-scanning)
+	tab.JSONCache[message] = jsonStrings
+
+	return jsonStrings, len(jsonStrings) > 0
+}
+
+// countJSONKeys counts the number of keys/items in a JSON string.
+// Returns (count, isObject). isObject is true for objects, false for arrays.
+func countJSONKeys(jsonStr string) (int, bool) {
+	var obj interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &obj); err != nil {
+		return 0, false
+	}
+
+	switch v := obj.(type) {
+	case map[string]interface{}:
+		return len(v), true // Object with N keys
+	case []interface{}:
+		return len(v), false // Array with N items
+	default:
+		return 0, false
+	}
 }
 
 // renderEntryDetails renders the sidebar content for an entry
@@ -1297,6 +1501,73 @@ func (m *Model) renderGlobalFields() string {
 
 		b.WriteString("\n")
 	}
+
+	return b.String()
+}
+
+// renderEntryJSON renders formatted JSON from the selected log entry
+func (m *Model) renderEntryJSON(entry client.LogEntry) string {
+	tab := m.CurrentTab()
+	if tab == nil {
+		return m.Styles.SidebarValue.Render("No tab selected")
+	}
+
+	var b strings.Builder
+
+	// Title
+	b.WriteString(m.Styles.SidebarTitle.Render("JSON Content"))
+	b.WriteString("\n\n")
+
+	// Get cached JSON
+	jsonStrings, found := m.detectAndCacheJSON(tab, entry.Message)
+	if !found || len(jsonStrings) == 0 {
+		b.WriteString(m.Styles.SidebarValue.Render("No JSON detected in this entry"))
+		b.WriteString("\n\n")
+		b.WriteString(m.Styles.SidebarKey.Render("Press 'F' to toggle sidebar views"))
+		return b.String()
+	}
+
+	// Render each JSON object/array with syntax highlighting
+	for i, jsonStr := range jsonStrings {
+		if i > 0 {
+			b.WriteString("\n\n")
+			b.WriteString(m.Styles.SidebarKey.Render(fmt.Sprintf("--- JSON Object %d ---", i+1)))
+			b.WriteString("\n")
+		}
+
+		// Parse JSON
+		var obj interface{}
+		if err := json.Unmarshal([]byte(jsonStr), &obj); err != nil {
+			b.WriteString(m.Styles.SidebarValue.Foreground(ColorError).Render(
+				fmt.Sprintf("Error parsing JSON: %v", err)))
+			continue
+		}
+
+		// Format with colorjson (respects color settings)
+		if printer.IsColorEnabled() {
+			f := colorjson.NewFormatter()
+			f.Indent = 2
+			formatted, err := f.Marshal(obj)
+			if err != nil {
+				b.WriteString(m.Styles.SidebarValue.Foreground(ColorError).Render(
+					fmt.Sprintf("Error formatting JSON: %v", err)))
+				continue
+			}
+			b.Write(formatted)
+		} else {
+			// Plain formatting without colors
+			formatted, err := json.MarshalIndent(obj, "", "  ")
+			if err != nil {
+				b.WriteString(m.Styles.SidebarValue.Foreground(ColorError).Render(
+					fmt.Sprintf("Error formatting JSON: %v", err)))
+				continue
+			}
+			b.Write(formatted)
+		}
+	}
+
+	b.WriteString("\n\n")
+	b.WriteString(m.Styles.SidebarKey.Foreground(ColorMuted).Render("Hint: Press 'c' or 'y' to copy JSON"))
 
 	return b.String()
 }
@@ -1507,17 +1778,23 @@ func (m Model) renderSidebarWithTabs() string {
 		Padding(0, 1)
 
 	// Render tabs
-	var entryTab, fieldsTab string
+	var entryTab, jsonTab, fieldsTab string
 	if m.SidebarMode == SidebarModeEntry {
 		entryTab = activeTab.Render("Entry")
+		jsonTab = inactiveTab.Render("JSON")
+		fieldsTab = inactiveTab.Render("Fields")
+	} else if m.SidebarMode == SidebarModeJSON {
+		entryTab = inactiveTab.Render("Entry")
+		jsonTab = activeTab.Render("JSON")
 		fieldsTab = inactiveTab.Render("Fields")
 	} else {
 		entryTab = inactiveTab.Render("Entry")
+		jsonTab = inactiveTab.Render("JSON")
 		fieldsTab = activeTab.Render("Fields")
 	}
 
 	// Tab bar with help hint
-	tabBar := lipgloss.JoinHorizontal(lipgloss.Center, entryTab, " ", fieldsTab)
+	tabBar := lipgloss.JoinHorizontal(lipgloss.Center, entryTab, " ", jsonTab, " ", fieldsTab)
 	tabHint := lipgloss.NewStyle().Foreground(ColorMuted).Render(" (F)")
 	header := tabBar + tabHint
 

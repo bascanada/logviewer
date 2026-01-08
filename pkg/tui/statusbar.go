@@ -65,7 +65,8 @@ type StatusBar struct {
 	FilteredCount  int // Number of entries after client-side filtering
 	CursorPosition int
 	ContextID      string
-	Loading        bool // Whether a request is in progress
+	Loading        bool   // Whether a request is in progress
+	Message        string // Temporary status message
 }
 
 // NewStatusBar creates a new status bar with default styles
@@ -74,6 +75,16 @@ func NewStatusBar() StatusBar {
 		Width:  80,
 		Styles: DefaultStatusBarStyles(),
 	}
+}
+
+// SetMessage sets a temporary status message
+func (s *StatusBar) SetMessage(message string) {
+	s.Message = message
+}
+
+// ClearMessage clears the temporary status message
+func (s *StatusBar) ClearMessage() {
+	s.Message = ""
 }
 
 // UpdateFromTab updates the status bar data from a tab
@@ -158,6 +169,23 @@ func (s *StatusBar) UpdateTimeRangeFromChips(chips []Chip) {
 func (s StatusBar) View() string {
 	if s.Width < 20 {
 		return ""
+	}
+
+	// Show temporary message if present
+	if s.Message != "" {
+		messageStyle := lipgloss.NewStyle().
+			Background(ColorPrimary).
+			Foreground(ColorText).
+			Bold(true).
+			Padding(0, 1)
+
+		messageLine := messageStyle.Render(s.Message)
+		// Render message prominently
+		return lipgloss.NewStyle().
+			Width(s.Width).
+			Border(lipgloss.NormalBorder(), true, false).
+			BorderForeground(ColorPrimary).
+			Render(messageLine)
 	}
 
 	var line1Parts []string
