@@ -599,18 +599,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			initCmds = append(initCmds, m.addTabCmd(ctxID, &tabSearch))
 		}
 
-		// Now populate search bar from CLI arguments (after tabs are created)
-		if m.InitialSearch != nil {
-			m.SearchBar.PopulateFromSearch(m.InitialSearch)
-			// Update status bar with time range from chips
-			m.StatusBar.UpdateTimeRangeFromChips(m.SearchBar.State.Chips)
-		}
-
-		// Copy the populated search bar state to all tabs
-		// Note: tab.Inherits is already set in addTabCmd before loadTabLogsCmd is called
-		for _, tab := range m.Tabs {
-			tab.SearchState = m.SearchBar.State
-		}
+		// NOTE: Search bar pre-population from InitialSearch was removed to fix double-filtering.
+		// The server already filters logs using InitialSearch passed in loadTabLogsCmd.
+		// Pre-populating the search bar here would cause the TUI to re-apply those same filters
+		// client-side, and time drift between client/server would hide logs (requiring Esc to see them).
+		// The search bar should remain empty on startup and only contain user-added filters.
+		//
+		// tab.SearchState stays empty (NewChipSearchState() from addTabCmd), which is correct.
 
 		log.Printf("[DEBUG] TUI InitMsg: created tabs, tabCount=%d, cmdCount=%d, initialInherits=%v", len(m.Tabs), len(initCmds), m.InitialInherits)
 		return m, tea.Batch(initCmds...)
