@@ -66,6 +66,7 @@ type StatusBar struct {
 	CursorPosition int
 	ContextID      string
 	Loading        bool   // Whether a request is in progress
+	LoadingMore    bool   // Whether pagination is loading more entries
 	Message        string // Temporary status message
 }
 
@@ -94,6 +95,7 @@ func (s *StatusBar) UpdateFromTab(tab *Tab) {
 	}
 
 	s.Loading = tab.Loading
+	s.LoadingMore = tab.LoadingMore
 	s.EntryCount = len(tab.Entries)
 	s.CursorPosition = tab.Cursor
 	s.ContextID = tab.ContextID
@@ -221,6 +223,8 @@ func (s StatusBar) View() string {
 	// Line 2: Loading indicator, entries, pagination, follow mode, position
 	if s.Loading {
 		line2Parts = append(line2Parts, s.Styles.Loading.Render("⏳ Loading..."))
+	} else if s.LoadingMore {
+		line2Parts = append(line2Parts, s.Styles.Loading.Render("⏳ Loading more..."))
 	}
 
 	if s.FilteredCount > 0 && s.FilteredCount != s.EntryCount {

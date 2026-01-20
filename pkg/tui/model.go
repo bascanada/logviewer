@@ -73,17 +73,23 @@ type Tab struct {
 
 	// JSON detection cache
 	JSONCache          map[string][]string // Maps message hash -> detected JSON strings
+
+	// Pagination state
+	PaginationInfo     *client.PaginationInfo // Pagination info from last search
+	LoadingMore        bool                   // True when fetching more pages
 }
 
 // LogEntryMsg is sent when new log entries arrive
 type LogEntryMsg struct {
-	TabID      string
-	Entries    []client.LogEntry
-	Result     client.LogSearchResult     // The search result (for printer config)
-	Template   *template.Template         // Compiled printer template
-	Fields     ty.UniSet[string]          // Available fields with values from GetFields()
-	StreamChan <-chan []client.LogEntry   // For live streaming (if applicable)
-	ErrorChan  <-chan error               // For async errors from backend
+	TabID          string
+	Entries        []client.LogEntry
+	Result         client.LogSearchResult     // The search result (for printer config)
+	Template       *template.Template         // Compiled printer template
+	Fields         ty.UniSet[string]          // Available fields with values from GetFields()
+	StreamChan     <-chan []client.LogEntry   // For live streaming (if applicable)
+	ErrorChan      <-chan error               // For async errors from backend
+	PaginationInfo *client.PaginationInfo     // Pagination info (HasMore, NextPageToken)
+	IsPagination   bool                       // True if this is a pagination response (prepend instead of append)
 }
 
 // StreamBatchMsg delivers streamed log entries
@@ -392,15 +398,112 @@ func (m *Model) loadTabLogsCmd(tab *Tab) tea.Cmd {
 			log.Printf("[WARN] TUI loadTabLogsCmd: GetFields failed: %v", err)
 		}
 
+		// Get pagination info
+		paginationInfo := result.GetPaginationInfo()
+
 		// Return initial entries with template, fields, streaming channel, and error channel
 		msg := LogEntryMsg{
-			TabID:      tabID,
-			Entries:    entries,
-			Result:     result,
-			Template:   tmpl,
-			Fields:     fields,
-			StreamChan: entryChan, // Will be handled by Update loop via subscription
-			ErrorChan:  result.Err(), // Monitor for async errors from backend
+			TabID:          tabID,
+			Entries:        entries,
+			Result:         result,
+			Template:       tmpl,
+			Fields:         fields,
+			StreamChan:     entryChan, // Will be handled by Update loop via subscription
+			ErrorChan:      result.Err(), // Monitor for async errors from backend
+			PaginationInfo: paginationInfo,
+			IsPagination:   false, // Initial load, not pagination
+		}
+
+		return msg
+	}
+}
+
+// loadMoreLogsCmd fetches the next page of logs using pagination token
+func (m *Model) loadMoreLogsCmd(tab *Tab) tea.Cmd {
+	// Capture values needed by the closure
+	searchFactory := m.SearchFactory
+	runtimeVars := m.RuntimeVars
+	tabID := tab.ID
+	contextID := tab.ContextID
+	inherits := tab.Inherits
+
+	// Get the next page token
+	if tab.PaginationInfo == nil || !tab.PaginationInfo.HasMore {
+		log.Printf("[DEBUG] TUI loadMoreLogsCmd: no more pages, tabID=%s", tabID)
+		return nil
+	}
+
+	nextPageToken := tab.PaginationInfo.NextPageToken
+	if nextPageToken == "" {
+		log.Printf("[DEBUG] TUI loadMoreLogsCmd: empty page token, tabID=%s", tabID)
+		return nil
+	}
+
+	// Create a new search with the page token
+	search := &client.LogSearch{}
+	if tab.Search != nil {
+		*search = *tab.Search // Copy current search
+	}
+	search.PageToken.S(nextPageToken)
+
+	log.Printf("[DEBUG] TUI loadMoreLogsCmd: fetching next page, tabID=%s, pageToken=%s", tabID, nextPageToken)
+
+	return func() tea.Msg {
+		log.Printf("[DEBUG] TUI loadMoreLogsCmd: executing, tabID=%s", tabID)
+		if searchFactory == nil {
+			log.Printf("[ERROR] TUI loadMoreLogsCmd: no search factory")
+			return ErrorMsg{TabID: tabID, Err: fmt.Errorf("no search factory configured")}
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		log.Printf("[DEBUG] TUI loadMoreLogsCmd: calling GetSearchResult, tabID=%s, pageToken=%s", tabID, nextPageToken)
+		result, err := searchFactory.GetSearchResult(ctx, contextID, inherits, *search, runtimeVars)
+		if err != nil {
+			log.Printf("[ERROR] TUI loadMoreLogsCmd: GetSearchResult failed, tabID=%s, error=%v", tabID, err)
+			return ErrorMsg{TabID: tabID, Err: err}
+		}
+
+		// Compile the printer template from the search result
+		printerOptions := result.GetSearch().PrinterOptions
+		templateConfig := printerOptions.Template
+		if templateConfig.Value == "" {
+			templateConfig.S("[{{FormatTimestamp .Timestamp \"15:04:05\"}}] [{{.ContextID}}] {{.Level}} {{.Message}}")
+		}
+
+		tmpl, tmplErr := template.New("tui_printer").Funcs(printer.GetTemplateFunctionsMap()).Parse(templateConfig.Value)
+		if tmplErr != nil {
+			log.Printf("[WARN] TUI loadMoreLogsCmd: failed to parse template: %v, using default", tmplErr)
+			tmpl, _ = template.New("tui_printer").Funcs(printer.GetTemplateFunctionsMap()).Parse("[{{FormatTimestamp .Timestamp \"15:04:05\"}}] [{{.ContextID}}] {{.Level}} {{.Message}}")
+		}
+
+		log.Printf("[DEBUG] TUI loadMoreLogsCmd: calling GetEntries, tabID=%s", tabID)
+		entries, _, err := result.GetEntries(ctx)
+		if err != nil {
+			log.Printf("[ERROR] TUI loadMoreLogsCmd: GetEntries failed, tabID=%s, error=%v", tabID, err)
+			return ErrorMsg{TabID: tabID, Err: err}
+		}
+
+		// Extract JSON fields from entries
+		searchConfig := result.GetSearch()
+		for i := range entries {
+			client.ExtractJSONFromEntry(&entries[i], searchConfig)
+		}
+
+		log.Printf("[DEBUG] TUI loadMoreLogsCmd: got entries, tabID=%s, count=%d", tabID, len(entries))
+
+		// Get pagination info for next page
+		paginationInfo := result.GetPaginationInfo()
+
+		// Return paginated entries
+		msg := LogEntryMsg{
+			TabID:          tabID,
+			Entries:        entries,
+			Result:         result,
+			Template:       tmpl,
+			PaginationInfo: paginationInfo,
+			IsPagination:   true, // This is a pagination response - prepend entries
 		}
 
 		return msg
@@ -479,15 +582,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case LogEntryMsg:
 		// Update the tab with new entries
-		log.Printf("[DEBUG] TUI LogEntryMsg received, tabID=%s, entries=%d, currentTabs=%d", msg.TabID, len(msg.Entries), len(m.Tabs))
+		log.Printf("[DEBUG] TUI LogEntryMsg received, tabID=%s, entries=%d, isPagination=%v, currentTabs=%d", msg.TabID, len(msg.Entries), msg.IsPagination, len(m.Tabs))
 		found := false
 		for _, tab := range m.Tabs {
 			if tab.ID == msg.TabID {
-				tab.Entries = append(tab.Entries, msg.Entries...)
-				tab.Loading = false
+				// Handle pagination (prepend) vs normal (append)
+				if msg.IsPagination {
+					// Prepend new entries to the beginning (older logs)
+					oldCursor := tab.Cursor
+					tab.Entries = append(msg.Entries, tab.Entries...)
+					// Adjust cursor position to maintain visual position
+					tab.Cursor = oldCursor + len(msg.Entries)
+					tab.LoadingMore = false
+					log.Printf("[DEBUG] TUI LogEntryMsg: prepended paginated entries, tabID=%s, newEntries=%d, totalEntries=%d, cursorAdjusted=%d->%d",
+						tab.ID, len(msg.Entries), len(tab.Entries), oldCursor, tab.Cursor)
+				} else {
+					// Append new entries to the end (newer logs or initial load)
+					tab.Entries = append(tab.Entries, msg.Entries...)
+					tab.Loading = false
+					log.Printf("[DEBUG] TUI LogEntryMsg: appended entries, tabID=%s, totalEntries=%d", tab.ID, len(tab.Entries))
+				}
 				tab.Result = msg.Result
 				tab.Template = msg.Template
-				log.Printf("[DEBUG] TUI LogEntryMsg: matched tab, tabID=%s, totalEntries=%d", tab.ID, len(tab.Entries))
+
+				// Store pagination info
+				tab.PaginationInfo = msg.PaginationInfo
+				if tab.PaginationInfo != nil {
+					log.Printf("[DEBUG] TUI LogEntryMsg: pagination info, hasMore=%v, nextToken=%s",
+						tab.PaginationInfo.HasMore, tab.PaginationInfo.NextPageToken)
+				}
 
 				// Get available fields from message (for global fields view and autocomplete)
 				if len(msg.Fields) > 0 {
@@ -545,6 +668,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.SearchBar.State = tab.SearchState
 					m.StatusBar.UpdateFromTab(tab)
 					m.StatusBar.UpdateTimeRangeFromChips(m.SearchBar.State.Chips)
+				}
+
+				// Log pagination completion
+				if msg.IsPagination {
+					log.Printf("[DEBUG] TUI LogEntryMsg: pagination complete, loadingMore=%v", tab.LoadingMore)
 				}
 
 				// Start streaming subscription if channel is present
@@ -717,24 +845,40 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.Keys.Up):
-		return m.moveCursor(-1), nil
+		return m.moveCursor(-1)
 
 	case key.Matches(msg, m.Keys.Down):
-		return m.moveCursor(1), nil
+		return m.moveCursor(1)
 
 	case key.Matches(msg, m.Keys.PageUp):
-		return m.moveCursor(-10), nil
+		return m.moveCursor(-10)
 
 	case key.Matches(msg, m.Keys.PageDown):
-		return m.moveCursor(10), nil
+		return m.moveCursor(10)
 
 	case key.Matches(msg, m.Keys.Home):
-		return m.moveCursor(-len(m.CurrentTab().Entries)), nil
+		tab := m.CurrentTab()
+		if tab == nil {
+			return m, nil
+		}
+
+		// If already at top and more data available, trigger pagination
+		if tab.Cursor == 0 &&
+			tab.PaginationInfo != nil &&
+			tab.PaginationInfo.HasMore &&
+			!tab.LoadingMore {
+			log.Printf("[DEBUG] TUI Home key: already at top, triggering pagination")
+			tab.LoadingMore = true
+			m.StatusBar.UpdateFromTab(tab)
+			return m, m.loadMoreLogsCmd(tab)
+		}
+
+		return m.moveCursor(-len(tab.Entries))
 
 	case key.Matches(msg, m.Keys.End):
 		tab := m.CurrentTab()
 		if tab != nil {
-			return m.moveCursor(len(tab.Entries)), nil
+			return m.moveCursor(len(tab.Entries))
 		}
 		return m, nil
 
@@ -940,10 +1084,10 @@ func (m Model) handleInheritSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // moveCursor moves the cursor by delta positions
-func (m Model) moveCursor(delta int) Model {
+func (m Model) moveCursor(delta int) (Model, tea.Cmd) {
 	tab := m.CurrentTab()
 	if tab == nil || len(tab.Entries) == 0 {
-		return m
+		return m, nil
 	}
 
 	oldCursor := tab.Cursor
@@ -957,13 +1101,27 @@ func (m Model) moveCursor(delta int) Model {
 
 	// Only update if cursor actually changed
 	if newCursor == oldCursor {
-		return m
+		return m, nil
 	}
 
 	tab.Cursor = newCursor
 	m.updateViewportContent()
 	m.updateSidebarContent()
-	return m
+
+	// Check if we need to fetch more data (pagination)
+	// Trigger when scrolling near the top and there's more data available
+	const paginationThreshold = 5 // Trigger when within 5 entries of the top
+	if newCursor < paginationThreshold &&
+		tab.PaginationInfo != nil &&
+		tab.PaginationInfo.HasMore &&
+		!tab.LoadingMore {
+		log.Printf("[DEBUG] TUI moveCursor: triggering pagination, cursor=%d, threshold=%d", newCursor, paginationThreshold)
+		tab.LoadingMore = true
+		m.StatusBar.UpdateFromTab(tab) // Update status bar to show loading indicator
+		return m, m.loadMoreLogsCmd(tab)
+	}
+
+	return m, nil
 }
 
 // closeCurrentTab closes the active tab
@@ -1379,6 +1537,12 @@ func (m *Model) updateViewportContent() {
 			totalVisualLines++
 		}
 
+		// Prepend loading indicator if pagination is loading
+		if tab.LoadingMore {
+			loadingLine := m.Styles.SidebarKey.Foreground(ColorPrimary).Render("⏳ Loading more logs...")
+			visualLines = append([]string{loadingLine}, visualLines...)
+		}
+
 		m.Viewport.SetContent(strings.Join(visualLines, "\n"))
 	} else {
 		// No-wrap mode: one entry = one line (original behavior)
@@ -1425,6 +1589,12 @@ func (m *Model) updateViewportContent() {
 		// Pad with empty lines if needed
 		for len(lines) < visibleLines {
 			lines = append(lines, "")
+		}
+
+		// Prepend loading indicator if pagination is loading
+		if tab.LoadingMore {
+			loadingLine := m.Styles.SidebarKey.Foreground(ColorPrimary).Render("⏳ Loading more logs...")
+			lines = append([]string{loadingLine}, lines...)
 		}
 
 		m.Viewport.SetContent(strings.Join(lines, "\n"))
