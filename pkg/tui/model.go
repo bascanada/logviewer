@@ -61,6 +61,7 @@ type Tab struct {
 	Loading     bool
 	Error       error
 	StreamChan  <-chan []client.LogEntry // For live streaming
+	ErrorChan   <-chan error             // For async errors from backend
 	CancelFunc  context.CancelFunc
 
 	// Per-tab search bar state
@@ -82,6 +83,7 @@ type LogEntryMsg struct {
 	Template   *template.Template         // Compiled printer template
 	Fields     ty.UniSet[string]          // Available fields with values from GetFields()
 	StreamChan <-chan []client.LogEntry   // For live streaming (if applicable)
+	ErrorChan  <-chan error               // For async errors from backend
 }
 
 // StreamBatchMsg delivers streamed log entries
@@ -130,6 +132,7 @@ type Model struct{
 	SidebarMode    SidebarMode // Entry details or Global fields
 	SplitRatio     float64     // 0.0 to 1.0, ratio for log list
 	ShowHelp       bool
+	LineWrapping   bool        // Enable/disable line wrapping for multiline logs
 
 	// Context selection state (for Ctrl+T new tab)
 	AvailableContexts []string
@@ -199,6 +202,7 @@ func New(cfg *config.ContextConfig, clientFactory factory.LogClientFactory, sear
 		DetailsVisible:    false,
 		SplitRatio:        0.7,
 		ShowHelp:          false,
+		LineWrapping:      false,
 		AvailableContexts: contexts,
 		ContextCursor:     0,
 		AvailableSearches: searches,
@@ -388,7 +392,7 @@ func (m *Model) loadTabLogsCmd(tab *Tab) tea.Cmd {
 			log.Printf("[WARN] TUI loadTabLogsCmd: GetFields failed: %v", err)
 		}
 
-		// Return initial entries with template, fields, and streaming channel
+		// Return initial entries with template, fields, streaming channel, and error channel
 		msg := LogEntryMsg{
 			TabID:      tabID,
 			Entries:    entries,
@@ -396,6 +400,7 @@ func (m *Model) loadTabLogsCmd(tab *Tab) tea.Cmd {
 			Template:   tmpl,
 			Fields:     fields,
 			StreamChan: entryChan, // Will be handled by Update loop via subscription
+			ErrorChan:  result.Err(), // Monitor for async errors from backend
 		}
 
 		return msg
@@ -423,6 +428,25 @@ func waitForStreamBatch(tab *Tab) tea.Cmd {
 		}
 
 		return StreamBatchMsg{TabID: tab.ID, Entries: entries}
+	}
+}
+
+// waitForError subscribes to an error channel and returns any backend errors
+// This follows the Bubble Tea message-passing pattern for safe concurrent updates
+func waitForError(tab *Tab) tea.Cmd {
+	return func() tea.Msg {
+		if tab.ErrorChan == nil {
+			return nil
+		}
+
+		err, ok := <-tab.ErrorChan
+		if !ok {
+			// Channel closed - no more errors
+			return nil
+		}
+
+		log.Printf("[ERROR] TUI waitForError: received error from backend, tabID=%s, error=%v", tab.ID, err)
+		return ErrorMsg{TabID: tab.ID, Err: err}
 	}
 }
 
@@ -530,6 +554,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					log.Printf("[DEBUG] TUI LogEntryMsg: started streaming subscription for tabID=%s", tab.ID)
 				}
 
+				// Start error monitoring if channel is present
+				if msg.ErrorChan != nil {
+					tab.ErrorChan = msg.ErrorChan
+					cmds = append(cmds, waitForError(tab))
+					log.Printf("[DEBUG] TUI LogEntryMsg: started error monitoring for tabID=%s", tab.ID)
+				}
+
 				// Always update viewport sizes before content
 				// Viewport has default dimensions (80x20) even before WindowSizeMsg
 				m.updateViewportSizes()
@@ -548,6 +579,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if tab.ID == msg.TabID {
 				tab.Error = msg.Err
 				tab.Loading = false
+
+				// Update viewport to show the error
+				m.updateViewportContent()
+
+				// Continue monitoring for more errors if channel is still open
+				if tab.ErrorChan != nil {
+					cmds = append(cmds, waitForError(tab))
+				}
 				break
 			}
 		}
@@ -711,6 +750,29 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, m.Keys.Copy):
 		return m, m.copyJSONToClipboard()
+
+	case key.Matches(msg, m.Keys.ToggleWrap):
+		m.LineWrapping = !m.LineWrapping
+
+		// Reset ViewOffset when changing wrap mode to avoid invalid state
+		tab := m.CurrentTab()
+		if tab != nil {
+			tab.ViewOffset = 0
+			// Ensure cursor is valid
+			if tab.Cursor < 0 {
+				tab.Cursor = 0
+			}
+			if len(tab.Entries) > 0 && tab.Cursor >= len(tab.Entries) {
+				tab.Cursor = len(tab.Entries) - 1
+			}
+		}
+
+		m.updateViewportContent()
+		statusMsg := "Wrap: OFF"
+		if m.LineWrapping {
+			statusMsg = "Wrap: ON"
+		}
+		return m, m.showStatusMessage(statusMsg)
 	}
 
 	// Handle F key for sidebar mode toggle (not captured by Keys)
@@ -1111,7 +1173,16 @@ func (m *Model) updateViewportContent() {
 	}
 
 	if tab.Error != nil {
-		m.Viewport.SetContent(fmt.Sprintf("Error: %v", tab.Error))
+		// Show error with styling and helpful information
+		errorStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("9")).  // Red
+			Bold(true).
+			Padding(1, 2).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("9"))
+
+		errorContent := fmt.Sprintf("❌ Backend Error\n\n%v\n\nPress 'r' to retry or 'q' to quit", tab.Error)
+		m.Viewport.SetContent(errorStyle.Render(errorContent))
 		return
 	}
 
@@ -1149,12 +1220,30 @@ func (m *Model) updateViewportContent() {
 	// Update status bar with filtered count
 	m.StatusBar.SetFilteredCount(len(entries))
 
-	// Ensure cursor is within bounds
+	// Ensure cursor is within bounds of filtered entries
+	if len(entries) == 0 {
+		tab.Cursor = 0
+		tab.ViewOffset = 0
+		m.Viewport.SetContent("No log entries found (after filtering).")
+		return
+	}
+
 	if tab.Cursor >= len(entries) {
 		tab.Cursor = len(entries) - 1
 	}
 	if tab.Cursor < 0 {
 		tab.Cursor = 0
+	}
+
+	// Ensure ViewOffset is within bounds
+	if tab.ViewOffset < 0 {
+		tab.ViewOffset = 0
+	}
+	if tab.ViewOffset >= len(entries) {
+		tab.ViewOffset = len(entries) - 1
+		if tab.ViewOffset < 0 {
+			tab.ViewOffset = 0
+		}
 	}
 
 	// Calculate visible window
@@ -1163,45 +1252,183 @@ func (m *Model) updateViewportContent() {
 		visibleLines = 1
 	}
 
-	// Adjust ViewOffset to keep cursor visible
-	if tab.Cursor < tab.ViewOffset {
-		tab.ViewOffset = tab.Cursor
-	} else if tab.Cursor >= tab.ViewOffset+visibleLines {
-		tab.ViewOffset = tab.Cursor - visibleLines + 1
-	}
+	// Build content - handle multiline rendering differently based on wrap mode
+	if m.LineWrapping {
+		// Wrap mode: more complex scrolling due to variable entry heights
+		// Strategy: Ensure cursor entry is visible, then render around it
 
-	// Clamp ViewOffset
-	maxOffset := len(entries) - visibleLines
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
-	if tab.ViewOffset > maxOffset {
-		tab.ViewOffset = maxOffset
-	}
-	if tab.ViewOffset < 0 {
-		tab.ViewOffset = 0
-	}
+		// Calculate height of each entry from ViewOffset to cursor
+		cursorVisible := false
+		totalVisualLines := 0
 
-	// Build content - only render visible lines
-	var lines []string
-	endIdx := tab.ViewOffset + visibleLines
-	if endIdx > len(entries) {
-		endIdx = len(entries)
-	}
+		// First pass: check if cursor is visible with current ViewOffset
+		for i := tab.ViewOffset; i < len(entries) && totalVisualLines < visibleLines; i++ {
+			if i < 0 || i >= len(entries) {
+				break // Safety: stop if index is invalid
+			}
 
-	for i := tab.ViewOffset; i < endIdx; i++ {
-		entry := entries[i]
-		isSelected := i == tab.Cursor
-		line := m.renderLogEntry(entry, isSelected, m.Viewport.Width, tab)
-		lines = append(lines, line)
-	}
+			entry := entries[i]
+			isSelected := i == tab.Cursor
+			rendered := m.renderLogEntry(entry, isSelected, m.Viewport.Width, tab)
 
-	// Pad with empty lines if needed
-	for len(lines) < visibleLines {
-		lines = append(lines, "")
-	}
+			entryHeight := countVisualLines(rendered, m.Viewport.Width)
+			if entryHeight < 1 {
+				entryHeight = 1 // Minimum 1 line per entry
+			}
 
-	m.Viewport.SetContent(strings.Join(lines, "\n"))
+			if i == tab.Cursor {
+				// Check if cursor entry fits in remaining space
+				if totalVisualLines + entryHeight <= visibleLines {
+					cursorVisible = true
+				}
+				break
+			}
+			totalVisualLines += entryHeight
+		}
+
+		// Adjust ViewOffset if cursor is not visible
+		if !cursorVisible || tab.Cursor < tab.ViewOffset {
+			// Cursor moved: recalculate ViewOffset to make it visible
+			if tab.Cursor < tab.ViewOffset {
+				// Scrolled up: put cursor at top
+				tab.ViewOffset = tab.Cursor
+			} else {
+				// Scrolled down: put cursor at bottom, work backwards
+				tab.ViewOffset = tab.Cursor
+				accumulatedHeight := 0
+
+				// Work backwards from cursor to find good ViewOffset
+				for i := tab.Cursor; i >= 0; i-- {
+					if i < 0 || i >= len(entries) {
+						break // Safety: stop if index is invalid
+					}
+
+					entry := entries[i]
+					isSelected := i == tab.Cursor
+					rendered := m.renderLogEntry(entry, isSelected, m.Viewport.Width, tab)
+					entryHeight := countVisualLines(rendered, m.Viewport.Width)
+					if entryHeight < 1 {
+						entryHeight = 1 // Minimum 1 line per entry
+					}
+
+					if accumulatedHeight + entryHeight > visibleLines && i < tab.Cursor {
+						// This entry won't fit, start from next one
+						tab.ViewOffset = i + 1
+						break
+					}
+
+					accumulatedHeight += entryHeight
+					tab.ViewOffset = i
+
+					if accumulatedHeight >= visibleLines {
+						break
+					}
+				}
+			}
+		}
+
+		// Clamp ViewOffset with extra safety
+		if tab.ViewOffset < 0 {
+			tab.ViewOffset = 0
+		}
+		if tab.ViewOffset >= len(entries) {
+			tab.ViewOffset = len(entries) - 1
+			if tab.ViewOffset < 0 {
+				tab.ViewOffset = 0
+			}
+		}
+
+		// Ensure cursor is also within bounds before rendering
+		if tab.Cursor >= len(entries) {
+			tab.Cursor = len(entries) - 1
+		}
+		if tab.Cursor < 0 {
+			tab.Cursor = 0
+		}
+
+		// Second pass: render from ViewOffset
+		var visualLines []string
+		totalVisualLines = 0
+
+		for i := tab.ViewOffset; i < len(entries) && totalVisualLines < visibleLines; i++ {
+			if i < 0 || i >= len(entries) {
+				continue // Skip invalid indices
+			}
+
+			entry := entries[i]
+			isSelected := i == tab.Cursor
+			rendered := m.renderLogEntry(entry, isSelected, m.Viewport.Width, tab)
+
+			// Split rendered output into individual lines and wrap long lines
+			entryLines := strings.Split(rendered, "\n")
+			for _, entryLine := range entryLines {
+				// Wrap long lines to viewport width
+				wrapped := wrapLine(entryLine, m.Viewport.Width)
+				for _, wrappedLine := range wrapped {
+					if totalVisualLines < visibleLines {
+						visualLines = append(visualLines, wrappedLine)
+						totalVisualLines++
+					}
+				}
+			}
+		}
+
+		// Pad with empty lines if needed
+		for totalVisualLines < visibleLines {
+			visualLines = append(visualLines, "")
+			totalVisualLines++
+		}
+
+		m.Viewport.SetContent(strings.Join(visualLines, "\n"))
+	} else {
+		// No-wrap mode: one entry = one line (original behavior)
+		// Adjust ViewOffset to keep cursor visible
+		if tab.Cursor < tab.ViewOffset {
+			tab.ViewOffset = tab.Cursor
+		} else if tab.Cursor >= tab.ViewOffset+visibleLines {
+			tab.ViewOffset = tab.Cursor - visibleLines + 1
+		}
+
+		// Clamp ViewOffset again after adjustment
+		maxOffset := len(entries) - visibleLines
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+		if tab.ViewOffset > maxOffset {
+			tab.ViewOffset = maxOffset
+		}
+		if tab.ViewOffset < 0 {
+			tab.ViewOffset = 0
+		}
+
+		var lines []string
+		endIdx := tab.ViewOffset + visibleLines
+		if endIdx > len(entries) {
+			endIdx = len(entries)
+		}
+
+		// Safety check: ensure ViewOffset is valid
+		if tab.ViewOffset >= len(entries) {
+			tab.ViewOffset = 0
+		}
+
+		for i := tab.ViewOffset; i < endIdx; i++ {
+			if i < 0 || i >= len(entries) {
+				continue // Skip invalid indices
+			}
+			entry := entries[i]
+			isSelected := i == tab.Cursor
+			line := m.renderLogEntry(entry, isSelected, m.Viewport.Width, tab)
+			lines = append(lines, line)
+		}
+
+		// Pad with empty lines if needed
+		for len(lines) < visibleLines {
+			lines = append(lines, "")
+		}
+
+		m.Viewport.SetContent(strings.Join(lines, "\n"))
+	}
 }
 
 // updateSidebarContent refreshes the sidebar content
@@ -1285,6 +1512,27 @@ func (m *Model) renderLogEntry(entry client.LogEntry, selected bool, maxWidth in
 		}
 	}
 
+	// Handle wrapping mode
+	if m.LineWrapping {
+		// Wrap mode: Keep newlines, don't truncate
+		// Clean up carriage returns and tabs but keep newlines
+		line = strings.ReplaceAll(line, "\r", "")
+		line = strings.ReplaceAll(line, "\t", "  ") // Convert tabs to 2 spaces
+
+		// Add JSON indicator if present and not already shown
+		if hasJSON && jsonSummary != "" && !strings.Contains(line, "[JSON") {
+			indicator := m.Styles.SidebarKey.Render(jsonSummary)
+			line = line + " " + indicator
+		}
+
+		// Apply selection or normal style (no width constraint for wrapping)
+		if selected {
+			return m.Styles.LogSelected.Render(line)
+		}
+		return m.Styles.LogEntry.Render(line)
+	}
+
+	// No-wrap mode (default): Single line, truncate if needed
 	// Replace multi-line ExpandJson output with compact summary
 	// Look for patterns like "\n{" or "\n[" which indicate expanded JSON
 	if strings.Contains(line, "\n{") || strings.Contains(line, "\n[") {
@@ -1339,6 +1587,85 @@ func (m *Model) renderLogEntry(entry client.LogEntry, selected bool, maxWidth in
 		return m.Styles.LogSelected.Width(maxWidth).Render(line)
 	}
 	return m.Styles.LogEntry.Width(maxWidth).Render(line)
+}
+
+// countVisualLines counts how many visual lines an entry will take when rendered
+// This accounts for newlines in the template and wrapping of long lines
+func countVisualLines(rendered string, maxWidth int) int {
+	if maxWidth < 1 {
+		maxWidth = 1
+	}
+
+	count := 0
+	lines := strings.Split(rendered, "\n")
+	for _, line := range lines {
+		wrapped := wrapLine(line, maxWidth)
+		count += len(wrapped)
+	}
+	return count
+}
+
+// wrapLine wraps a long line to fit within maxWidth, preserving ANSI codes
+// Returns a slice of wrapped lines
+func wrapLine(line string, maxWidth int) []string {
+	if maxWidth < 1 {
+		maxWidth = 1
+	}
+
+	// Quick check: if line fits, return as-is
+	plainLen := lipgloss.Width(line) // lipgloss.Width handles ANSI codes
+	if plainLen <= maxWidth {
+		return []string{line}
+	}
+
+	// For lines with ANSI codes, we need to be more careful
+	// Simple approach: split into runes and track visible width
+	runes := []rune(line)
+	var result []string
+	var currentLine strings.Builder
+	visibleWidth := 0
+	inEscape := false
+
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
+
+		// Track ANSI escape sequences
+		if r == '\x1b' && i+1 < len(runes) && runes[i+1] == '[' {
+			inEscape = true
+			currentLine.WriteRune(r)
+			continue
+		}
+
+		if inEscape {
+			currentLine.WriteRune(r)
+			if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
+				inEscape = false
+			}
+			continue
+		}
+
+		// Regular visible character
+		currentLine.WriteRune(r)
+		visibleWidth++
+
+		// Check if we need to wrap
+		if visibleWidth >= maxWidth {
+			result = append(result, currentLine.String())
+			currentLine.Reset()
+			visibleWidth = 0
+		}
+	}
+
+	// Add remaining content
+	if currentLine.Len() > 0 {
+		result = append(result, currentLine.String())
+	}
+
+	if len(result) == 0 {
+		return []string{""}
+	}
+
+	return result
 }
 
 // detectAndCacheJSON detects JSON in a log entry and caches the result.
@@ -1798,9 +2125,9 @@ func (m Model) renderSearchFooter() string {
 	parts = append(parts, m.SearchBar.View())
 
 	// Help text
-	helpText := "↑↓ navigate • / search • I inherits • Tab autocomplete • Enter sidebar • F fields • ? help • q quit"
+	helpText := "↑↓ navigate • / search • w wrap • I inherits • Tab autocomplete • Enter sidebar • F fields • ? help • q quit"
 	if m.ShowHelp {
-		helpText = "↑↓/jk nav • PgUp/PgDn scroll • Tab/Shift+Tab tabs • Ctrl+T new • Ctrl+W close • I inherits • [ ] resize • Enter sidebar • F fields • Esc clear • q quit"
+		helpText = "↑↓/jk nav • PgUp/PgDn scroll • Tab/Shift+Tab tabs • Ctrl+T new • Ctrl+W close • w wrap • I inherits • [ ] resize • Enter sidebar • F fields • Esc clear • q quit"
 	}
 	parts = append(parts, m.Styles.HelpBar.Render(helpText))
 

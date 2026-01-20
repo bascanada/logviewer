@@ -24,6 +24,9 @@ type KeyMap struct {
 	ExpandSidebar   key.Binding
 	ShrinkSidebar   key.Binding
 
+	// Display
+	ToggleWrap key.Binding
+
 	// Search
 	Search      key.Binding
 	ClearSearch key.Binding
@@ -90,6 +93,10 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("[", "alt+left"),
 			key.WithHelp("[", "shrink sidebar"),
 		),
+		ToggleWrap: key.NewBinding(
+			key.WithKeys("w"),
+			key.WithHelp("w", "toggle wrap"),
+		),
 		Search: key.NewBinding(
 			key.WithKeys("/"),
 			key.WithHelp("/", "search"),
@@ -128,7 +135,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 		{k.Up, k.Down, k.PageUp, k.PageDown, k.Home, k.End},
 		{k.NextTab, k.PrevTab, k.NewTab, k.CloseTab},
 		{k.ToggleSidebar, k.ExpandSidebar, k.ShrinkSidebar},
-		{k.Search, k.ClearSearch, k.Refresh, k.Copy},
+		{k.ToggleWrap, k.Search, k.ClearSearch, k.Refresh, k.Copy},
 		{k.Help, k.Quit},
 	}
 }
