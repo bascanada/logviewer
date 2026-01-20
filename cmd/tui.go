@@ -92,6 +92,7 @@ func runTUI(cmd *cobra.Command, args []string) {
 	model := tui.New(cfg, clientFactory, searchFactory)
 	model.RuntimeVars = runtimeVars
 	model.InitialContexts = resolvedContextIds
+	model.InitialInherits = inherits
 	searchCopy := deepCopyLogSearch(searchRequest)
 	model.InitialSearch = &searchCopy
 

@@ -161,6 +161,7 @@ type Model struct{
 	// Initial contexts to load (set before Init)
 	InitialContexts []string
 	InitialSearch   *client.LogSearch
+	InitialInherits []string
 }
 
 // New creates a new TUI model
@@ -236,6 +237,7 @@ func (m *Model) addTabCmd(contextID string, search *client.LogSearch) tea.Cmd {
 		Entries:            make([]client.LogEntry, 0),
 		Cursor:             0,
 		Search:             search,
+		Inherits:           m.InitialInherits, // Set inherits from model before loading logs
 		Loading:            true,
 		SearchState:        NewChipSearchState(),
 		AvailableFields:    make([]string, 0),
@@ -253,7 +255,7 @@ func (m *Model) addTabCmd(contextID string, search *client.LogSearch) tea.Cmd {
 	m.StatusBar.UpdateFromTab(tab)
 	m.StatusBar.UpdateTimeRangeFromChips(m.SearchBar.State.Chips)
 
-	log.Printf("[DEBUG] TUI addTabCmd: created tab, tabID=%s, contextID=%s, totalTabs=%d", tab.ID, contextID, len(m.Tabs))
+	log.Printf("[DEBUG] TUI addTabCmd: created tab, tabID=%s, contextID=%s, inherits=%v, totalTabs=%d", tab.ID, contextID, tab.Inherits, len(m.Tabs))
 	return m.loadTabLogsCmd(tab)
 }
 
@@ -617,11 +619,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Copy the populated search bar state to all tabs
+		// Note: tab.Inherits is already set in addTabCmd before loadTabLogsCmd is called
 		for _, tab := range m.Tabs {
 			tab.SearchState = m.SearchBar.State
 		}
 
-		log.Printf("[DEBUG] TUI InitMsg: created tabs, tabCount=%d, cmdCount=%d", len(m.Tabs), len(initCmds))
+		log.Printf("[DEBUG] TUI InitMsg: created tabs, tabCount=%d, cmdCount=%d, initialInherits=%v", len(m.Tabs), len(initCmds), m.InitialInherits)
 		return m, tea.Batch(initCmds...)
 
 	case AddTabMsg:
