@@ -503,24 +503,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						sort.Strings(tab.AvailableVariables)
 					}
 
-					// Populate search bar from context config on first load
-					// Only if the search state is empty (not already populated from CLI args)
-					if tab.SearchState.IsEmpty() && search != nil {
-						// Create a UI-specific copy of search to sanitize fields
-						// This prevents config options like "json" or "format" from appearing as filters
-						uiSearch := *search
-						uiSearch.Fields = make(ty.MS)
-						for k, v := range search.Fields {
-							if k != "json" && k != "format" {
-								uiSearch.Fields[k] = v
-							}
-						}
-						
-						tempBar := NewSearchBar()
-						tempBar.PopulateFromSearch(&uiSearch)
-						tab.SearchState = tempBar.State
-						log.Printf("[DEBUG] TUI LogEntryMsg: populated search bar from context config, chips=%d", len(tab.SearchState.Chips))
-					}
+					// NOTE: Auto-population of search bar from context config was removed.
+					// It caused double-filtering: the server already filtered logs based on search params,
+					// then the TUI applied those same filters client-side. Time drift/timezone differences
+					// between client and server caused client-side filters to hide logs that the server
+					// just returned, requiring users to press Escape to see logs.
+					// The search bar should only contain filters explicitly added by the user or CLI args.
 				}
 
 				// If this is the active tab, update the global search bar
