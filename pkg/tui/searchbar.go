@@ -27,6 +27,8 @@ type SearchBarStyles struct {
 	ChipNativeQuery  lipgloss.Style
 	ChipFilterGroup  lipgloss.Style
 	ChipSize         lipgloss.Style
+	ChipContext      lipgloss.Style
+	ChipInherit      lipgloss.Style
 	ChipSelected     lipgloss.Style
 	InputActive      lipgloss.Style
 	InputInactive    lipgloss.Style
@@ -84,12 +86,23 @@ func DefaultSearchBarStyles() SearchBarStyles {
 			Foreground(ColorBg).
 			Padding(0, 1).
 			MarginRight(1),
+		ChipContext: lipgloss.NewStyle().
+			Background(lipgloss.Color("27")). // Dark blue
+			Foreground(ColorBg).
+			Padding(0, 1).
+			MarginRight(1),
+		ChipInherit: lipgloss.NewStyle().
+			Background(lipgloss.Color("129")). // Purple
+			Foreground(ColorBg).
+			Padding(0, 1).
+			MarginRight(1),
 		ChipSelected: lipgloss.NewStyle().
 			Background(ColorPrimary).
 			Foreground(ColorBg).
 			Padding(0, 1).
 			MarginRight(1).
-			Bold(true),
+			Bold(true).
+			Underline(true), // Extra visual indicator for selection
 		InputActive: lipgloss.NewStyle().
 			Foreground(ColorText),
 		InputInactive: lipgloss.NewStyle().
@@ -221,9 +234,44 @@ func (s SearchBar) handleKey(msg tea.KeyMsg) (SearchBar, tea.Cmd) {
 		return s, nil
 
 	case tea.KeyBackspace:
+		// If a chip is selected, delete it (same as Delete key)
+		if s.State.SelectedChip >= 0 && s.State.SelectedChip < len(s.State.Chips) {
+			chip := s.State.Chips[s.State.SelectedChip]
+
+			// Prevent deletion of context chips
+			if chip.Type == ChipTypeContext {
+				return s, nil
+			}
+
+			deletedIndex := s.State.SelectedChip
+			s.State.Chips = append(s.State.Chips[:deletedIndex], s.State.Chips[deletedIndex+1:]...)
+
+			// Adjust selection
+			if len(s.State.Chips) == 0 {
+				s.State.SelectedChip = -1
+			} else if deletedIndex >= len(s.State.Chips) {
+				s.State.SelectedChip = len(s.State.Chips) - 1
+			} else {
+				s.State.SelectedChip = deletedIndex
+			}
+
+			return s, nil
+		}
+
+		// If no chip selected and input is empty, remove last chip
 		if s.State.CurrentInput == "" && len(s.State.Chips) > 0 {
-			// Remove last chip when input is empty
-			s.State.RemoveLastChip()
+			// Find the last non-context chip
+			lastNonContextIdx := -1
+			for i := len(s.State.Chips) - 1; i >= 0; i-- {
+				if s.State.Chips[i].Type != ChipTypeContext {
+					lastNonContextIdx = i
+					break
+				}
+			}
+
+			if lastNonContextIdx >= 0 {
+				s.State.Chips = append(s.State.Chips[:lastNonContextIdx], s.State.Chips[lastNonContextIdx+1:]...)
+			}
 			return s, nil
 		}
 
@@ -256,11 +304,29 @@ func (s SearchBar) handleKey(msg tea.KeyMsg) (SearchBar, tea.Cmd) {
 		}
 
 	case tea.KeyDelete:
-		if s.State.SelectedChip >= 0 {
-			s.State.RemoveChip(s.State.SelectedChip)
-			if s.State.SelectedChip >= len(s.State.Chips) {
-				s.State.SelectedChip = len(s.State.Chips) - 1
+		if s.State.SelectedChip >= 0 && s.State.SelectedChip < len(s.State.Chips) {
+			chip := s.State.Chips[s.State.SelectedChip]
+
+			// Prevent deletion of context chips (they're tied to the tab)
+			if chip.Type == ChipTypeContext {
+				return s, nil // Silently ignore - context is tied to tab
 			}
+
+			// Store current index before deletion
+			deletedIndex := s.State.SelectedChip
+
+			// Remove the chip
+			s.State.Chips = append(s.State.Chips[:deletedIndex], s.State.Chips[deletedIndex+1:]...)
+
+			// Adjust selection to stay on a nearby chip
+			if len(s.State.Chips) == 0 {
+				s.State.SelectedChip = -1 // No chips left, back to input
+			} else if deletedIndex >= len(s.State.Chips) {
+				s.State.SelectedChip = len(s.State.Chips) - 1 // Move to last chip
+			} else {
+				s.State.SelectedChip = deletedIndex // Stay at same position (now showing next chip)
+			}
+
 			return s, nil
 		}
 	}
@@ -365,6 +431,10 @@ func (s SearchBar) getChipStyle(chipType ChipType) lipgloss.Style {
 		return s.Styles.ChipFilterGroup
 	case ChipTypeSize:
 		return s.Styles.ChipSize
+	case ChipTypeContext:
+		return s.Styles.ChipContext
+	case ChipTypeInherit:
+		return s.Styles.ChipInherit
 	default:
 		return s.Styles.ChipField
 	}
@@ -761,60 +831,12 @@ func (s *SearchBar) parseInput(input string) Chip {
 }
 
 // BuildFilter converts chips to a client.Filter
+// NOTE: Currently disabled - all filtering is done server-side.
+// The search bar is purely informational, showing what parameters are active.
 func (s *SearchBar) BuildFilter() *client.Filter {
-	if len(s.State.Chips) == 0 {
-		return nil
-	}
-
-	var filters []client.Filter
-
-	for _, chip := range s.State.Chips {
-		switch chip.Type {
-		case ChipTypeField:
-			op, negate := mapOperatorToClient(chip.Operator)
-			filters = append(filters, client.Filter{
-				Field:  chip.Field,
-				Op:     op,
-				Value:  chip.Value,
-				Negate: negate,
-			})
-
-		case ChipTypeVariable:
-			// Variables are resolved at search time
-			// For now, treat as a field reference
-			filters = append(filters, client.Filter{
-				Field: chip.Value,
-				Op:    operator.Exists,
-			})
-
-		case ChipTypeFreeText:
-			// Free text searches the message field
-			filters = append(filters, client.Filter{
-				Field: "_",
-				Op:    operator.Match,
-				Value: chip.Text,
-			})
-
-		case ChipTypeFilterGroup:
-			// Preserve the original filter structure for complex groups
-			if chip.GroupFilter != nil {
-				filters = append(filters, *chip.GroupFilter)
-			}
-		}
-	}
-
-	if len(filters) == 0 {
-		return nil
-	}
-
-	if len(filters) == 1 {
-		return &filters[0]
-	}
-
-	return &client.Filter{
-		Logic:   client.LogicAnd,
-		Filters: filters,
-	}
+	// Disable all client-side filtering
+	// All chips are informational and affect server-side queries only
+	return nil
 }
 
 // mapOperatorToClient converts UI operator to client operator
@@ -1240,6 +1262,14 @@ func (s *SearchBar) BuildSearchFromChips() *client.LogSearch {
 
 	for _, chip := range s.State.Chips {
 		switch chip.Type {
+		case ChipTypeContext:
+			// Skip - context is informational only, not part of the search
+			continue
+
+		case ChipTypeInherit:
+			// Skip - inherits are handled separately in refreshCurrentTab
+			continue
+
 		case ChipTypeTimeRange:
 			switch chip.Field {
 			case "last":

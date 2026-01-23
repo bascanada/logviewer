@@ -766,13 +766,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			initCmds = append(initCmds, m.addTabCmd(ctxID, &tabSearch))
 		}
 
-		// NOTE: Search bar pre-population from InitialSearch was removed to fix double-filtering.
-		// The server already filters logs using InitialSearch passed in loadTabLogsCmd.
-		// Pre-populating the search bar here would cause the TUI to re-apply those same filters
-		// client-side, and time drift between client/server would hide logs (requiring Esc to see them).
-		// The search bar should remain empty on startup and only contain user-added filters.
-		//
-		// tab.SearchState stays empty (NewChipSearchState() from addTabCmd), which is correct.
+		// Populate search bar with server-side query information
+		// All chips are purely informational - no client-side filtering is applied
+		if len(m.Tabs) > 0 {
+			// Add context chip (informational)
+			if len(m.InitialContexts) > 0 {
+				contextChip := Chip{
+					Type:    ChipTypeContext,
+					Value:   m.InitialContexts[0], // Show first context
+					Display: "context:" + m.InitialContexts[0],
+				}
+				m.SearchBar.State.Chips = append(m.SearchBar.State.Chips, contextChip)
+			}
+
+			// Add inherit chips (informational)
+			for _, inherit := range m.InitialInherits {
+				inheritChip := Chip{
+					Type:    ChipTypeInherit,
+					Value:   inherit,
+					Display: "inherit:" + inherit,
+				}
+				m.SearchBar.State.Chips = append(m.SearchBar.State.Chips, inheritChip)
+			}
+
+			// Add chips from InitialSearch (time range, size, native query, etc.)
+			if m.InitialSearch != nil {
+				m.SearchBar.PopulateFromSearch(m.InitialSearch)
+			}
+
+			// Sync to the first tab's search state
+			m.Tabs[0].SearchState = m.SearchBar.State
+			// Update status bar to show time range from chips
+			m.StatusBar.UpdateTimeRangeFromChips(m.SearchBar.State.Chips)
+			log.Printf("[DEBUG] TUI InitMsg: populated search bar with %d informational chips", len(m.SearchBar.State.Chips))
+		}
 
 		log.Printf("[DEBUG] TUI InitMsg: created tabs, tabCount=%d, cmdCount=%d, initialInherits=%v", len(m.Tabs), len(initCmds), m.InitialInherits)
 		return m, tea.Batch(initCmds...)
@@ -1099,6 +1126,17 @@ func (m Model) moveCursor(delta int) (Model, tea.Cmd) {
 		newCursor = len(tab.Entries) - 1
 	}
 
+	// Trigger pagination if trying to move up past the top
+	if delta < 0 && tab.Cursor == 0 &&
+		tab.PaginationInfo != nil &&
+		tab.PaginationInfo.HasMore &&
+		!tab.LoadingMore {
+		log.Printf("[DEBUG] TUI moveCursor: triggering pagination from top boundary")
+		tab.LoadingMore = true
+		m.StatusBar.UpdateFromTab(tab)
+		return m, m.loadMoreLogsCmd(tab)
+	}
+
 	// Only update if cursor actually changed
 	if newCursor == oldCursor {
 		return m, nil
@@ -1112,10 +1150,11 @@ func (m Model) moveCursor(delta int) (Model, tea.Cmd) {
 	// Trigger when scrolling near the top and there's more data available
 	const paginationThreshold = 5 // Trigger when within 5 entries of the top
 	if newCursor < paginationThreshold &&
+		delta < 0 && // Only trigger when moving UP
 		tab.PaginationInfo != nil &&
 		tab.PaginationInfo.HasMore &&
 		!tab.LoadingMore {
-		log.Printf("[DEBUG] TUI moveCursor: triggering pagination, cursor=%d, threshold=%d", newCursor, paginationThreshold)
+		log.Printf("[DEBUG] TUI moveCursor: triggering pagination, cursor=%d, threshold=%d, delta=%d", newCursor, paginationThreshold, delta)
 		tab.LoadingMore = true
 		m.StatusBar.UpdateFromTab(tab) // Update status bar to show loading indicator
 		return m, m.loadMoreLogsCmd(tab)
@@ -1198,17 +1237,36 @@ func (m *Model) refreshCurrentTab() tea.Cmd {
 
 	log.Printf("[DEBUG] refreshCurrentTab: chipSearch.Fields=%v, chipSearch.Range=%+v", chipSearch.Fields, chipSearch.Range)
 
-	// Apply inherited searches to the tab
+	// Extract inherits from ChipTypeInherit chips
 	var inherits []string
-	for search, active := range m.ActiveSearches {
-		if active {
-			inherits = append(inherits, search)
+	for _, chip := range m.SearchBar.State.Chips {
+		if chip.Type == ChipTypeInherit {
+			inherits = append(inherits, chip.Value)
 		}
 	}
+
+	// Also include inherits from ActiveSearches (from I key menu)
+	for search, active := range m.ActiveSearches {
+		if active {
+			// Check if not already in inherits list
+			found := false
+			for _, existing := range inherits {
+				if existing == search {
+					found = true
+					break
+				}
+			}
+			if !found {
+				inherits = append(inherits, search)
+			}
+		}
+	}
+
 	// Sort for consistent ordering
 	sort.Strings(inherits)
 	tab.Inherits = inherits
 
+	log.Printf("[DEBUG] refreshCurrentTab: extracted inherits=%v from chips", inherits)
 	return m.loadTabLogsCmd(tab)
 }
 

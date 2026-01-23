@@ -23,6 +23,10 @@ const (
 	ChipTypeFilterGroup
 	// ChipTypeSize represents result size limit (e.g., size:100)
 	ChipTypeSize
+	// ChipTypeContext represents the active context (informational only)
+	ChipTypeContext
+	// ChipTypeInherit represents an inherited search template (informational only)
+	ChipTypeInherit
 )
 
 // Chip represents a single search component in the chip-based search bar
