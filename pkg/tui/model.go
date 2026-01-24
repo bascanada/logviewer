@@ -34,6 +34,15 @@ const (
 	FocusSidebar
 	FocusContextSelect
 	FocusInheritSelect
+	FocusConfirmation
+)
+
+// ConfirmationType represents what we are confirming
+type ConfirmationType int
+
+const (
+	ConfirmCloseTab ConfirmationType = iota
+	ConfirmQuitApp
 )
 
 // SidebarMode represents what content the sidebar displays
@@ -63,6 +72,7 @@ type Tab struct {
 	StreamChan <-chan []client.LogEntry // For live streaming
 	ErrorChan  <-chan error             // For async errors from backend
 	CancelFunc context.CancelFunc
+	ClientType string // Backend client type (e.g. splunk, opensearch)
 
 	// Per-tab search bar state
 	SearchState        ChipSearchState     // The chips and input state for this tab
@@ -134,6 +144,7 @@ type Model struct {
 
 	// UI State
 	Focus          FocusMode
+	Confirmation   ConfirmationType
 	DetailsVisible bool
 	SidebarMode    SidebarMode // Entry details or Global fields
 	SplitRatio     float64     // 0.0 to 1.0, ratio for log list
@@ -240,6 +251,25 @@ func (m *Model) addTabCmd(contextID string, search *client.LogSearch) tea.Cmd {
 		name = fmt.Sprintf("Tab %d", len(m.Tabs)+1)
 	}
 
+	// Resolve context config to get default search params
+	var contextSearch *client.LogSearch
+	var clientType string
+	if m.Config != nil && contextID != "" {
+		if ctxConfig, ok := m.Config.Contexts[contextID]; ok {
+			// Resolve client type
+			if clientCfg, ok := m.Config.Clients[ctxConfig.Client]; ok {
+				clientType = clientCfg.Type
+			}
+
+			// Deep copy the search from config
+			if searchCtx, err := m.Config.GetSearchContext(contextID, nil, client.LogSearch{}, nil); err == nil {
+				contextSearch = &searchCtx.Search
+			} else {
+				log.Printf("[WARN] Failed to resolve context config for %s: %v", contextID, err)
+			}
+		}
+	}
+
 	tab := &Tab{
 		ID:                 fmt.Sprintf("tab-%d-%d", len(m.Tabs), time.Now().UnixNano()),
 		Name:               name,
@@ -255,12 +285,51 @@ func (m *Model) addTabCmd(contextID string, search *client.LogSearch) tea.Cmd {
 		VariableMetadata:   make(map[string]string),
 		FieldValues:        make(map[string][]string),
 		JSONCache:          make(map[string][]string),
+		ClientType:         clientType,
 	}
+
+	// Populate search bar state for this tab
+	tempSB := NewSearchBar()
+	tempSB.ClientType = clientType
+	
+	// 1. Add Context chip (informational)
+	if contextID != "" {
+		tempSB.State.Chips = append(tempSB.State.Chips, Chip{
+			Type:    ChipTypeContext,
+			Value:   contextID,
+			Display: contextID,
+		})
+	}
+
+	// 2. Prepare effective search by merging context defaults and explicit search overrides
+	effectiveSearch := &client.LogSearch{}
+	if contextSearch != nil {
+		// Start with context defaults (contextSearch is already a deep copy from GetSearchContext)
+		*effectiveSearch = *contextSearch
+	}
+	if search != nil {
+		// Merge overrides (CLI args / manual search)
+		effectiveSearch.MergeInto(search)
+	}
+
+	// 1. Populate from merged search (handles context + CLI overrides without duplicates)
+	tempSB.PopulateFromSearch(effectiveSearch)
+
+	// 2. Add inherit chips
+	for _, inherit := range tab.Inherits {
+		tempSB.State.Chips = append(tempSB.State.Chips, Chip{
+			Type:    ChipTypeInherit,
+			Value:   inherit,
+			Display: "inherit:" + inherit,
+		})
+	}
+
+	tab.SearchState = tempSB.State
 
 	m.Tabs = append(m.Tabs, tab)
 	m.ActiveTab = len(m.Tabs) - 1
 
-	// Restore search bar from the new tab (starts with empty/default state)
+	// Restore search bar from the new tab
 	m.restoreSearchBarFromTab(tab)
 	m.StatusBar.UpdateFromTab(tab)
 	m.StatusBar.UpdateTimeRangeFromChips(m.SearchBar.State.Chips)
@@ -287,6 +356,8 @@ func (m *Model) saveSearchBarToTab(tab *Tab) {
 	tab.AvailableVariables = m.SearchBar.AvailableVariables
 	tab.VariableMetadata = m.SearchBar.VariableMetadata
 	tab.FieldValues = m.SearchBar.FieldValues
+	// ClientType is static per tab, usually no need to save back, 
+	// but if we allowed changing client type dynamically, we would.
 }
 
 // restoreSearchBarFromTab restores the search bar state from the given tab
@@ -299,6 +370,7 @@ func (m *Model) restoreSearchBarFromTab(tab *Tab) {
 	m.SearchBar.AvailableVariables = tab.AvailableVariables
 	m.SearchBar.VariableMetadata = tab.VariableMetadata
 	m.SearchBar.FieldValues = tab.FieldValues
+	m.SearchBar.ClientType = tab.ClientType
 	// Sync the text input with the restored state
 	m.SearchBar.TextInput.SetValue(tab.SearchState.CurrentInput)
 }
@@ -574,6 +646,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.Focus == FocusInheritSelect {
 			return m.handleInheritSelect(msg)
 		}
+		// Handle confirmation mode
+		if m.Focus == FocusConfirmation {
+			return m.handleConfirmation(msg)
+		}
 		// Handle context selection mode
 		if m.Focus == FocusContextSelect {
 			return m.handleContextSelect(msg)
@@ -754,7 +830,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Load initial contexts
 		log.Printf("[DEBUG] TUI InitMsg received, initialContexts=%v", m.InitialContexts)
 
-		// First, create all tabs (this will clear the search bar)
 		var initCmds []tea.Cmd
 		for _, ctxID := range m.InitialContexts {
 			search := m.InitialSearch
@@ -766,42 +841,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			initCmds = append(initCmds, m.addTabCmd(ctxID, &tabSearch))
 		}
 
-		// Populate search bar with server-side query information
-		// All chips are purely informational - no client-side filtering is applied
+		// Switch to first tab initially
 		if len(m.Tabs) > 0 {
-			// Add context chip (informational)
-			if len(m.InitialContexts) > 0 {
-				contextChip := Chip{
-					Type:    ChipTypeContext,
-					Value:   m.InitialContexts[0], // Show first context
-					Display: "context:" + m.InitialContexts[0],
-				}
-				m.SearchBar.State.Chips = append(m.SearchBar.State.Chips, contextChip)
-			}
-
-			// Add inherit chips (informational)
-			for _, inherit := range m.InitialInherits {
-				inheritChip := Chip{
-					Type:    ChipTypeInherit,
-					Value:   inherit,
-					Display: "inherit:" + inherit,
-				}
-				m.SearchBar.State.Chips = append(m.SearchBar.State.Chips, inheritChip)
-			}
-
-			// Add chips from InitialSearch (time range, size, native query, etc.)
-			if m.InitialSearch != nil {
-				m.SearchBar.PopulateFromSearch(m.InitialSearch)
-			}
-
-			// Sync to the first tab's search state
-			m.Tabs[0].SearchState = m.SearchBar.State
-			// Update status bar to show time range from chips
-			m.StatusBar.UpdateTimeRangeFromChips(m.SearchBar.State.Chips)
-			log.Printf("[DEBUG] TUI InitMsg: populated search bar with %d informational chips", len(m.SearchBar.State.Chips))
+			m.switchToTab(0)
 		}
 
-		log.Printf("[DEBUG] TUI InitMsg: created tabs, tabCount=%d, cmdCount=%d, initialInherits=%v", len(m.Tabs), len(initCmds), m.InitialInherits)
+		log.Printf("[DEBUG] TUI InitMsg: created %d tabs", len(m.Tabs))
 		return m, tea.Batch(initCmds...)
 
 	case AddTabMsg:
@@ -849,7 +894,13 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.Keys.CloseTab):
-		return m, m.closeCurrentTab()
+		if len(m.Tabs) <= 1 {
+			m.Confirmation = ConfirmQuitApp
+		} else {
+			m.Confirmation = ConfirmCloseTab
+		}
+		m.Focus = FocusConfirmation
+		return m, nil
 
 	case key.Matches(msg, m.Keys.ToggleSidebar):
 		m.DetailsVisible = !m.DetailsVisible
@@ -1105,6 +1156,30 @@ func (m Model) handleInheritSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			search := m.AvailableSearches[m.InheritCursor]
 			m.ActiveSearches[search] = !m.ActiveSearches[search]
 		}
+	}
+
+	return m, nil
+}
+
+// handleConfirmation handles input when in confirmation mode
+func (m Model) handleConfirmation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "Y":
+		m.Focus = FocusList
+		if m.Confirmation == ConfirmQuitApp {
+			m.cleanup()
+			return m, tea.Quit
+		}
+		return m, m.closeCurrentTab()
+
+	case "n", "N":
+		m.Focus = FocusList
+		return m, nil
+	}
+
+	if msg.Type == tea.KeyEscape {
+		m.Focus = FocusList
+		return m, nil
 	}
 
 	return m, nil
@@ -2129,6 +2204,11 @@ func (m Model) View() string {
 		return m.renderInheritSelectOverlay()
 	}
 
+	// Render confirmation overlay if active
+	if m.Focus == FocusConfirmation {
+		return m.renderConfirmationOverlay()
+	}
+
 	var sections []string
 
 	// Header (tabs)
@@ -2145,6 +2225,43 @@ func (m Model) View() string {
 	sections = append(sections, m.renderSearchFooter())
 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
+}
+
+// renderConfirmationOverlay renders the confirmation modal
+func (m Model) renderConfirmationOverlay() string {
+	var title, message string
+	if m.Confirmation == ConfirmQuitApp {
+		title = "Quit Application?"
+		message = "Are you sure you want to quit? (y/N)"
+	} else {
+		title = "Close Tab?"
+		message = "Are you sure you want to close this tab? (y/N)"
+	}
+
+	// Build the modal content
+	content := lipgloss.JoinVertical(lipgloss.Center,
+		m.Styles.SidebarTitle.Render(title),
+		"",
+		m.Styles.SidebarValue.Render(message),
+	)
+
+	// Box it
+	modalStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ColorPrimary).
+		Padding(1, 4).
+		Align(lipgloss.Center)
+
+	modal := modalStyle.Render(content)
+
+	// Center on screen
+	return lipgloss.Place(
+		m.Width,
+		m.Height,
+		lipgloss.Center,
+		lipgloss.Center,
+		modal,
+	)
 }
 
 // renderContextSelectOverlay renders the context selection modal

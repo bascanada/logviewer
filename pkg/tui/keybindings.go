@@ -78,8 +78,8 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("Ctrl+t", "new tab"),
 		),
 		CloseTab: key.NewBinding(
-			key.WithKeys("ctrl+w"),
-			key.WithHelp("Ctrl+w", "close tab"),
+			key.WithKeys("ctrl+w", "q"),
+			key.WithHelp("Ctrl+w/q", "close tab"),
 		),
 		ToggleSidebar: key.NewBinding(
 			key.WithKeys("enter", "d"),
@@ -118,8 +118,8 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("?", "help"),
 		),
 		Quit: key.NewBinding(
-			key.WithKeys("q", "ctrl+c"),
-			key.WithHelp("q", "quit"),
+			key.WithKeys("ctrl+c"),
+			key.WithHelp("Ctrl+c", "quit"),
 		),
 	}
 }

@@ -27,6 +27,8 @@ const (
 	ChipTypeContext
 	// ChipTypeInherit represents an inherited search template (informational only)
 	ChipTypeInherit
+	// ChipTypeOption represents a backend-specific search option (e.g., index, sourcetype)
+	ChipTypeOption
 )
 
 // Chip represents a single search component in the chip-based search bar
@@ -74,6 +76,8 @@ const (
 	AutocompleteContextValue
 	// AutocompleteContextVariable suggests $variables
 	AutocompleteContextVariable
+	// AutocompleteContextOption suggests backend options (e.g., index, namespace)
+	AutocompleteContextOption
 )
 
 // Suggestion represents an autocomplete option

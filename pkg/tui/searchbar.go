@@ -29,6 +29,7 @@ type SearchBarStyles struct {
 	ChipSize         lipgloss.Style
 	ChipContext      lipgloss.Style
 	ChipInherit      lipgloss.Style
+	ChipOption       lipgloss.Style
 	ChipSelected     lipgloss.Style
 	InputActive      lipgloss.Style
 	InputInactive    lipgloss.Style
@@ -96,6 +97,11 @@ func DefaultSearchBarStyles() SearchBarStyles {
 			Foreground(ColorBg).
 			Padding(0, 1).
 			MarginRight(1),
+		ChipOption: lipgloss.NewStyle().
+			Background(lipgloss.Color("30")). // Teal/Dark Cyan
+			Foreground(ColorBg).
+			Padding(0, 1).
+			MarginRight(1),
 		ChipSelected: lipgloss.NewStyle().
 			Background(ColorPrimary).
 			Foreground(ColorBg).
@@ -129,6 +135,7 @@ type SearchBar struct {
 	Styles    SearchBarStyles
 	Width     int
 	Focused   bool
+	ClientType string // Used to suggest backend-specific options
 
 	// Data sources for autocomplete
 	AvailableFields    []string            // Fields discovered from loaded entries
@@ -435,6 +442,8 @@ func (s SearchBar) getChipStyle(chipType ChipType) lipgloss.Style {
 		return s.Styles.ChipContext
 	case ChipTypeInherit:
 		return s.Styles.ChipInherit
+	case ChipTypeOption:
+		return s.Styles.ChipOption
 	default:
 		return s.Styles.ChipField
 	}
@@ -507,13 +516,28 @@ func (s *SearchBar) generateSuggestions() []Suggestion {
 		return s.suggestValues(field)
 	}
 
-	// Check if input contains a partial field name
-	if input != "" {
-		// Suggest matching fields
-		return s.suggestFields(input)
+	// Check if input matches a known option prefix (e.g. "index:")
+	if idx := strings.Index(input, ":"); idx != -1 {
+		key := input[:idx]
+		knownOptions := s.getKnownOptions(s.ClientType)
+		for _, opt := range knownOptions {
+			if key == opt {
+				// It's a known option, maybe suggest values?
+				// For now, no specific value suggestions for options, let user type
+				return nil
+			}
+		}
 	}
 
-	// Default: show time range options, size, native query, and fields
+	// Check if input contains a partial field name
+	if input != "" {
+		// Suggest matching fields AND options
+		suggestions := s.suggestFields(input)
+		suggestions = append(suggestions, s.suggestOptions(input)...)
+		return suggestions
+	}
+
+	// Default: show time range options, size, native query, fields, and options
 	suggestions := []Suggestion{
 		{Text: "last:", Description: "relative time (e.g., 1h, 24h)", Context: AutocompleteContextField},
 		{Text: "from:", Description: "start time", Context: AutocompleteContextField},
@@ -521,11 +545,54 @@ func (s *SearchBar) generateSuggestions() []Suggestion {
 		{Text: "size:", Description: "result limit (e.g., 100, 500)", Context: AutocompleteContextField},
 		{Text: "query:", Description: "native query (SPL, Lucene)", Context: AutocompleteContextField},
 	}
+	
+	// Add top options for this client type
+	optionSuggestions := s.suggestOptions("")
+	if len(optionSuggestions) > 0 {
+		suggestions = append(suggestions, optionSuggestions...)
+	}
+
 	fieldSuggestions := s.suggestFields("")
 	if len(fieldSuggestions) > 2 {
 		fieldSuggestions = fieldSuggestions[:2]
 	}
 	suggestions = append(suggestions, fieldSuggestions...)
+	return suggestions
+}
+
+// getKnownOptions returns a list of valid options for the current client type
+func (s *SearchBar) getKnownOptions(clientType string) []string {
+	switch strings.ToLower(clientType) {
+	case "splunk":
+		return []string{"index", "fields"}
+	case "opensearch", "kibana", "elasticsearch":
+		return []string{"index"}
+	case "cloudwatch":
+		return []string{"logGroupName", "useInsights"}
+	case "k8s", "kubernetes":
+		return []string{"namespace", "pod", "container", "labelSelector", "previous", "timestamp"}
+	case "docker":
+		return []string{"container", "service", "project", "showStdout", "showStderr", "timestamps", "details"}
+	default:
+		return []string{"index", "namespace"} // Generic fallbacks
+	}
+}
+
+// suggestOptions suggests backend options matching the prefix
+func (s *SearchBar) suggestOptions(prefix string) []Suggestion {
+	var suggestions []Suggestion
+	prefix = strings.ToLower(prefix)
+	
+	options := s.getKnownOptions(s.ClientType)
+	for _, opt := range options {
+		if prefix == "" || strings.HasPrefix(strings.ToLower(opt), prefix) {
+			suggestions = append(suggestions, Suggestion{
+				Text:        opt + ":",
+				Description: fmt.Sprintf("option (%s)", s.ClientType),
+				Context:     AutocompleteContextOption,
+			})
+		}
+	}
 	return suggestions
 }
 
@@ -718,6 +785,11 @@ func (s *SearchBar) acceptSuggestion(suggestion Suggestion) {
 		}
 		s.State.AddChip(chip)
 		s.TextInput.SetValue("")
+
+	case AutocompleteContextOption:
+		// Set input to "option:" and wait for value
+		s.TextInput.SetValue(suggestion.Text)
+		s.State.CurrentInput = s.TextInput.Value()
 	}
 }
 
@@ -780,6 +852,24 @@ func (s *SearchBar) parseInput(input string) Chip {
 			Field:   "size",
 			Value:   strings.TrimPrefix(input, "size:"),
 			Display: input,
+		}
+	}
+
+	// Check for known client options (e.g. index:main)
+	if idx := strings.Index(input, ":"); idx != -1 {
+		key := input[:idx]
+		val := input[idx+1:]
+		knownOptions := s.getKnownOptions(s.ClientType)
+		for _, opt := range knownOptions {
+			if key == opt {
+				return Chip{
+					Type:     ChipTypeOption,
+					Field:    key,
+					Value:    val,
+					Display:  input,
+					Editable: true,
+				}
+			}
 		}
 	}
 
@@ -1213,6 +1303,24 @@ func (s *SearchBar) PopulateFromSearch(search *client.LogSearch) {
 		filterChips := filterToChips(search.Filter)
 		s.State.Chips = append(s.State.Chips, filterChips...)
 	}
+
+	// Add Options chips (informational/configurable scope)
+	var optKeys []string
+	for k := range search.Options {
+		optKeys = append(optKeys, k)
+	}
+	sort.Strings(optKeys)
+	for _, k := range optKeys {
+		v := search.Options[k]
+		valStr := fmt.Sprintf("%v", v)
+		s.State.Chips = append(s.State.Chips, Chip{
+			Type:     ChipTypeOption,
+			Field:    k,
+			Value:    valStr,
+			Display:  k + ":" + valStr,
+			Editable: true,
+		})
+	}
 }
 
 // mapUIOperatorToClient converts a UI operator to a client operator and negate flag
@@ -1305,6 +1413,12 @@ func (s *SearchBar) BuildSearchFromChips() *client.LogSearch {
 			if chip.GroupFilter != nil {
 				filterChips = append(filterChips, *chip.GroupFilter)
 			}
+
+		case ChipTypeOption:
+			if search.Options == nil {
+				search.Options = make(map[string]interface{})
+			}
+			search.Options[chip.Field] = chip.Value
 		}
 	}
 
