@@ -15,8 +15,8 @@ import (
 var tuiCmd = &cobra.Command{
 	Use:     "tui",
 	Aliases: []string{"live", "ui"},
-	Short:   "Launch interactive TUI for log viewing",
-	Long: `Launch an interactive Terminal User Interface for browsing and filtering logs.
+	Short:   "Launch interactive TUI (Alpha) for log viewing",
+	Long: `Launch an interactive Terminal User Interface (Alpha) for browsing and filtering logs.
 
 The TUI provides:
   - Tab-based navigation between multiple contexts
@@ -24,6 +24,8 @@ The TUI provides:
   - Vim-style navigation (j/k, gg, G)
   - Full-text search with /
   - Detailed JSON field inspection in sidebar
+
+> **Note:** The TUI is currently in **Alpha**. Features may change.
 
 Examples:
   # Launch TUI with current context
