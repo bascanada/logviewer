@@ -12,13 +12,13 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/TylerBrock/colorjson"
+	"github.com/atotto/clipboard"
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/client/config"
 	"github.com/bascanada/logviewer/pkg/log/factory"
 	"github.com/bascanada/logviewer/pkg/log/printer"
 	"github.com/bascanada/logviewer/pkg/ty"
-	"github.com/TylerBrock/colorjson"
-	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -47,22 +47,22 @@ const (
 
 // Tab represents an open context/query tab
 type Tab struct {
-	ID          string
-	Name        string
-	ContextID   string
-	Entries     []client.LogEntry
-	Cursor      int
-	ViewOffset  int
-	Search      *client.LogSearch
-	Inherits    []string           // Search templates to inherit
-	Result      client.LogSearchResult
-	Template    *template.Template // Printer template for formatting entries
-	Fields      ty.UniSet[string]  // Available fields with their values from GetFields()
-	Loading     bool
-	Error       error
-	StreamChan  <-chan []client.LogEntry // For live streaming
-	ErrorChan   <-chan error             // For async errors from backend
-	CancelFunc  context.CancelFunc
+	ID         string
+	Name       string
+	ContextID  string
+	Entries    []client.LogEntry
+	Cursor     int
+	ViewOffset int
+	Search     *client.LogSearch
+	Inherits   []string // Search templates to inherit
+	Result     client.LogSearchResult
+	Template   *template.Template // Printer template for formatting entries
+	Fields     ty.UniSet[string]  // Available fields with their values from GetFields()
+	Loading    bool
+	Error      error
+	StreamChan <-chan []client.LogEntry // For live streaming
+	ErrorChan  <-chan error             // For async errors from backend
+	CancelFunc context.CancelFunc
 
 	// Per-tab search bar state
 	SearchState        ChipSearchState     // The chips and input state for this tab
@@ -72,24 +72,24 @@ type Tab struct {
 	FieldValues        map[string][]string // Field -> possible values (cached)
 
 	// JSON detection cache
-	JSONCache          map[string][]string // Maps message hash -> detected JSON strings
+	JSONCache map[string][]string // Maps message hash -> detected JSON strings
 
 	// Pagination state
-	PaginationInfo     *client.PaginationInfo // Pagination info from last search
-	LoadingMore        bool                   // True when fetching more pages
+	PaginationInfo *client.PaginationInfo // Pagination info from last search
+	LoadingMore    bool                   // True when fetching more pages
 }
 
 // LogEntryMsg is sent when new log entries arrive
 type LogEntryMsg struct {
 	TabID          string
 	Entries        []client.LogEntry
-	Result         client.LogSearchResult     // The search result (for printer config)
-	Template       *template.Template         // Compiled printer template
-	Fields         ty.UniSet[string]          // Available fields with values from GetFields()
-	StreamChan     <-chan []client.LogEntry   // For live streaming (if applicable)
-	ErrorChan      <-chan error               // For async errors from backend
-	PaginationInfo *client.PaginationInfo     // Pagination info (HasMore, NextPageToken)
-	IsPagination   bool                       // True if this is a pagination response (prepend instead of append)
+	Result         client.LogSearchResult   // The search result (for printer config)
+	Template       *template.Template       // Compiled printer template
+	Fields         ty.UniSet[string]        // Available fields with values from GetFields()
+	StreamChan     <-chan []client.LogEntry // For live streaming (if applicable)
+	ErrorChan      <-chan error             // For async errors from backend
+	PaginationInfo *client.PaginationInfo   // Pagination info (HasMore, NextPageToken)
+	IsPagination   bool                     // True if this is a pagination response (prepend instead of append)
 }
 
 // StreamBatchMsg delivers streamed log entries
@@ -123,7 +123,7 @@ type InitMsg struct{}
 type ClearStatusMsg struct{}
 
 // Model is the main TUI state
-type Model struct{
+type Model struct {
 	// Window dimensions
 	Width  int
 	Height int
@@ -138,16 +138,16 @@ type Model struct{
 	SidebarMode    SidebarMode // Entry details or Global fields
 	SplitRatio     float64     // 0.0 to 1.0, ratio for log list
 	ShowHelp       bool
-	LineWrapping   bool        // Enable/disable line wrapping for multiline logs
+	LineWrapping   bool // Enable/disable line wrapping for multiline logs
 
 	// Context selection state (for Ctrl+T new tab)
 	AvailableContexts []string
 	ContextCursor     int
 
 	// Inherit selection state (for I key)
-	AvailableSearches []string          // Search template names from config
-	ActiveSearches    map[string]bool   // Currently active inherited searches
-	InheritCursor     int               // Cursor for inherit selection
+	AvailableSearches []string        // Search template names from config
+	ActiveSearches    map[string]bool // Currently active inherited searches
+	InheritCursor     int             // Cursor for inherit selection
 
 	// Components
 	SearchBar SearchBar
@@ -408,7 +408,7 @@ func (m *Model) loadTabLogsCmd(tab *Tab) tea.Cmd {
 			Result:         result,
 			Template:       tmpl,
 			Fields:         fields,
-			StreamChan:     entryChan, // Will be handled by Update loop via subscription
+			StreamChan:     entryChan,    // Will be handled by Update loop via subscription
 			ErrorChan:      result.Err(), // Monitor for async errors from backend
 			PaginationInfo: paginationInfo,
 			IsPagination:   false, // Initial load, not pagination
@@ -1347,9 +1347,9 @@ func (m *Model) cleanup() {
 
 // updateViewportSizes recalculates component sizes
 func (m *Model) updateViewportSizes() {
-	headerHeight := 2  // Tab bar
-	statusHeight := 4  // Status bar (2 lines + borders)
-	footerHeight := 3  // Search bar + help (may grow with autocomplete)
+	headerHeight := 2 // Tab bar
+	statusHeight := 4 // Status bar (2 lines + borders)
+	footerHeight := 3 // Search bar + help (may grow with autocomplete)
 	mainHeight := m.Height - headerHeight - statusHeight - footerHeight
 
 	if mainHeight < 1 {
@@ -1391,7 +1391,7 @@ func (m *Model) updateViewportContent() {
 	if tab.Error != nil {
 		// Show error with styling and helpful information
 		errorStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("9")).  // Red
+			Foreground(lipgloss.Color("9")). // Red
 			Bold(true).
 			Padding(1, 2).
 			Border(lipgloss.RoundedBorder()).
@@ -1494,7 +1494,7 @@ func (m *Model) updateViewportContent() {
 
 			if i == tab.Cursor {
 				// Check if cursor entry fits in remaining space
-				if totalVisualLines + entryHeight <= visibleLines {
+				if totalVisualLines+entryHeight <= visibleLines {
 					cursorVisible = true
 				}
 				break
@@ -1527,7 +1527,7 @@ func (m *Model) updateViewportContent() {
 						entryHeight = 1 // Minimum 1 line per entry
 					}
 
-					if accumulatedHeight + entryHeight > visibleLines && i < tab.Cursor {
+					if accumulatedHeight+entryHeight > visibleLines && i < tab.Cursor {
 						// This entry won't fit, start from next one
 						tab.ViewOffset = i + 1
 						break
