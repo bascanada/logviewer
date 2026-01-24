@@ -12,9 +12,9 @@ import (
 	"github.com/fatih/color"
 )
 
-// findJSON finds all valid JSON objects and arrays in a string.
+// FindJSON finds all valid JSON objects and arrays in a string.
 // Returns slices of JSON strings found in the input.
-func findJSON(s string) []string {
+func FindJSON(s string) []string {
 	var results []string
 	runes := []rune(s)
 
@@ -24,7 +24,7 @@ func findJSON(s string) []string {
 		}
 
 		// Try to extract JSON starting at this position
-		if jsonStr := extractJSON(runes, i); jsonStr != "" {
+		if jsonStr := ExtractJSON(runes, i); jsonStr != "" {
 			// Validate it's actually valid JSON
 			var testObj interface{}
 			if err := json.Unmarshal([]byte(jsonStr), &testObj); err == nil {
@@ -50,9 +50,9 @@ func findJSON(s string) []string {
 	return results
 }
 
-// extractJSON attempts to extract a complete JSON object or array starting at position start.
+// ExtractJSON attempts to extract a complete JSON object or array starting at position start.
 // Returns the JSON string if valid, or empty string if not.
-func extractJSON(runes []rune, start int) string {
+func ExtractJSON(runes []rune, start int) string {
 	if start >= len(runes) {
 		return ""
 	}
@@ -146,7 +146,7 @@ func KV(values ty.MI) string {
 // Outputs formatted, indented (and colored if enabled) JSON on new lines.
 // Usage in template: {{.Message}}{{ExpandJson .Message}}
 func ExpandJSON(value string) string {
-	jsonStrings := findJSON(value)
+    jsonStrings := FindJSON(value)
 	if len(jsonStrings) == 0 {
 		return ""
 	}
@@ -206,7 +206,7 @@ func ExpandJSONLimit(value string, maxLines int) string {
 // Useful for preventing deeply nested JSON from cluttering output.
 // Usage in template: {{ExpandJsonLimitDepth .Message 3}}
 func ExpandJSONLimitDepth(value string, maxDepth int) string {
-	jsonStrings := findJSON(value)
+    jsonStrings := FindJSON(value)
 	if len(jsonStrings) == 0 {
 		return ""
 	}
@@ -283,7 +283,7 @@ func truncateDepth(obj interface{}, maxDepth, currentDepth int) interface{} {
 // Useful for short JSON payloads where vertical space is limited.
 // Usage in template: {{ExpandJsonCompact .Message}}
 func ExpandJSONCompact(value string) string {
-	jsonStrings := findJSON(value)
+    jsonStrings := FindJSON(value)
 	if len(jsonStrings) == 0 {
 		return ""
 	}

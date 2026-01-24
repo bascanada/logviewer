@@ -124,6 +124,13 @@ logviewer -i app-logs --refresh 2s query log
 logviewer -i app-logs --format "[{{.Timestamp.Format \"15:04:05\"}}] {{.Level}}: {{.Message}}" query log
 ```
 
+### Interactive TUI (Alpha)
+```bash
+# Launch the interactive Text User Interface
+logviewer tui -i context
+```
+> **Note:** The TUI is currently in **Alpha**. See [TUI Documentation](https://github.com/bascanada/logviewer/wiki/TUI-Mode-(Alpha)) for details.
+
 ### AI-powered investigation
 ```bash
 # Start MCP server for AI agents
