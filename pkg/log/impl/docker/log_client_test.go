@@ -382,9 +382,9 @@ func TestGetLogClient(t *testing.T) {
 	t.Run("Host parameter handling", func(t *testing.T) {
 		// Test that various host formats are handled
 		hosts := []string{
-			"",                          // Default
+			"",                            // Default
 			"unix:///var/run/docker.sock", // Unix socket
-			"tcp://localhost:2375",       // TCP
+			"tcp://localhost:2375",        // TCP
 		}
 		for _, host := range hosts {
 			// Just verify no panic on parameter handling

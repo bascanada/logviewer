@@ -266,7 +266,7 @@ func NewConfigManager(path string) (*ConfigManager, error) {
 	cm.watcher = watcher
 
 	if err := cm.Reload(); err != nil {
-		watcher.Close()
+		_ = watcher.Close()
 		return nil, err
 	}
 
@@ -1112,17 +1112,17 @@ func generatePromptContent(
 
 	// Section 3: Field Extraction Info
 	fe := ctxConfig.Search.FieldExtraction
-	if fe.Json.Set && fe.Json.Value {
+	if fe.JSON.Set && fe.JSON.Value {
 		sb.WriteString("## Field Extraction\n")
 		sb.WriteString("- **Format:** JSON structured logs\n")
-		if fe.JsonMessageKey.Set {
-			sb.WriteString(fmt.Sprintf("  - Message key: `%s`\n", fe.JsonMessageKey.Value))
+		if fe.JSONMessageKey.Set {
+			sb.WriteString(fmt.Sprintf("  - Message key: `%s`\n", fe.JSONMessageKey.Value))
 		}
-		if fe.JsonLevelKey.Set {
-			sb.WriteString(fmt.Sprintf("  - Level key: `%s`\n", fe.JsonLevelKey.Value))
+		if fe.JSONLevelKey.Set {
+			sb.WriteString(fmt.Sprintf("  - Level key: `%s`\n", fe.JSONLevelKey.Value))
 		}
-		if fe.JsonTimestampKey.Set {
-			sb.WriteString(fmt.Sprintf("  - Timestamp key: `%s`\n", fe.JsonTimestampKey.Value))
+		if fe.JSONTimestampKey.Set {
+			sb.WriteString(fmt.Sprintf("  - Timestamp key: `%s`\n", fe.JSONTimestampKey.Value))
 		}
 		sb.WriteString("\n")
 	}

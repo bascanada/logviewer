@@ -1,7 +1,10 @@
+// Package factory provides helpers to construct search and client factories
+// used across the application.
 package factory
 
 import (
 	"context"
+
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/client/config"
 )
@@ -13,6 +16,9 @@ type SearchFactory interface {
 	// If fields is empty, returns values for all fields found in the logs.
 	GetFieldValues(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, fields []string, runtimeVars map[string]string) (map[string][]string, error)
 }
+
+// SearchFactory exposes methods to construct or retrieve search contexts
+// and results for a given search request.
 
 type logSearchFactory struct {
 	clientsFactory  LogClientFactory

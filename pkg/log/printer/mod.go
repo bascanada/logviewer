@@ -11,10 +11,18 @@ import (
 	"github.com/bascanada/logviewer/pkg/log/client"
 )
 
+// LogPrinter represents an entity capable of rendering log search results to
+// a target output.
 type LogPrinter interface {
+	// Display renders `result` to the configured output. The implementation may
+	// stream results and return (continuous=true) when following logs.
 	Display(ctx context.Context, result client.LogSearchResult) error
 }
 
+// WrapIoWritter performs the common work of writing entries from a
+// LogSearchResult to an `io.Writer`. It returns a boolean indicating whether
+// the result will continue streaming (follow) and an error for initial
+// processing failures.
 func WrapIoWritter(ctx context.Context, result client.LogSearchResult, writer io.Writer, update func(), onError func(error)) (bool, error) {
 
 	printerOptions := result.GetSearch().PrinterOptions

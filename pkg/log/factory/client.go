@@ -1,3 +1,6 @@
+// Package factory provides helpers to construct log client factories used by
+// the application. It exposes `GetLogClientFactory` which builds lazily
+// initialized clients based on configuration.
 package factory
 
 import (
@@ -25,6 +28,9 @@ const (
 type LogClientFactory interface {
 	Get(name string) (*client.LogClient, error)
 }
+
+// LogClientFactory provides an abstraction for obtaining a configured
+// `client.LogClient` by name.
 
 type logClientFactory struct {
 	clients ty.LazyMap[string, client.LogClient]
@@ -107,7 +113,7 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
 				authOptions := splunk.SplunkAuthOptions{}
 				if authMap, ok := v.Options["auth"].(ty.MI); ok {
-					authOptions.Header = ty.MI(authMap).GetMS("header")
+					authOptions.Header = authMap.GetMS("header")
 				}
 				vv, err := splunk.GetClient(splunk.SplunkLogSearchClientOptions{
 					Url:        v.Options.GetString("url"),
@@ -150,3 +156,6 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 
 	return logClientFactory, nil
 }
+
+// GetLogClientFactory builds a LogClientFactory from the provided
+// configuration, lazily constructing clients on demand.

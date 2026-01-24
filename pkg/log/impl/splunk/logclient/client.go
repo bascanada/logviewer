@@ -94,14 +94,14 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 	for {
 		if tryCount >= maxRetries {
 			// When the job is done, we should cancel it
-			defer s.client.CancelSearchJob(searchJobResponse.Sid)
+			defer func() { _ = s.client.CancelSearchJob(searchJobResponse.Sid) }()
 			return nil, errors.New("number of retry for splunk job failed")
 		}
 
 		select {
 		case <-ctx.Done():
 			// When the job is done, we should cancel it
-			defer s.client.CancelSearchJob(searchJobResponse.Sid)
+			defer func() { _ = s.client.CancelSearchJob(searchJobResponse.Sid) }()
 			return nil, ctx.Err()
 		case <-time.After(pollInterval):
 		}
@@ -122,7 +122,7 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 
 		if isDone {
 			// When the job is done, we should cancel it
-			defer s.client.CancelSearchJob(searchJobResponse.Sid)
+			defer func() { _ = s.client.CancelSearchJob(searchJobResponse.Sid) }()
 			break
 		}
 
@@ -211,14 +211,14 @@ func (s SplunkLogSearchClient) GetFieldValues(ctx context.Context, search *clien
 	for tryCount := 0; tryCount < maxRetries; tryCount++ {
 		select {
 		case <-ctx.Done():
-			s.client.CancelSearchJob(searchJobResponse.Sid)
+			_ = s.client.CancelSearchJob(searchJobResponse.Sid)
 			return nil, ctx.Err()
 		case <-time.After(pollInterval):
 		}
 
 		status, err := s.client.GetSearchStatus(searchJobResponse.Sid)
 		if err != nil {
-			s.client.CancelSearchJob(searchJobResponse.Sid)
+			_ = s.client.CancelSearchJob(searchJobResponse.Sid)
 			return nil, err
 		}
 
@@ -231,13 +231,13 @@ func (s SplunkLogSearchClient) GetFieldValues(ctx context.Context, search *clien
 	}
 
 	if !isDone {
-		s.client.CancelSearchJob(searchJobResponse.Sid)
+		_ = s.client.CancelSearchJob(searchJobResponse.Sid)
 		return nil, fmt.Errorf("timeout waiting for splunk job")
 	}
 
 	// Get results from /results endpoint since we're using stats
 	results, err := s.client.GetSearchResult(searchJobResponse.Sid, 0, 1, true)
-	s.client.CancelSearchJob(searchJobResponse.Sid)
+	_ = s.client.CancelSearchJob(searchJobResponse.Sid)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get results: %w", err)
 	}

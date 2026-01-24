@@ -11,13 +11,13 @@ import (
 type MockLogSearchResult struct {
 	Entries []LogEntry
 	Channel chan []LogEntry
-    Search *LogSearch
+	Search  *LogSearch
 }
 
 func (m *MockLogSearchResult) GetSearch() *LogSearch {
-    if m.Search != nil {
-        return m.Search
-    }
+	if m.Search != nil {
+		return m.Search
+	}
 	return &LogSearch{Options: ty.MI{"__context_id__": "test-ctx"}}
 }
 
@@ -43,14 +43,14 @@ func TestMultiLogSearchResult_GetEntries_Streaming(t *testing.T) {
 	mock1 := &MockLogSearchResult{
 		Entries: []LogEntry{{Message: "init1", Timestamp: time.Now()}},
 		Channel: ch1,
-        Search: &LogSearch{Options: ty.MI{"__context_id__": "ctx1"}},
+		Search:  &LogSearch{Options: ty.MI{"__context_id__": "ctx1"}},
 	}
 
 	ch2 := make(chan []LogEntry)
 	mock2 := &MockLogSearchResult{
 		Entries: []LogEntry{{Message: "init2", Timestamp: time.Now()}},
 		Channel: ch2,
-        Search: &LogSearch{Options: ty.MI{"__context_id__": "ctx2"}},
+		Search:  &LogSearch{Options: ty.MI{"__context_id__": "ctx2"}},
 	}
 
 	multiRes, err := NewMultiLogSearchResult(&LogSearch{})
@@ -68,15 +68,15 @@ func TestMultiLogSearchResult_GetEntries_Streaming(t *testing.T) {
 		t.Fatalf("GetEntries failed: %v", err)
 	}
 
-    // Check initial entries
-    if len(initialEntries) != 2 {
-        t.Errorf("Expected 2 initial entries, got %d", len(initialEntries))
-    }
+	// Check initial entries
+	if len(initialEntries) != 2 {
+		t.Errorf("Expected 2 initial entries, got %d", len(initialEntries))
+	}
 
-    // Check if channel is returned
-    if mergedCh == nil {
-        t.Fatal("Expected merged channel, got nil")
-    }
+	// Check if channel is returned
+	if mergedCh == nil {
+		t.Fatal("Expected merged channel, got nil")
+	}
 
 	// Test streaming
 	go func() {
@@ -90,20 +90,20 @@ func TestMultiLogSearchResult_GetEntries_Streaming(t *testing.T) {
 	count := 0
 	for entries := range mergedCh {
 		count++
-        for _, e := range entries {
-            if e.Message == "stream1" {
-                if e.ContextID != "ctx1" {
-                     t.Errorf("Expected ContextID ctx1 for stream1, got %s", e.ContextID)
-                }
-            } else if e.Message == "stream2" {
-                 if e.ContextID != "ctx2" {
-                     t.Errorf("Expected ContextID ctx2 for stream2, got %s", e.ContextID)
-                }
-            }
-        }
+		for _, e := range entries {
+			if e.Message == "stream1" {
+				if e.ContextID != "ctx1" {
+					t.Errorf("Expected ContextID ctx1 for stream1, got %s", e.ContextID)
+				}
+			} else if e.Message == "stream2" {
+				if e.ContextID != "ctx2" {
+					t.Errorf("Expected ContextID ctx2 for stream2, got %s", e.ContextID)
+				}
+			}
+		}
 	}
-    
-    // We expect at least 1 or 2 batches depending on how the loop and go scheduler work.
-    // The loop "for entries := range mergedCh" will exit when mergedChannel is closed.
-    // mergedChannel is closed when ch1 and ch2 are closed.
+
+	// We expect at least 1 or 2 batches depending on how the loop and go scheduler work.
+	// The loop "for entries := range mergedCh" will exit when mergedChannel is closed.
+	// mergedChannel is closed when ch1 and ch2 are closed.
 }

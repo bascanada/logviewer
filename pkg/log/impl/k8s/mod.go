@@ -303,7 +303,7 @@ func ensureKubeconfig(kubeconfig string) error {
 	// Replace 127.0.0.1 with localhost to match compose port mapping semantics
 	b, err := os.ReadFile(kubeconfig)
 	if err == nil {
-		updated := []byte{}
+		updated := make([]byte, 0, len(b))
 		updated = append(updated, b...)
 		// simple replacement (avoid bringing in strings dep already imported indirectly)
 		content := string(updated)

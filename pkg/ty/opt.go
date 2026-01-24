@@ -2,15 +2,18 @@ package ty
 
 import (
 	"encoding/json"
+
 	"gopkg.in/yaml.v3"
 )
 
+// Opt represents an optional value that tracks whether it is set and valid (not null).
 type Opt[T interface{}] struct {
 	Value T // inner value
 	Set   bool
 	Valid bool
 }
 
+// OptWrap creates a new Opt with the given value, set to valid and set.
 func OptWrap[T interface{}](value T) Opt[T] {
 	return Opt[T]{
 		Value: value,
@@ -19,6 +22,7 @@ func OptWrap[T interface{}](value T) Opt[T] {
 	}
 }
 
+// Merge merges the state of another Opt into this one if the other one is set.
 func (i *Opt[T]) Merge(or *Opt[T]) {
 	if or.Set {
 		i.Value = or.Value
@@ -27,21 +31,25 @@ func (i *Opt[T]) Merge(or *Opt[T]) {
 	}
 }
 
+// S sets the value and marks it as set and valid.
 func (i *Opt[T]) S(v T) {
 	i.Value = v
 	i.Set = true
 	i.Valid = true
 }
 
+// N marks the value as invalid (null).
 func (i *Opt[T]) N() {
 	i.Valid = false
 }
 
+// U marks the value as unset.
 func (i *Opt[T]) U() {
 	i.Set = false
 	i.Valid = false
 }
 
+// UnmarshalJSON implements json.Unmarshaler.
 func (i *Opt[T]) UnmarshalJSON(data []byte) error {
 	i.Set = true
 

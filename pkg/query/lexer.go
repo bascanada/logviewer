@@ -1,3 +1,5 @@
+// Package query provides a lexer and parser for the HL query expression
+// language used by the CLI and search backends.
 package query
 
 import (
@@ -281,7 +283,7 @@ func (l *Lexer) readQuotedString() (string, error) {
 
 	startPos := l.pos
 	for l.pos < len(l.input) {
-		if l.input[l.pos] == byte(quote) {
+		if l.input[l.pos] == quote {
 			value := l.input[startPos:l.pos]
 			l.pos++ // Skip closing quote
 			return value, nil

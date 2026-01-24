@@ -292,7 +292,7 @@ func (s *Server) queryFieldsHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) openapiHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/yaml")
 	w.WriteHeader(http.StatusOK)
-	w.Write(s.openapiSpec)
+	_, _ = w.Write(s.openapiSpec)
 }
 
 func (s *Server) contextsHandler(w http.ResponseWriter, r *http.Request) {

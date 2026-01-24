@@ -161,7 +161,7 @@ func init() {
 	// SSH
 	queryCommand.PersistentFlags().StringVar(&sshOptions.Addr, "ssh-addr", "", "SSH address and port localhost:22")
 	queryCommand.PersistentFlags().StringVar(&sshOptions.User, "ssh-user", "", "SSH user")
-	queryCommand.PersistentFlags().StringVar(&sshOptions.PrivateKey, "ssh-identifiy", "", "SSH private key , by default $HOME/.ssh/id_rsa")
+	queryCommand.PersistentFlags().StringVar(&sshOptions.PrivateKey, "ssh-identify", "", "SSH private key , by default $HOME/.ssh/id_rsa")
 	queryCommand.PersistentFlags().BoolVar(&sshOptions.DisablePTY, "ssh-disable-pty", false, "Disable requesting a PTY on SSH connections (useful for network devices)")
 
 	// CLOUDWATCH

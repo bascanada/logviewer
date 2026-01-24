@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -82,7 +83,7 @@ func (s *Server) Start() error {
 	// Block until we receive a shutdown signal or a server error
 	select {
 	case err := <-serverErrors:
-		if err != http.ErrServerClosed {
+		if !errors.Is(err, http.ErrServerClosed) {
 			return fmt.Errorf("server error: %w", err)
 		}
 

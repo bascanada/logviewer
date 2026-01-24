@@ -209,12 +209,12 @@ func TestReaderLogResult_GetEntries_Follow(t *testing.T) {
 
 		// Write some data and verify it's received
 		go func() {
-			pw.Write([]byte("streaming line 1\n"))
-			pw.Write([]byte("streaming line 2\n"))
-			pw.Close()
+			_, _ = pw.Write([]byte("streaming line 1\n"))
+			_, _ = pw.Write([]byte("streaming line 2\n"))
+			_ = pw.Close()
 		}()
 
-		received := []string{}
+		received := make([]string, 0)
 		for batch := range ch {
 			for _, entry := range batch {
 				received = append(received, entry.Message)
@@ -244,13 +244,13 @@ func TestReaderLogResult_GetEntries_Follow(t *testing.T) {
 		require.NotNil(t, ch)
 
 		// Write one line
-		pw.Write([]byte("first line\n"))
+		_, _ = pw.Write([]byte("first line\n"))
 
 		// Cancel context
 		cancel()
 
 		// Close the writer to allow goroutine to exit
-		pw.Close()
+		_ = pw.Close()
 
 		// Channel should eventually close
 		select {
@@ -508,7 +508,7 @@ func TestReaderLogResult_PreFiltered(t *testing.T) {
 				"__preFiltered__": true,
 			},
 		}
-		search.FieldExtraction.Json.S(true)
+		search.FieldExtraction.JSON.S(true)
 
 		lr := &ReaderLogResult{
 			search:  search,
@@ -527,7 +527,7 @@ func TestReaderLogResult_PreFiltered(t *testing.T) {
 		search := &client.LogSearch{
 			Fields: ty.MS{"level": "ERROR"},
 		}
-		search.FieldExtraction.Json.S(true)
+		search.FieldExtraction.JSON.S(true)
 
 		lr := &ReaderLogResult{
 			search:  search,

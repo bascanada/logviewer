@@ -1,3 +1,5 @@
+// Package reader provides helpers to adapt io.Reader sources into
+// LogSearchResult implementations used by the printing and search layers.
 package reader
 
 import (
@@ -13,8 +15,6 @@ import (
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/ty"
 )
-
-const maxBatchSize = 10
 
 type ReaderLogResult struct {
 	search  *client.LogSearch
@@ -86,7 +86,7 @@ func (lr *ReaderLogResult) parseBlock(block string) (*client.LogEntry, bool) {
 	client.ExtractJSONFromEntry(&entry, lr.search)
 
 	// Update field set for discovery
-	if lr.search.FieldExtraction.Json.Value {
+	if lr.search.FieldExtraction.JSON.Value {
 		for k, v := range entry.Fields {
 			lr.fields.Add(k, fmt.Sprintf("%v", v))
 		}
@@ -133,12 +133,12 @@ func (lr *ReaderLogResult) parseBlock(block string) (*client.LogEntry, bool) {
 	isPreFiltered := lr.search.Options.GetBool("__preFiltered__")
 
 	// DEBUG: Log preFiltered status
-	slog.Debug("parseBlock", "preFiltered", isPreFiltered, "jsonExtract", lr.search.FieldExtraction.Json.Value)
+	slog.Debug("parseBlock", "preFiltered", isPreFiltered, "jsonExtract", lr.search.FieldExtraction.JSON.Value)
 
 	// Apply filter using the new recursive filter system
 	// Skip filtering only if explicitly pre-filtered (local hl mode)
 	if !isPreFiltered {
-		if lr.namedGroupRegexExtraction != nil || lr.kvRegexExtraction != nil || lr.search.FieldExtraction.Json.Value {
+		if lr.namedGroupRegexExtraction != nil || lr.kvRegexExtraction != nil || lr.search.FieldExtraction.JSON.Value {
 			effectiveFilter := lr.search.GetEffectiveFilter()
 			if effectiveFilter != nil {
 				if !effectiveFilter.Match(entry) {
@@ -206,7 +206,7 @@ func (lr *ReaderLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, c
 
 	if !lr.search.Follow {
 		lr.loadEntries()
-		lr.closer.Close()
+		_ = lr.closer.Close()
 		return lr.entries, nil, nil
 	} else {
 		// Channel to receive lines from the scanner
@@ -234,7 +234,7 @@ func (lr *ReaderLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, c
 		if lr.search.Size.Set && lr.search.Size.Value > 0 {
 			captureLimit = lr.search.Size.Value
 		}
-		
+
 		timeout := time.NewTimer(500 * time.Millisecond)
 		capturing := true
 
@@ -250,7 +250,6 @@ func (lr *ReaderLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, c
 			case line, ok := <-lineChan:
 				if !ok {
 					// Scanner finished during capture
-					capturing = false
 					break CaptureLoop
 				}
 				// Parse synchronously
@@ -259,7 +258,6 @@ func (lr *ReaderLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, c
 				})
 			case <-timeout.C:
 				// Timeout reached, stop capturing
-				capturing = false
 				break CaptureLoop
 			}
 		}
@@ -268,11 +266,11 @@ func (lr *ReaderLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, c
 		lr.flushBlock(&pendingBlock, func(entry client.LogEntry) {
 			initialEntries = append(initialEntries, entry)
 		})
-		
+
 		// If scanner finished, we are done
 		select {
 		case <-doneChan:
-			lr.closer.Close()
+			_ = lr.closer.Close()
 			return initialEntries, nil, nil
 		default:
 		}
@@ -282,14 +280,14 @@ func (lr *ReaderLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, c
 
 		go func() {
 			defer close(c)
-			defer lr.closer.Close()
+			defer func() { _ = lr.closer.Close() }()
 
-			// We might have a partial pending block from Phase 1? 
+			// We might have a partial pending block from Phase 1?
 			// No, we flushed it above. pendingBlock is empty now.
 			// But wait, if processLine accumulated a partial line but didn't trigger onEntry,
-			// flushBlock forced it out as an entry. 
+			// flushBlock forced it out as an entry.
 			// This effectively "breaks" a multiline log that straddles the capture boundary.
-			// However, given the timeout/limit, this is an acceptable tradeoff to ensure 
+			// However, given the timeout/limit, this is an acceptable tradeoff to ensure
 			// history is displayed. Multiline logs usually arrive in a burst anyway.
 
 			onEntry := func(entry client.LogEntry) {

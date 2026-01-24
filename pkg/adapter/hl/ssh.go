@@ -24,7 +24,7 @@ import (
 // Returns a shell command string safe for SSH execution.
 func BuildSSHCommand(hlArgs []string, paths []string, fallbackCmd string) string {
 	// Build the hl command with proper escaping
-	var hlCmdParts []string
+	hlCmdParts := make([]string, 0, 1+len(hlArgs)+len(paths))
 	hlCmdParts = append(hlCmdParts, "hl")
 	for _, arg := range hlArgs {
 		hlCmdParts = append(hlCmdParts, shellEscape(arg))
@@ -40,7 +40,7 @@ func BuildSSHCommand(hlArgs []string, paths []string, fallbackCmd string) string
 		fallback = fallbackCmd
 	} else {
 		// Default fallback: cat the files
-		var fallbackParts []string
+		fallbackParts := make([]string, 0, 1+len(paths))
 		fallbackParts = append(fallbackParts, "cat")
 		for _, path := range paths {
 			fallbackParts = append(fallbackParts, shellEscape(path))
@@ -60,7 +60,7 @@ func BuildSSHCommand(hlArgs []string, paths []string, fallbackCmd string) string
 // The marker is printed to stderr so it doesn't interfere with log output.
 func BuildSSHCommandWithMarker(hlArgs []string, paths []string, fallbackCmd string) string {
 	// Build the hl command with proper escaping
-	var hlCmdParts []string
+	hlCmdParts := make([]string, 0, 1+len(hlArgs)+len(paths))
 	hlCmdParts = append(hlCmdParts, "hl")
 	for _, arg := range hlArgs {
 		hlCmdParts = append(hlCmdParts, shellEscape(arg))
@@ -75,7 +75,7 @@ func BuildSSHCommandWithMarker(hlArgs []string, paths []string, fallbackCmd stri
 	if fallbackCmd != "" {
 		fallback = fallbackCmd
 	} else {
-		var fallbackParts []string
+		fallbackParts := make([]string, 0, 1+len(paths))
 		fallbackParts = append(fallbackParts, "cat")
 		for _, path := range paths {
 			fallbackParts = append(fallbackParts, shellEscape(path))
@@ -94,7 +94,7 @@ func BuildSSHCommandWithMarker(hlArgs []string, paths []string, fallbackCmd stri
 // When in follow mode, we use tail -f as the fallback instead of cat.
 func BuildFollowSSHCommand(hlArgs []string, paths []string) string {
 	// For follow mode, the fallback should use tail -f
-	var fallbackParts []string
+	fallbackParts := make([]string, 0, 2+len(paths))
 	fallbackParts = append(fallbackParts, "tail", "-f")
 	for _, path := range paths {
 		fallbackParts = append(fallbackParts, shellEscape(path))
@@ -141,7 +141,7 @@ func isShellSafe(s string) bool {
 // ArgsToString converts a slice of arguments to a single command string.
 // Each argument is properly escaped.
 func ArgsToString(args []string) string {
-	var parts []string
+	parts := make([]string, 0, len(args))
 	for _, arg := range args {
 		parts = append(parts, shellEscape(arg))
 	}
