@@ -1,5 +1,10 @@
 # logviewer
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/bascanada/logviewer)](https://goreportcard.com/report/github.com/bascanada/logviewer)
+[![Build Status](https://github.com/bascanada/logviewer/actions/workflows/main.yaml/badge.svg)](https://github.com/bascanada/logviewer/actions/workflows/main.yaml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/bascanada/logviewer.svg)](https://pkg.go.dev/github.com/bascanada/logviewer)
+[![License](https://img.shields.io/github/license/bascanada/logviewer)](LICENSE)
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/bascanada/logviewer/main/logo.svg" alt="logviewer logo" width="120" />
   <br>

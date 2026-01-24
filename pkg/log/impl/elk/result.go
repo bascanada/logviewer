@@ -1,3 +1,5 @@
+// Package elk provides Elasticsearch-specific types and search result
+// handling for log retrieval implementations.
 package elk
 
 import (
@@ -11,6 +13,7 @@ import (
 	"github.com/bascanada/logviewer/pkg/ty"
 )
 
+// Hit represents a single hit returned by Elasticsearch for a document.
 type Hit struct {
 	Index  string `json:"_index"`
 	Type   string `json:"_type"`
@@ -19,18 +22,21 @@ type Hit struct {
 	Source ty.MI  `json:"_source"`
 }
 
+// Hits is a wrapper for the hit list returned by an Elasticsearch query.
 type Hits struct {
 	// total
 	// max_score
 	Hits []Hit `json:"hits"`
 }
 
+// ElkSearchResult implements client search results for Elasticsearch
+// responses and provides convenience methods to extract entries and
+// pagination information.
 type ElkSearchResult struct {
 	client client.LogClient
 	search *client.LogSearch
 	result Hits
 
-	entriesChan chan ty.UniSet[string]
 	// store loaded entries
 
 	// store extracted fields
@@ -39,6 +45,8 @@ type ElkSearchResult struct {
 	ErrChan       chan error
 }
 
+// GetSearchResult constructs an ElkSearchResult from a client, search
+// description and raw hits returned by Elasticsearch.
 func GetSearchResult(client client.LogClient, search *client.LogSearch, hits Hits) ElkSearchResult {
 	return ElkSearchResult{
 		client:  client,
@@ -48,10 +56,14 @@ func GetSearchResult(client client.LogClient, search *client.LogSearch, hits Hit
 	}
 }
 
+// GetSearch returns the original LogSearch used to produce this result.
 func (sr ElkSearchResult) GetSearch() *client.LogSearch {
 	return sr.search
 }
 
+// GetEntries returns the parsed log entries for this result, a channel
+// that will receive updates when the search is refreshed, and any
+// immediate error encountered during setup.
 func (sr ElkSearchResult) GetEntries(context context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
 
 	entries := sr.parseResults()
@@ -61,6 +73,9 @@ func (sr ElkSearchResult) GetEntries(context context.Context) ([]client.LogEntry
 	return entries, c, err
 }
 
+// GetFields extracts a set of field names and values present in the
+// search results. It returns the set, an update channel (currently
+// unused) and an error if one occurs.
 func (sr ElkSearchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 
 	fields := ty.UniSet[string]{}
@@ -118,6 +133,9 @@ func (sr ElkSearchResult) parseResults() []client.LogEntry {
 	return entries
 }
 
+// GetPaginationInfo returns pagination details (has more / next page
+// token) when the search explicitly requested a size and more results
+// are available.
 func (sr ElkSearchResult) GetPaginationInfo() *client.PaginationInfo {
 	if !sr.search.Size.Set {
 		return nil
@@ -140,6 +158,8 @@ func (sr ElkSearchResult) GetPaginationInfo() *client.PaginationInfo {
 	}
 }
 
+// Err returns a channel that will receive asynchronous errors
+// produced while watching for search refreshes.
 func (sr ElkSearchResult) Err() <-chan error {
 	return sr.ErrChan
 }

@@ -1,3 +1,6 @@
+// Package ssh implements a LogClient backed by remote SSH access. It contains
+// utilities to build remote commands, establish SSH connections and stream
+// logs back to the caller.
 package ssh
 
 import (
@@ -61,7 +64,7 @@ func getCommand(search *client.LogSearch) (string, error) {
 	return buf.String(), nil
 }
 
-func (lc sshLogClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
+func (lc sshLogClient) Get(_ context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
 	// Check if we should use hl with paths
 	paths, hasPaths := search.Options.GetListOfStringsOk(OptionsPaths)
 	preferNative := search.Options.GetBool(OptionsPreferNativeDriver)
@@ -279,7 +282,7 @@ func GetLogClient(options SSHLogClientOptions) (client.LogClient, error) {
 			sshc.PublicKeys(signer),
 		},
 		HostKeyCallback: sshc.HostKeyCallback(
-			func(hostname string, remote net.Addr, key sshc.PublicKey) error {
+			func(_ string, remote net.Addr, key sshc.PublicKey) error {
 				return nil
 			}),
 	}

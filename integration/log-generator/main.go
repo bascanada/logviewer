@@ -43,7 +43,7 @@ func main() {
 
 	// 1. Trigger Endpoint (Manual)
 	http.HandleFunc("/checkout", handleCheckout)
-	
+
 	// 2. Load Generator (Automatic background traffic)
 	go startLoadGenerator()
 
@@ -55,8 +55,10 @@ func main() {
 
 // initDynamoDB connects to LocalStack
 func initDynamoDB() {
-	if localstackURL == "" { return }
-	
+	if localstackURL == "" {
+		return
+	}
+
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithRegion("us-east-1"),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider("test", "test", "")),
@@ -70,13 +72,13 @@ func initDynamoDB() {
 		return
 	}
 	dynamoClient = dynamodb.NewFromConfig(cfg)
-	
+
 	// Create table if not exists (ignoring errors for brevity)
 	dynamoClient.CreateTable(context.TODO(), &dynamodb.CreateTableInput{
-		TableName: aws.String("Orders"),
-		KeySchema: []types.KeySchemaElement{{AttributeName: aws.String("OrderID"), KeyType: types.KeyTypeHash}},
+		TableName:            aws.String("Orders"),
+		KeySchema:            []types.KeySchemaElement{{AttributeName: aws.String("OrderID"), KeyType: types.KeyTypeHash}},
 		AttributeDefinitions: []types.AttributeDefinition{{AttributeName: aws.String("OrderID"), AttributeType: types.ScalarAttributeTypeS}},
-		BillingMode: types.BillingModePayPerRequest,
+		BillingMode:          types.BillingModePayPerRequest,
 	})
 }
 
@@ -84,7 +86,7 @@ func startLoadGenerator() {
 	// Wait for startup
 	time.Sleep(5 * time.Second)
 	log.Println("Starting background load generator...")
-	
+
 	for {
 		// Simulate traffic bursts
 		go simulateTransaction()
@@ -103,7 +105,7 @@ func simulateTransaction() {
 
 	// --- 1. Frontend Service (Nginx Style -> Stdout/K8s Logs) ---
 	// "192.168.1.5 - - [Date] "POST /api/checkout" 200 ..."
-	fmt.Printf("10.0.0.%d - - [%s] \"POST /api/checkout HTTP/1.1\" 200 1024 \"Mozilla/5.0\" trace_id=%s\n", 
+	fmt.Printf("10.0.0.%d - - [%s] \"POST /api/checkout HTTP/1.1\" 200 1024 \"Mozilla/5.0\" trace_id=%s\n",
 		rand.Intn(255), time.Now().Format("02/Jan/2006:15:04:05 -0700"), traceID)
 
 	// --- 2. Order Service (JSON -> OpenSearch) ---
@@ -147,7 +149,7 @@ func simulateTransaction() {
 	// --- 4. Database (Stdout/K8s Logs - simulating separate pod) ---
 	// Occasional deadlock
 	if rand.Float32() < 0.05 {
-		fmt.Printf("%s [ERROR] [database-primary] Deadlock found when trying to get lock; try restarting transaction trace_id=%s\n", 
+		fmt.Printf("%s [ERROR] [database-primary] Deadlock found when trying to get lock; try restarting transaction trace_id=%s\n",
 			time.Now().Format(time.RFC3339), traceID)
 	}
 
@@ -165,7 +167,9 @@ func simulateTransaction() {
 }
 
 func logToDynamo(id, status, msg string) {
-	if dynamoClient == nil { return }
+	if dynamoClient == nil {
+		return
+	}
 	dynamoClient.PutItem(context.TODO(), &dynamodb.PutItemInput{
 		TableName: aws.String("Orders"),
 		Item: map[string]types.AttributeValue{
@@ -178,7 +182,9 @@ func logToDynamo(id, status, msg string) {
 }
 
 func sendToSplunk(entry LogEntry) {
-	if splunkHecURL == "" { return }
+	if splunkHecURL == "" {
+		return
+	}
 	payload, _ := json.Marshal(map[string]interface{}{"event": entry, "sourcetype": "json"})
 	req, _ := http.NewRequest("POST", splunkHecURL, bytes.NewBuffer(payload))
 	req.Header.Set("Authorization", "Splunk "+splunkHecToken)
@@ -193,7 +199,9 @@ func sendToSplunk(entry LogEntry) {
 }
 
 func sendToOpenSearch(entry LogEntry) {
-	if opensearchURL == "" { return }
+	if opensearchURL == "" {
+		return
+	}
 	payload, _ := json.Marshal(entry)
 	req, _ := http.NewRequest("POST", opensearchURL, bytes.NewBuffer(payload))
 	req.Header.Set("Content-Type", "application/json")

@@ -120,8 +120,8 @@ func (lc DockerLogClient) Get(ctx context.Context, search *logclient.LogSearch) 
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error demultiplexing docker log stream: %v\n", err)
 			}
-			pw.CloseWithError(err)
-			out.Close()
+			_ = pw.CloseWithError(err)
+			_ = out.Close()
 		}()
 		logReader = pr
 		closer = pr

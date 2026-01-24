@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Package cmd implements the interactive configuration wizard and helpers
+// used by the `logviewer configure` command.
 package cmd
 
 import (

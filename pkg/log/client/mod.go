@@ -73,7 +73,7 @@ type LogClient interface {
 // configuration. This is used by both the reader and printer to avoid code duplication.
 // This function is idempotent - it's safe to call multiple times on the same entry.
 func ExtractJSONFromEntry(entry *LogEntry, search *LogSearch) {
-	if !search.FieldExtraction.Json.Set || !search.FieldExtraction.Json.Value {
+	if !search.FieldExtraction.JSON.Set || !search.FieldExtraction.JSON.Value {
 		return
 	}
 
@@ -84,7 +84,7 @@ func ExtractJSONFromEntry(entry *LogEntry, search *LogSearch) {
 	}
 
 	var jsonMap map[string]interface{}
-	jsonContent := entry.Message
+	var jsonContent string
 	// Find the last occurrence of '{' to extract JSON from mixed content
 	if idx := strings.LastIndex(entry.Message, "{"); idx != -1 {
 		jsonContent = entry.Message[idx:]
@@ -99,16 +99,16 @@ func ExtractJSONFromEntry(entry *LogEntry, search *LogSearch) {
 
 	// Get configured key names or use defaults
 	msgKey := "message"
-	if search.FieldExtraction.JsonMessageKey.Set {
-		msgKey = search.FieldExtraction.JsonMessageKey.Value
+	if search.FieldExtraction.JSONMessageKey.Set {
+		msgKey = search.FieldExtraction.JSONMessageKey.Value
 	}
 	levelKey := "level"
-	if search.FieldExtraction.JsonLevelKey.Set {
-		levelKey = search.FieldExtraction.JsonLevelKey.Value
+	if search.FieldExtraction.JSONLevelKey.Set {
+		levelKey = search.FieldExtraction.JSONLevelKey.Value
 	}
 	tsKey := "timestamp"
-	if search.FieldExtraction.JsonTimestampKey.Set {
-		tsKey = search.FieldExtraction.JsonTimestampKey.Value
+	if search.FieldExtraction.JSONTimestampKey.Set {
+		tsKey = search.FieldExtraction.JSONTimestampKey.Value
 	}
 
 	// Extract all fields except the special ones

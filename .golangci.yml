@@ -1,0 +1,62 @@
+version: 2
+
+output:
+  # Fixed: Use singular 'format' string
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+
+linters:
+  disable-all: true
+  enable:
+    # --- Core Stability & Bugs ---
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck    # Covers 'gosimple' functionality
+    - unused
+    
+    # --- Quality & Style ---
+    - revive         # Replacement for 'golint'
+    - gocyclo        # Complexity checks
+    - gocritic       # Opinionated checks for bugs and style
+    - misspell       # Typos
+    - unconvert      # Remove unnecessary type conversions
+    - prealloc       # Slice allocation performance hints
+
+    # --- Security & Reliability ---
+    - gosec          # Security Scanner
+    - bodyclose      # Prevents HTTP body leaks (Critical for your logviewer)
+    - errorlint      # Ensures proper error wrapping (Go 1.13+)
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15
+  
+  gosec:
+    excludes:
+      - G104 # "Audit errors not checked" (Reduces noise significantly)
+
+  revive:
+    rules:
+      - name: exported
+        severity: warning
+        arguments:
+          - disableStutteringCheck: true
+
+  errorlint:
+    errorf: true
+    asserts: true
+    comparison: true
+
+issues:
+  max-issues-per-linter: 50
+  max-same-issues: 3
+  
+  exclude-rules:
+    # Ease strictness for test files
+    - path: _test\.go
+      linters:
+        - gosec
+        - bodyclose
+        - gocyclo

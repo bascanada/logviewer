@@ -9,10 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestExpandJson(t *testing.T) {
+func TestExpandJSON(t *testing.T) {
 	t.Run("expands simple JSON object", func(t *testing.T) {
 		input := "get data from json: {\"key\": \"value\", \"num\": 42}"
-		result := printer.ExpandJson(input)
+		result := printer.ExpandJSON(input)
 		assert.NotEmpty(t, result)
 		assert.Contains(t, result, "key")
 		assert.Contains(t, result, "value")
@@ -21,7 +21,7 @@ func TestExpandJson(t *testing.T) {
 
 	t.Run("expands JSON array", func(t *testing.T) {
 		input := "Response: [\"item1\", \"item2\", \"item3\"]"
-		result := printer.ExpandJson(input)
+		result := printer.ExpandJSON(input)
 		assert.NotEmpty(t, result)
 		assert.Contains(t, result, "item1")
 		assert.Contains(t, result, "item2")
@@ -29,7 +29,7 @@ func TestExpandJson(t *testing.T) {
 
 	t.Run("expands nested JSON", func(t *testing.T) {
 		input := "Payload: {\"user\": {\"name\": \"John\", \"id\": 123}, \"active\": true}"
-		result := printer.ExpandJson(input)
+		result := printer.ExpandJSON(input)
 		assert.NotEmpty(t, result)
 		assert.Contains(t, result, "user")
 		assert.Contains(t, result, "name")
@@ -38,7 +38,7 @@ func TestExpandJson(t *testing.T) {
 
 	t.Run("expands multiple JSON objects", func(t *testing.T) {
 		input := "First: {\"a\": 1} Second: {\"b\": 2}"
-		result := printer.ExpandJson(input)
+		result := printer.ExpandJSON(input)
 		assert.NotEmpty(t, result)
 		assert.Contains(t, result, "a")
 		assert.Contains(t, result, "b")
@@ -46,50 +46,50 @@ func TestExpandJson(t *testing.T) {
 
 	t.Run("ignores empty JSON objects", func(t *testing.T) {
 		input := "Empty object: {}"
-		result := printer.ExpandJson(input)
+		result := printer.ExpandJSON(input)
 		assert.Empty(t, result)
 	})
 
 	t.Run("ignores empty JSON arrays", func(t *testing.T) {
 		input := "Empty array: []"
-		result := printer.ExpandJson(input)
+		result := printer.ExpandJSON(input)
 		assert.Empty(t, result)
 	})
 
 	t.Run("returns empty for no JSON", func(t *testing.T) {
 		input := "This is just a plain log message"
-		result := printer.ExpandJson(input)
+		result := printer.ExpandJSON(input)
 		assert.Empty(t, result)
 	})
 
 	t.Run("handles JSON with special characters", func(t *testing.T) {
 		input := "Message: {\"url\": \"https://example.com?param=value&other=123\"}"
-		result := printer.ExpandJson(input)
+		result := printer.ExpandJSON(input)
 		assert.NotEmpty(t, result)
 		assert.Contains(t, result, "url")
 	})
 
 	t.Run("handles JSON with escaped quotes", func(t *testing.T) {
 		input := "Data: {\"message\": \"He said \\\"hello\\\" to me\"}"
-		result := printer.ExpandJson(input)
+		result := printer.ExpandJSON(input)
 		assert.NotEmpty(t, result)
 		assert.Contains(t, result, "message")
 	})
 
 	t.Run("handles real-world checkout log", func(t *testing.T) {
 		input := "Outbound: {\"redirectUrl\":\"https://payments.example.com\",\"sessionId\":\"ABC123\"}"
-		result := printer.ExpandJson(input)
+		result := printer.ExpandJSON(input)
 		assert.NotEmpty(t, result)
 		assert.Contains(t, result, "redirectUrl")
 		assert.Contains(t, result, "sessionId")
 	})
 }
 
-func TestExpandJsonLimit(t *testing.T) {
+func TestExpandJSONLimit(t *testing.T) {
 	t.Run("respects line limit", func(t *testing.T) {
 		// Create a JSON with many fields (will be many lines when formatted)
 		input := `Data: {"field1": "value1", "field2": "value2", "field3": "value3", "field4": "value4", "field5": "value5"}`
-		result := printer.ExpandJsonLimit(input, 3)
+		result := printer.ExpandJSONLimit(input, 3)
 
 		lines := len(strings.Split(result, "\n"))
 		// Should have at most 4 lines (3 + truncation message)
@@ -99,7 +99,7 @@ func TestExpandJsonLimit(t *testing.T) {
 
 	t.Run("no truncation for short JSON", func(t *testing.T) {
 		input := "Data: {\"key\": \"value\"}"
-		result := printer.ExpandJsonLimit(input, 10)
+		result := printer.ExpandJSONLimit(input, 10)
 
 		assert.NotEmpty(t, result)
 		assert.NotContains(t, result, "truncated")
@@ -107,15 +107,15 @@ func TestExpandJsonLimit(t *testing.T) {
 
 	t.Run("returns empty for no JSON", func(t *testing.T) {
 		input := "No JSON here"
-		result := printer.ExpandJsonLimit(input, 5)
+		result := printer.ExpandJSONLimit(input, 5)
 		assert.Empty(t, result)
 	})
 }
 
-func TestExpandJsonCompact(t *testing.T) {
+func TestExpandJSONCompact(t *testing.T) {
 	t.Run("formats JSON on single line", func(t *testing.T) {
 		input := "Data: {\"key\": \"value\", \"num\": 42}"
-		result := printer.ExpandJsonCompact(input)
+		result := printer.ExpandJSONCompact(input)
 
 		assert.NotEmpty(t, result)
 		// Should have minimal newlines (only leading newline per JSON)
@@ -125,7 +125,7 @@ func TestExpandJsonCompact(t *testing.T) {
 
 	t.Run("formats array on single line", func(t *testing.T) {
 		input := "Array: [\"a\", \"b\", \"c\"]"
-		result := printer.ExpandJsonCompact(input)
+		result := printer.ExpandJSONCompact(input)
 
 		assert.NotEmpty(t, result)
 		assert.Contains(t, result, "a")
@@ -135,15 +135,15 @@ func TestExpandJsonCompact(t *testing.T) {
 
 	t.Run("returns empty for no JSON", func(t *testing.T) {
 		input := "No JSON here"
-		result := printer.ExpandJsonCompact(input)
+		result := printer.ExpandJSONCompact(input)
 		assert.Empty(t, result)
 	})
 }
 
-func TestExpandJsonLimitDepth(t *testing.T) {
+func TestExpandJSONLimitDepth(t *testing.T) {
 	t.Run("limits depth to 1 level", func(t *testing.T) {
 		input := `Data: {"level1": {"level2": {"level3": "deep"}}}`
-		result := printer.ExpandJsonLimitDepth(input, 1)
+		result := printer.ExpandJSONLimitDepth(input, 1)
 
 		assert.NotEmpty(t, result)
 		assert.Contains(t, result, "level1")
@@ -153,7 +153,7 @@ func TestExpandJsonLimitDepth(t *testing.T) {
 
 	t.Run("limits depth to 2 levels", func(t *testing.T) {
 		input := `Data: {"a": {"b": {"c": {"d": "value"}}}}`
-		result := printer.ExpandJsonLimitDepth(input, 2)
+		result := printer.ExpandJSONLimitDepth(input, 2)
 
 		assert.NotEmpty(t, result)
 		assert.Contains(t, result, "a")
@@ -164,7 +164,7 @@ func TestExpandJsonLimitDepth(t *testing.T) {
 
 	t.Run("handles arrays with depth limit", func(t *testing.T) {
 		input := `Data: {"items": [{"nested": {"deep": "value"}}]}`
-		result := printer.ExpandJsonLimitDepth(input, 3)
+		result := printer.ExpandJSONLimitDepth(input, 3)
 
 		assert.NotEmpty(t, result)
 		assert.Contains(t, result, "items")
@@ -175,7 +175,7 @@ func TestExpandJsonLimitDepth(t *testing.T) {
 
 	t.Run("preserves shallow JSON", func(t *testing.T) {
 		input := `Data: {"key1": "value1", "key2": "value2"}`
-		result := printer.ExpandJsonLimitDepth(input, 3)
+		result := printer.ExpandJSONLimitDepth(input, 3)
 
 		assert.NotEmpty(t, result)
 		assert.Contains(t, result, "key1")
@@ -186,7 +186,7 @@ func TestExpandJsonLimitDepth(t *testing.T) {
 
 	t.Run("depth 0 replaces everything with ...", func(t *testing.T) {
 		input := `Data: {"key": "value"}`
-		result := printer.ExpandJsonLimitDepth(input, 0)
+		result := printer.ExpandJSONLimitDepth(input, 0)
 
 		assert.NotEmpty(t, result)
 		assert.Contains(t, result, "...")
@@ -195,7 +195,7 @@ func TestExpandJsonLimitDepth(t *testing.T) {
 
 	t.Run("handles complex nested structure", func(t *testing.T) {
 		input := `Response: {"user": {"name": "John", "profile": {"age": 30, "address": {"city": "NYC"}}}}`
-		result := printer.ExpandJsonLimitDepth(input, 2)
+		result := printer.ExpandJSONLimitDepth(input, 2)
 
 		assert.NotEmpty(t, result)
 		assert.Contains(t, result, "user")
@@ -207,13 +207,13 @@ func TestExpandJsonLimitDepth(t *testing.T) {
 
 	t.Run("returns empty for no JSON", func(t *testing.T) {
 		input := "No JSON here"
-		result := printer.ExpandJsonLimitDepth(input, 2)
+		result := printer.ExpandJSONLimitDepth(input, 2)
 		assert.Empty(t, result)
 	})
 
 	t.Run("handles real-world nested payload", func(t *testing.T) {
 		input := `Outbound: {"redirectUrl":"https://example.com","paymentSessionId":"ABC","details":{"amount":100,"currency":"USD","items":[{"id":1,"name":"ticket"}]}}`
-		result := printer.ExpandJsonLimitDepth(input, 2)
+		result := printer.ExpandJSONLimitDepth(input, 2)
 
 		assert.NotEmpty(t, result)
 		assert.Contains(t, result, "redirectUrl")

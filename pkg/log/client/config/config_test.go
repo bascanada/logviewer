@@ -16,10 +16,10 @@ func writeTemp(t *testing.T, dir, name, content string) string {
 		dir = t.TempDir()
 	}
 	path := filepath.Join(dir, name)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		t.Fatalf("failed to create dirs: %v", err)
 	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("failed to write file: %v", err)
 	}
 	return path
@@ -83,7 +83,7 @@ func TestLoadContextConfig_EnvVarPrecedence(t *testing.T) {
 	if err := os.Setenv(EnvConfigPath, path); err != nil {
 		t.Fatalf("failed to set env: %v", err)
 	}
-	defer os.Unsetenv(EnvConfigPath)
+	defer func() { _ = os.Unsetenv(EnvConfigPath) }()
 
 	cfg, err := LoadContextConfig("")
 	if err != nil {
@@ -106,7 +106,7 @@ func TestLoadContextConfig_EnvVarPrecedence(t *testing.T) {
 
 	// Create a fake home dir structure to simulate default config
 	homeDir := filepath.Join(dir, "home")
-	os.Setenv("HOME", homeDir) // This might not work on Windows but let's assume *nix for now or proper mocks
+	_ = os.Setenv("HOME", homeDir) // This might not work on Windows but let's assume *nix for now or proper mocks
 
 	// Actually LoadContextConfig uses os.UserHomeDir(), which respects HOME on unix.
 
@@ -128,7 +128,7 @@ func TestLoadContextConfig_EnvVarPrecedence(t *testing.T) {
 	}
 
 	// cleanup env var
-	os.Unsetenv(EnvConfigPath)
+	_ = os.Unsetenv(EnvConfigPath)
 }
 
 func ExampleLoadContextConfig() {
@@ -271,8 +271,8 @@ func TestLoadContextConfig_MultiFileMerge(t *testing.T) {
 	// Mock UserHomeDir via env var (assuming internal implementation or system respects it)
 	// Note: os.UserHomeDir() respects HOME on Unix.
 	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", oldHome)
+	_ = os.Setenv("HOME", tmpHome)
+	defer func() { _ = os.Setenv("HOME", oldHome) }()
 
 	// 1. Create main config file
 	mainContent := `
@@ -281,7 +281,7 @@ clients:
 contexts:
   mainCtx: { client: c1, search: {} }
 `
-	if err := os.WriteFile(filepath.Join(configDir, DefaultConfigFile), []byte(mainContent), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(configDir, DefaultConfigFile), []byte(mainContent), 0600); err != nil {
 		t.Fatalf("failed to write main config: %v", err)
 	}
 
@@ -291,7 +291,7 @@ contexts:
   dropInCtx: { client: c1, search: {} }
   mainCtx: { client: c1, description: "overridden", search: {} } # Should override mainCtx
 `
-	if err := os.WriteFile(filepath.Join(dropInDir, "extra.yaml"), []byte(dropInContent), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dropInDir, "extra.yaml"), []byte(dropInContent), 0600); err != nil {
 		t.Fatalf("failed to write drop-in config: %v", err)
 	}
 
@@ -323,8 +323,8 @@ func TestLoadContextConfig_EnvVarMultiFile(t *testing.T) {
 	file2 := writeTemp(t, dir, "f2.yaml", `contexts: { ctx2: { client: local, search: {} } }`)
 
 	envVal := fmt.Sprintf("%s%c%s", file1, os.PathListSeparator, file2)
-	os.Setenv(EnvConfigPath, envVal)
-	defer os.Unsetenv(EnvConfigPath)
+	_ = os.Setenv(EnvConfigPath, envVal)
+	defer func() { _ = os.Unsetenv(EnvConfigPath) }()
 
 	cfg, err := LoadContextConfig("")
 	if err != nil {

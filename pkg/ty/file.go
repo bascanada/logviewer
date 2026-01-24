@@ -2,7 +2,7 @@ package ty
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"os"
 	"regexp"
 	"strings"
@@ -11,21 +11,20 @@ import (
 const lineBreak = "\n"
 const lineRegex = "^([a-zA-Z0-9\\-]*)[:=](.*)$"
 
-/*
-* Supported separator: : , = , json map
- */
+// LoadMS loads a string map from a file (KV or JSON).
+// Supported separator: : , = , json map
 func (ms *MS) LoadMS(path string) error {
 
-	r, _ := regexp.Compile(lineRegex)
+	r := regexp.MustCompile(lineRegex)
 
 	file, err := os.Open(path)
 	if err != nil {
 		return err
 	}
 
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
-	value, err := ioutil.ReadAll(file)
+	value, err := io.ReadAll(file)
 
 	if err != nil {
 		return err
@@ -51,8 +50,9 @@ func (ms *MS) LoadMS(path string) error {
 	return nil
 }
 
+// Load loads a generic map info from a JSON file.
 func (mi *MI) Load(path string) error {
-	err := ReadJsonFile(path, mi)
+	err := ReadJSONFile(path, mi)
 	if err != nil {
 		return err
 	}

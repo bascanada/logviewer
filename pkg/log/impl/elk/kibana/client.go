@@ -1,3 +1,5 @@
+// Package kibana contains a client implementation for Kibana/Elasticsearch
+// based backends used to retrieve logs via Kibana's internal search API.
 package kibana
 
 import (
@@ -15,12 +17,14 @@ type KibanaTarget struct {
 	Endpoint string `json:"endpoint"`
 }
 
+// KibanaTarget describes the connection target for a Kibana-backed client.
+
 type kibanaClient struct {
 	target KibanaTarget
-	client http.HttpClient
+	client http.HTTPClient
 }
 
-func (kc kibanaClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
+func (kc kibanaClient) Get(_ context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
 	var searchResponse SearchResponse
 
 	request, err := getSearchRequest(search)
@@ -28,7 +32,7 @@ func (kc kibanaClient) Get(ctx context.Context, search *client.LogSearch) (clien
 		return nil, err
 	}
 
-	err = kc.client.PostJson("/internal/search/es", ty.MS{
+	err = kc.client.PostJSON("/internal/search/es", ty.MS{
 		"kbn-version": search.Options.GetOr("version", "7.10.2").(string),
 	}, &request, &searchResponse, nil)
 	if err != nil {
@@ -268,3 +272,6 @@ func GetClient(target KibanaTarget) (client.LogClient, error) {
 	client.client = http.GetClient(target.Endpoint)
 	return client, nil
 }
+
+// GetClient returns a LogClient configured to communicate with the given
+// Kibana endpoint.

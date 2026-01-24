@@ -61,13 +61,13 @@ func (p *Parser) advance() {
 	}
 }
 
-// expect checks if the current token matches the expected type
-func (p *Parser) expect(t TokenType) error {
-	if p.current().Type != t {
-		return fmt.Errorf("expected token type %d, got %d at position %d", t, p.current().Type, p.current().Pos)
-	}
-	return nil
-}
+// expect checks if the current token matches the expected type (unused)
+// func (p *Parser) expect(t TokenType) error {
+// 	if p.current().Type != t {
+// 		return fmt.Errorf("expected token type %d, got %d at position %d", t, p.current().Type, p.current().Pos)
+// 	}
+// 	return nil
+// }
 
 // parseOrExpr parses: and_expr ("OR" and_expr)*
 func (p *Parser) parseOrExpr() (*client.Filter, error) {

@@ -18,7 +18,7 @@ func TestLoadFileText(t *testing.T) {
 
 	ms := MS{}
 
-	(&ms).LoadMS(path)
+	_ = (&ms).LoadMS(path)
 
 	assert.Equal(t, "value", ms["test123"], "value not equal")
 	assert.Equal(t, "value", ms["rare"], "value not equal")
@@ -34,7 +34,7 @@ func TestLoadFileJson(t *testing.T) {
 
 	ms := MS{}
 
-	(&ms).LoadMS(path)
+	_ = (&ms).LoadMS(path)
 
 	assert.Equal(t, "value", ms["test123"], "value not equal")
 	assert.Equal(t, "value", ms["rare"], "value not equal")
@@ -47,7 +47,7 @@ func CreateTestFile(name string, content string) string {
 		panic(f)
 	}
 
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if _, err := f.Write([]byte(content)); err != nil {
 		panic(err)

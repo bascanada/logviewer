@@ -125,7 +125,7 @@ func buildSearchRequest() client.LogSearch {
 
 		// Process legacy fields (field=value)
 		if len(legacyFields) > 0 {
-			stringArrayEnvVariable(legacyFields, &searchRequest.Fields)
+			_ = stringArrayEnvVariable(legacyFields, &searchRequest.Fields)
 		}
 
 		// Process hl-syntax fields into Filter
@@ -139,7 +139,7 @@ func buildSearchRequest() client.LogSearch {
 		}
 	}
 	if len(fieldsOps) > 0 {
-		stringArrayEnvVariable(fieldsOps, &searchRequest.FieldsCondition)
+		_ = stringArrayEnvVariable(fieldsOps, &searchRequest.FieldsCondition)
 	}
 
 	// Parse -q/--query expression
@@ -544,7 +544,7 @@ var queryFieldCommand = &cobra.Command{
 			fmt.Fprintln(os.Stderr, "error:", err1)
 			os.Exit(1)
 		}
-		searchResult.GetEntries(context.Background())
+		_, _, _ = searchResult.GetEntries(context.Background())
 		fields, _, err := searchResult.GetFields(context.Background())
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
@@ -621,12 +621,12 @@ var queryLogCommand = &cobra.Command{
 			fmt.Fprintf(os.Stderr, "Error displaying logs: %v\n", err)
 			os.Exit(1)
 		}
-		continous, err := outputter.Display(context.Background(), searchResult, onError)
+		continuous, err := outputter.Display(context.Background(), searchResult, onError)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error displaying logs: %v\n", err)
 			os.Exit(1)
 		}
-		if continous {
+		if continuous {
 			c := make(chan os.Signal, 1)
 			signal.Notify(c, os.Interrupt)
 			<-c
@@ -701,6 +701,6 @@ var queryCommand = &cobra.Command{
 	PreRun: onCommandStart,
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Println("Please use 'logviewer query log' to stream logs, 'logviewer query field' to inspect fields, or 'logviewer query values' to get distinct values.")
-		cmd.Help()
+		_ = cmd.Help()
 	},
 }

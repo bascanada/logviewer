@@ -22,7 +22,6 @@ type SplunkLogSearchResult struct {
 
 	results []restapi.SearchResultsResponse
 
-	entriesChan chan ty.UniSet[string]
 	// parsed offset from the incoming page token (set by client.Get)
 	CurrentOffset int
 	// useResultsEndpoint indicates if the query has transforming commands
@@ -190,7 +189,7 @@ func (s SplunkLogSearchResult) formatAggregatedResult(result ty.MI) string {
 	}
 	sort.Strings(keys)
 
-	var parts []string
+	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
 		parts = append(parts, fmt.Sprintf("%s=%v", k, result[k]))
 	}

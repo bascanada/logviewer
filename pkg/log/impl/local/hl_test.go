@@ -1,3 +1,6 @@
+// Package local provides a local file/command based log client used for
+// development and testing. This test package verifies behavior of the local
+// implementation.
 package local
 
 import (
@@ -50,7 +53,7 @@ func TestLocalClient_HLDetection(t *testing.T) {
 
 		// This should panic or error because neither cmd nor paths is set
 		assert.Panics(t, func() {
-			lc.Get(context.Background(), search)
+			_, _ = lc.Get(context.Background(), search)
 		})
 	})
 }

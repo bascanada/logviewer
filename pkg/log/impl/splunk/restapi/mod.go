@@ -37,7 +37,7 @@ type SplunkTarget struct {
 
 type SplunkRestClient struct {
 	target SplunkTarget
-	client http.HttpClient
+	client http.HTTPClient
 }
 
 func (src SplunkRestClient) CreateSearchJob(

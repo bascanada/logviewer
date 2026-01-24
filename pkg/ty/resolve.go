@@ -5,6 +5,7 @@ import (
 	"regexp"
 )
 
+// ResolveVars resolves shell-style variable references in the input string using the provided runtime variables and environment variables.
 func ResolveVars(input string, runtimeVars map[string]string) string {
 	re := regexp.MustCompile(`\$(\{([a-zA-Z_][a-zA-Z0-9_]*)(:-(.*))?\}|\$([a-zA-Z_][a-zA-Z0-9_]*))`)
 	return re.ReplaceAllStringFunc(input, func(v string) string {
@@ -34,10 +35,12 @@ func ResolveVars(input string, runtimeVars map[string]string) string {
 	})
 }
 
+// ResolveVariables resolves variables in all values of the MS map.
 func (ms MS) ResolveVariables() MS {
 	return ms.ResolveVariablesWith(nil)
 }
 
+// ResolveVariablesWith resolves variables in all values of the MS map using additional runtime variables.
 func (ms MS) ResolveVariablesWith(vars map[string]string) MS {
 	msResolved := MS{}
 	for k, v := range ms {
@@ -53,6 +56,7 @@ func (mi MI) ResolveVariables() MI {
 	return mi.ResolveVariablesWith(nil)
 }
 
+// ResolveVariablesWith on MI resolves variables in string values of the MI map using additional runtime variables.
 func (mi MI) ResolveVariablesWith(vars map[string]string) MI {
 	resolved := MI{}
 	for k, v := range mi {

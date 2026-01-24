@@ -5,6 +5,7 @@ import (
 	"github.com/bascanada/logviewer/pkg/ty"
 )
 
+// Body represents the body of a Kibana/Elasticsearch search request.
 type Body struct {
 	Size           int      `json:"size"`
 	Sort           []ty.MI  `json:"sort"`
@@ -15,19 +16,23 @@ type Body struct {
 	Query          ty.MI    `json:"query"`
 }
 
+// Params represents the parameters of a Kibana/Elasticsearch search request.
 type Params struct {
 	Index string `json:"index"`
 	Body  Body   `json:"body"`
 }
 
+// SearchRequest represents a Kibana/Elasticsearch search request.
 type SearchRequest struct {
 	Params Params `json:"params"`
 }
 
+// Response represents the response from a Kibana/Elasticsearch search request.
 type Response struct {
 	Hits elk.Hits `json:"hits"`
 }
 
+// SearchResponse represents the full Kibana/Elasticsearch search response.
 type SearchResponse struct {
 	RawResponse Response `json:"rawResponse"`
 }

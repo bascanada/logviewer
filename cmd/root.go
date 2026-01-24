@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Package cmd contains the CLI entrypoints and top-level commands used by
+// the `logviewer` executable.
 package cmd
 
 import (
@@ -32,7 +34,7 @@ var rootCmd = &cobra.Command{
 				return
 			}
 		}
-		cmd.Help()
+		_ = cmd.Help()
 	},
 }
 

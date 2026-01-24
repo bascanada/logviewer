@@ -271,7 +271,7 @@ func escapeValue(value string) string {
 func BuildSimpleArgs(paths []string, follow bool, since string, filters map[string]string) []string {
 	var args []string
 
-	args = append(args, "-P")     // Disable pager
+	args = append(args, "-P")    // Disable pager
 	args = append(args, "--raw") // Output raw JSON
 
 	if follow {

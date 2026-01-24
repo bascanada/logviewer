@@ -1,3 +1,6 @@
+// Package cloudwatch provides an implementation of logclient.LogClient backed
+// by AWS CloudWatch Logs and helper functions for building queries and parsing
+// results.
 package cloudwatch
 
 import (

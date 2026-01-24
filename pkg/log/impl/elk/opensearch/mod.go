@@ -19,10 +19,10 @@ type OpenSearchTarget struct {
 
 type openSearchClient struct {
 	target OpenSearchTarget
-	client http.HttpClient
+	client http.HTTPClient
 }
 
-func (kc openSearchClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
+func (kc openSearchClient) Get(_ context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
 	var searchResult SearchResult
 
 	index := search.Options.GetString("index")

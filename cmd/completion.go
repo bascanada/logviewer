@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Package cmd contains subcommands and helpers to generate shell completion
+// scripts and other CLI utilities for the `logviewer` tool.
 package cmd
 
 import (
@@ -55,13 +57,13 @@ PowerShell:
 	Run: func(cmd *cobra.Command, args []string) {
 		switch args[0] {
 		case "bash":
-			cmd.Root().GenBashCompletion(os.Stdout)
+			_ = cmd.Root().GenBashCompletion(os.Stdout)
 		case "zsh":
-			cmd.Root().GenZshCompletion(os.Stdout)
+			_ = cmd.Root().GenZshCompletion(os.Stdout)
 		case "fish":
-			cmd.Root().GenFishCompletion(os.Stdout, true)
+			_ = cmd.Root().GenFishCompletion(os.Stdout, true)
 		case "powershell":
-			cmd.Root().GenPowerShellCompletionWithDesc(os.Stdout)
+			_ = cmd.Root().GenPowerShellCompletionWithDesc(os.Stdout)
 		}
 	},
 }

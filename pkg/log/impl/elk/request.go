@@ -1,3 +1,5 @@
+// Package elk contains helpers for building OpenSearch/Kibana-compatible
+// search request fragments and parsing results.
 package elk
 
 import (

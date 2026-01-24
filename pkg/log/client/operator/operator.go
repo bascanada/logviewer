@@ -1,3 +1,4 @@
+// Package operator defines the supported filter operators.
 package operator
 
 const (

@@ -32,7 +32,7 @@ var useContextCmd = &cobra.Command{
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) != 1 {
-			cmd.Help()
+			_ = cmd.Help()
 			return
 		}
 		contextID := args[0]
@@ -69,7 +69,7 @@ var listContextsCmd = &cobra.Command{
 		}
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-		fmt.Fprintln(w, "CURRENT\tNAME\tCLIENT\tDESCRIPTION")
+		_, _ = fmt.Fprintln(w, "CURRENT\tNAME\tCLIENT\tDESCRIPTION")
 
 		// Sort keys for consistent output
 		keys := make([]string, 0, len(cfg.Contexts))
@@ -84,9 +84,9 @@ var listContextsCmd = &cobra.Command{
 			if name == cfg.CurrentContext {
 				prefix = "*"
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", prefix, name, ctx.Client, ctx.Description)
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", prefix, name, ctx.Client, ctx.Description)
 		}
-		w.Flush()
+		_ = w.Flush()
 	},
 }
 

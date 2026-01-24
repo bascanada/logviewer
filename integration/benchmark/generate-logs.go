@@ -1,12 +1,12 @@
-// Log generator for performance benchmarking
-// Generates large JSON log files quickly for testing hl vs native performance
+// Package main provides a small utility to generate large JSON log files
+// used for performance benchmarking of hl vs native drivers.
 //
 // Usage: go run generate-logs.go [options]
-//   -size      Number of log entries (default: 1000000)
-//   -output    Output file path (default: /tmp/benchmark-logs.json)
-//   -error     Error log percentage (default: 5)
-//   -warn      Warning log percentage (default: 10)
-
+//
+//	-size      Number of log entries (default: 1000000)
+//	-output    Output file path (default: /tmp/benchmark-logs.json)
+//	-error     Error log percentage (default: 5)
+//	-warn      Warning log percentage (default: 10)
 package main
 
 import (
@@ -109,7 +109,7 @@ func main() {
 	fmt.Println()
 
 	// Create output directory
-	if err := os.MkdirAll(filepath.Dir(*output), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(*output), 0750); err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating directory: %v\n", err)
 		os.Exit(1)
 	}
@@ -120,19 +120,19 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error creating file: %v\n", err)
 		os.Exit(1)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var writer *bufio.Writer
 	var gzWriter *gzip.Writer
 
 	if *compress {
 		gzWriter = gzip.NewWriter(file)
-		defer gzWriter.Close()
+		defer func() { _ = gzWriter.Close() }()
 		writer = bufio.NewWriterSize(gzWriter, 1024*1024) // 1MB buffer
 	} else {
 		writer = bufio.NewWriterSize(file, 1024*1024)
 	}
-	defer writer.Flush()
+	defer func() { _ = writer.Flush() }()
 
 	start := time.Now()
 	baseTime := time.Now().Add(-24 * time.Hour) // Spread over last 24h
