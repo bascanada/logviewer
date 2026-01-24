@@ -58,4 +58,5 @@ func init() {
 	rootCmd.AddCommand(queryCommand)
 	rootCmd.AddCommand(versionCommand)
 	rootCmd.AddCommand(serverCmd)
+	rootCmd.AddCommand(tuiCmd)
 }
