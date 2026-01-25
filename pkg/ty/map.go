@@ -78,6 +78,7 @@ func (mi MI) GetMS(key string) MS {
 	return MS{}
 }
 
+// GetBool returns the value as a bool if it exists and is a bool, otherwise false.
 func (mi MI) GetBool(key string) bool {
 	if v, b := mi[key]; b {
 		return v.(bool)
@@ -85,6 +86,7 @@ func (mi MI) GetBool(key string) bool {
 	return false
 }
 
+// GetBoolOk returns the value as a bool if it exists and can be interpreted as boolean, along with true.
 func (mi MI) GetBoolOk(key string) (bool, bool) {
 	v, ok := mi[key]
 	if !ok {
@@ -106,6 +108,7 @@ func (mi MI) GetBoolOk(key string) (bool, bool) {
 	return false, false
 }
 
+// GetListOfStringsOk returns the value as a slice of strings if it exists and can be converted, along with true.
 func (mi MI) GetListOfStringsOk(key string) ([]string, bool) {
 	v, ok := mi[key]
 	if !ok {
@@ -126,6 +129,7 @@ func (mi MI) GetListOfStringsOk(key string) ([]string, bool) {
 	}
 }
 
+// MergeM merges two maps and returns the parent map (modified).
 func MergeM[T interface{}](parent map[string]T, child map[string]T) map[string]T {
 	for k, v := range child {
 		parent[k] = v

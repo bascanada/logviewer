@@ -10,6 +10,7 @@ import (
 	"github.com/bascanada/logviewer/pkg/ty"
 )
 
+// LogEntry represents a single log record.
 type LogEntry struct {
 	Timestamp time.Time `json:"timestamp"`
 	Message   string    `json:"message"`
@@ -44,8 +45,8 @@ func (e LogEntry) Field(key string) interface{} {
 	return ""
 }
 
-// Result of the search , may be used to get more log
-// or keep updated
+// LogSearchResult is the result of a search operation.
+// It provides methods to retrieve entries, fields, and pagination info.
 type LogSearchResult interface {
 	GetSearch() *LogSearch
 	GetEntries(context context.Context) ([]LogEntry, chan []LogEntry, error)
@@ -54,12 +55,13 @@ type LogSearchResult interface {
 	Err() <-chan error
 }
 
+// PaginationInfo contains information about available pages of results.
 type PaginationInfo struct {
 	HasMore       bool
 	NextPageToken string
 }
 
-// Client to start a log search
+// LogClient is the interface for a log backend (e.g., Splunk, CloudWatch).
 type LogClient interface {
 	Get(ctx context.Context, search *LogSearch) (LogSearchResult, error)
 	// GetFieldValues returns distinct values for the specified fields.

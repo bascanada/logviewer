@@ -341,7 +341,7 @@ func getAdHocLogClient(searchRequest *client.LogSearch) (client.LogClient, error
 			body = body.ResolveVariables()
 		}
 		logClient, err = splunk.GetClient(splunk.SplunkLogSearchClientOptions{
-			Url:        endpointSplunk,
+			URL:        endpointSplunk,
 			SearchBody: body,
 			Headers:    headers,
 		})

@@ -91,11 +91,12 @@ func TestMultiLogSearchResult_GetEntries_Streaming(t *testing.T) {
 	for entries := range mergedCh {
 		count++
 		for _, e := range entries {
-			if e.Message == "stream1" {
+			switch e.Message {
+			case "stream1":
 				if e.ContextID != "ctx1" {
 					t.Errorf("Expected ContextID ctx1 for stream1, got %s", e.ContextID)
 				}
-			} else if e.Message == "stream2" {
+			case "stream2":
 				if e.ContextID != "ctx2" {
 					t.Errorf("Expected ContextID ctx2 for stream2, got %s", e.ContextID)
 				}

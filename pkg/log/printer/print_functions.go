@@ -146,7 +146,7 @@ func KV(values ty.MI) string {
 // Outputs formatted, indented (and colored if enabled) JSON on new lines.
 // Usage in template: {{.Message}}{{ExpandJson .Message}}
 func ExpandJSON(value string) string {
-    jsonStrings := FindJSON(value)
+	jsonStrings := FindJSON(value)
 	if len(jsonStrings) == 0 {
 		return ""
 	}
@@ -206,7 +206,7 @@ func ExpandJSONLimit(value string, maxLines int) string {
 // Useful for preventing deeply nested JSON from cluttering output.
 // Usage in template: {{ExpandJsonLimitDepth .Message 3}}
 func ExpandJSONLimitDepth(value string, maxDepth int) string {
-    jsonStrings := FindJSON(value)
+	jsonStrings := FindJSON(value)
 	if len(jsonStrings) == 0 {
 		return ""
 	}
@@ -283,7 +283,7 @@ func truncateDepth(obj interface{}, maxDepth, currentDepth int) interface{} {
 // Useful for short JSON payloads where vertical space is limited.
 // Usage in template: {{ExpandJsonCompact .Message}}
 func ExpandJSONCompact(value string) string {
-    jsonStrings := FindJSON(value)
+	jsonStrings := FindJSON(value)
 	if len(jsonStrings) == 0 {
 		return ""
 	}

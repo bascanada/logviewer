@@ -128,10 +128,12 @@ func isShellSafe(s string) bool {
 	}
 	for _, c := range s {
 		// Allow alphanumerics, underscore, hyphen, dot, forward slash, and colon
-		if !((c >= 'a' && c <= 'z') ||
-			(c >= 'A' && c <= 'Z') ||
-			(c >= '0' && c <= '9') ||
-			c == '_' || c == '-' || c == '.' || c == '/' || c == ':') {
+		switch {
+		case c >= 'a' && c <= 'z':
+		case c >= 'A' && c <= 'Z':
+		case c >= '0' && c <= '9':
+		case c == '_' || c == '-' || c == '.' || c == '/' || c == ':':
+		default:
 			return false
 		}
 	}

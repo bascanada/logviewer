@@ -273,6 +273,7 @@ type ContextConfig struct {
 	CurrentContext string `json:"-" yaml:"-"`
 }
 
+// GetSearchContext resolves a search context by ID, merging with defaults and overrides.
 func (cc ContextConfig) GetSearchContext(contextId string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (SearchContext, error) {
 	if contextId == "" {
 		return SearchContext{}, errors.New("contextId is empty, required when using config")

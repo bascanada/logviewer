@@ -12,8 +12,11 @@ import (
 type TokenType int
 
 const (
+	// TokenEOF represents the end of the input
 	TokenEOF TokenType = iota
+	// TokenField represents a field name
 	TokenField
+	// TokenOperator represents an operator (=, !=, etc.)
 	TokenOperator
 	TokenValue
 	TokenAnd

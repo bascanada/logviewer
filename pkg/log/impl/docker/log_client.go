@@ -1,3 +1,4 @@
+// Package docker provides a Docker-backed log client implementation.
 package docker
 
 import (
@@ -22,11 +23,13 @@ import (
 const regexDockerTimestamp = "(([0-9]*)-([0-9]*)-([0-9]*)T([0-9]*):([0-9]*):([0-9]*).([0-9]*)Z)"
 const dockerPingTimeout = 10 * time.Second
 
+// DockerLogClient implements the LogClient interface for Docker.
 type DockerLogClient struct {
 	apiClient *client.Client
 	host      string
 }
 
+// Get executes a search against Docker logs.
 func (lc DockerLogClient) Get(ctx context.Context, search *logclient.LogSearch) (logclient.LogSearchResult, error) {
 
 	if !search.FieldExtraction.TimestampRegex.Set {
@@ -136,6 +139,7 @@ func (lc DockerLogClient) Get(ctx context.Context, search *logclient.LogSearch) 
 	return reader.GetLogResult(search, scanner, closer)
 }
 
+// GetFieldValues retrieves distinct values for the specified fields.
 func (lc DockerLogClient) GetFieldValues(ctx context.Context, search *logclient.LogSearch, fields []string) (map[string][]string, error) {
 	// For docker/text-based backends, we need to run a search and extract field values
 	result, err := lc.Get(ctx, search)
@@ -145,6 +149,7 @@ func (lc DockerLogClient) GetFieldValues(ctx context.Context, search *logclient.
 	return logclient.GetFieldValuesFromResult(ctx, result, fields)
 }
 
+// GetLogClient returns a new Docker log client.
 func GetLogClient(host string) (logclient.LogClient, error) {
 	// Prepare basic options
 	opts := []client.Opt{
@@ -182,9 +187,7 @@ func GetLogClient(host string) (logclient.LogClient, error) {
 		// For SSH connections, provide helpful diagnostic information
 		if helper != nil {
 			sshHost := host
-			if strings.HasPrefix(sshHost, "ssh://") {
-				sshHost = strings.TrimPrefix(sshHost, "ssh://")
-			}
+			sshHost = strings.TrimPrefix(sshHost, "ssh://")
 			return nil, fmt.Errorf("failed to connect to docker daemon via SSH: %w\n\nTroubleshooting:\n"+
 				"1. Ensure Docker is installed on the remote host (version 18.09 or later required for SSH)\n"+
 				"2. Verify SSH connection works: ssh %s docker version\n"+

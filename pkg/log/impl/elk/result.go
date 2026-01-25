@@ -17,7 +17,7 @@ import (
 type Hit struct {
 	Index  string `json:"_index"`
 	Type   string `json:"_type"`
-	Id     string `json:"_id"`
+	ID     string `json:"_id"`
 	Score  int32  `json:"_score"`
 	Source ty.MI  `json:"_source"`
 }
@@ -29,10 +29,10 @@ type Hits struct {
 	Hits []Hit `json:"hits"`
 }
 
-// ElkSearchResult implements client search results for Elasticsearch
+// SearchResult implements client search results for Elasticsearch
 // responses and provides convenience methods to extract entries and
 // pagination information.
-type ElkSearchResult struct {
+type SearchResult struct {
 	client client.LogClient
 	search *client.LogSearch
 	result Hits
@@ -45,10 +45,10 @@ type ElkSearchResult struct {
 	ErrChan       chan error
 }
 
-// GetSearchResult constructs an ElkSearchResult from a client, search
+// NewSearchResult constructs a SearchResult from a client, search
 // description and raw hits returned by Elasticsearch.
-func GetSearchResult(client client.LogClient, search *client.LogSearch, hits Hits) ElkSearchResult {
-	return ElkSearchResult{
+func NewSearchResult(client client.LogClient, search *client.LogSearch, hits Hits) SearchResult {
+	return SearchResult{
 		client:  client,
 		search:  search,
 		result:  hits,
@@ -57,14 +57,14 @@ func GetSearchResult(client client.LogClient, search *client.LogSearch, hits Hit
 }
 
 // GetSearch returns the original LogSearch used to produce this result.
-func (sr ElkSearchResult) GetSearch() *client.LogSearch {
+func (sr SearchResult) GetSearch() *client.LogSearch {
 	return sr.search
 }
 
 // GetEntries returns the parsed log entries for this result, a channel
 // that will receive updates when the search is refreshed, and any
 // immediate error encountered during setup.
-func (sr ElkSearchResult) GetEntries(context context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
+func (sr SearchResult) GetEntries(context context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
 
 	entries := sr.parseResults()
 
@@ -76,7 +76,7 @@ func (sr ElkSearchResult) GetEntries(context context.Context) ([]client.LogEntry
 // GetFields extracts a set of field names and values present in the
 // search results. It returns the set, an update channel (currently
 // unused) and an error if one occurs.
-func (sr ElkSearchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
+func (sr SearchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 
 	fields := ty.UniSet[string]{}
 
@@ -91,7 +91,7 @@ func (sr ElkSearchResult) GetFields(ctx context.Context) (ty.UniSet[string], cha
 	return fields, nil, nil
 }
 
-func (sr ElkSearchResult) parseResults() []client.LogEntry {
+func (sr SearchResult) parseResults() []client.LogEntry {
 	size := len(sr.result.Hits)
 
 	entries := make([]client.LogEntry, size)
@@ -136,7 +136,7 @@ func (sr ElkSearchResult) parseResults() []client.LogEntry {
 // GetPaginationInfo returns pagination details (has more / next page
 // token) when the search explicitly requested a size and more results
 // are available.
-func (sr ElkSearchResult) GetPaginationInfo() *client.PaginationInfo {
+func (sr SearchResult) GetPaginationInfo() *client.PaginationInfo {
 	if !sr.search.Size.Set {
 		return nil
 	}
@@ -160,11 +160,11 @@ func (sr ElkSearchResult) GetPaginationInfo() *client.PaginationInfo {
 
 // Err returns a channel that will receive asynchronous errors
 // produced while watching for search refreshes.
-func (sr ElkSearchResult) Err() <-chan error {
+func (sr SearchResult) Err() <-chan error {
 	return sr.ErrChan
 }
 
-func (sr ElkSearchResult) onChange(ctx context.Context) (chan []client.LogEntry, error) {
+func (sr SearchResult) onChange(ctx context.Context) (chan []client.LogEntry, error) {
 	if sr.search.Refresh.Duration.Value == "" {
 		return nil, nil
 	}
@@ -223,7 +223,7 @@ func (sr ElkSearchResult) onChange(ctx context.Context) (chan []client.LogEntry,
 						continue
 					}
 					lastLte = newLte
-					c <- result.(ElkSearchResult).parseResults()
+					c <- result.(SearchResult).parseResults()
 				}
 			case <-ctx.Done():
 				close(c)

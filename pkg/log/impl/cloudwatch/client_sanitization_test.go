@@ -43,7 +43,7 @@ func TestIsSafeFieldName(t *testing.T) {
 
 func TestQueryBuildingEscapesValues(t *testing.T) {
 	mockClient := &mockCWClientSanitize{}
-	c := &CloudWatchLogClient{client: mockClient}
+	c := &LogClient{client: mockClient}
 	s := &client.LogSearch{Fields: ty.MS{"level": "error'critical"}, Options: ty.MI{"logGroupName": "lg"}}
 	_, err := c.Get(context.Background(), s)
 	assert.NoError(t, err)

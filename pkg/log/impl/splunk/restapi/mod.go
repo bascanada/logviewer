@@ -10,12 +10,12 @@ import (
 	"github.com/bascanada/logviewer/pkg/ty"
 )
 
-// Struct to hold search job response
+// SearchJobResponse holds the response for a search job creation.
 type SearchJobResponse struct {
 	Sid string `json:"sid"`
 }
 
-// Struct to hold search job status response
+// JobStatusResponse holds the response for a search job status check.
 type JobStatusResponse struct {
 	Entry []struct {
 		Content struct {
@@ -24,7 +24,7 @@ type JobStatusResponse struct {
 	} `json:"entry"`
 }
 
-// Struct to hold search results response
+// SearchResultsResponse holds the response for search results.
 type SearchResultsResponse struct {
 	Results []ty.MI `json:"results"`
 }
@@ -37,7 +37,7 @@ type SplunkTarget struct {
 
 type SplunkRestClient struct {
 	target SplunkTarget
-	client http.HTTPClient
+	client http.Client
 }
 
 func (src SplunkRestClient) CreateSearchJob(
@@ -50,7 +50,7 @@ func (src SplunkRestClient) CreateSearchJob(
 ) (SearchJobResponse, error) {
 	var searchJobResponse SearchJobResponse
 
-	searchPath := fmt.Sprintf("/search/jobs")
+	searchPath := "/search/jobs"
 
 	// Ensure data map is initialized
 	if data == nil {

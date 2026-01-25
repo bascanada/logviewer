@@ -17,7 +17,9 @@ import (
 )
 
 const (
+	// OptionsCmd is the key for the command to execute.
 	OptionsCmd   = "cmd"
+	// OptionsShell is the key for the shell to use.
 	OptionsShell = "shell"
 	// OptionsPaths specifies file paths to read logs from.
 	// When paths are provided and hl is available, hl will be used for high-performance filtering.
@@ -238,6 +240,7 @@ func (lc localLogClient) GetFieldValues(ctx context.Context, search *client.LogS
 	return client.GetFieldValuesFromResult(ctx, result, fields)
 }
 
+// GetLogClient returns a new local log client.
 func GetLogClient() (client.LogClient, error) {
 	return localLogClient{}, nil
 }

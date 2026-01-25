@@ -15,6 +15,7 @@ import (
 	"github.com/bascanada/logviewer/pkg/ty"
 )
 
+// ReaderLogResult wraps a generic io.Reader (scanner) as a LogSearchResult.
 type ReaderLogResult struct {
 	search  *client.LogSearch
 	scanner *bufio.Scanner
@@ -31,10 +32,12 @@ type ReaderLogResult struct {
 	ErrChan chan error
 }
 
+// Err returns an error channel.
 func (lr ReaderLogResult) Err() <-chan error {
 	return lr.ErrChan
 }
 
+// GetSearch returns the search configuration.
 func (lr ReaderLogResult) GetSearch() *client.LogSearch {
 	return lr.search
 }
@@ -131,7 +134,7 @@ func (lr *ReaderLogResult) parseBlock(block string) (*client.LogEntry, bool) {
 	// For hybrid SSH mode, we always filter client-side to ensure correctness.
 	isPreFiltered := lr.search.Options.GetBool("__preFiltered__")
 
-    // ...existing code...
+	// ...existing code...
 	// Apply filter using the new recursive filter system
 	// Skip filtering only if explicitly pre-filtered (local hl mode)
 	if !isPreFiltered {
@@ -199,142 +202,145 @@ func (lr *ReaderLogResult) loadEntries() bool {
 	return len(lr.entries) > 0
 }
 
+// GetEntries returns log entries and a channel for streaming updates.
 func (lr *ReaderLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
 
 	if !lr.search.Follow {
 		lr.loadEntries()
 		_ = lr.closer.Close()
 		return lr.entries, nil, nil
-	} else {
-		// Channel to receive lines from the scanner
-		lineChan := make(chan string, 100) // Buffered to prevent scanner blocking during handoff
-		// Channel to signal scanning finished
-		doneChan := make(chan bool)
+	}
 
-		go func() {
-			defer close(lineChan)
-			defer close(doneChan)
-			for lr.scanner.Scan() {
-				lineChan <- lr.scanner.Text()
-			}
-		}()
+	// Channel to receive lines from the scanner
+	lineChan := make(chan string, 100) // Buffered to prevent scanner blocking during handoff
+	// Channel to signal scanning finished
+	doneChan := make(chan bool)
 
-		var initialEntries []client.LogEntry
-		var pendingBlock strings.Builder
+	go func() {
+		defer close(lineChan)
+		defer close(doneChan)
+		for lr.scanner.Scan() {
+			lineChan <- lr.scanner.Text()
+		}
+	}()
 
-		// Helper to process lines into entries
-		// Note: We need to append to either initialEntries OR send to channel c depending on phase
-		// So we'll decouple parsing from destination.
+	var initialEntries []client.LogEntry
+	var pendingBlock strings.Builder
 
-		// Phase 1: Capture initial batch for sorting
-		captureLimit := 1000
-		if lr.search.Size.Set && lr.search.Size.Value > 0 {
-			captureLimit = lr.search.Size.Value
+	// Helper to process lines into entries
+	// Note: We need to append to either initialEntries OR send to channel c depending on phase
+	// So we'll decouple parsing from destination.
+
+	// Phase 1: Capture initial batch for sorting
+	captureLimit := 1000
+	if lr.search.Size.Set && lr.search.Size.Value > 0 {
+		captureLimit = lr.search.Size.Value
+	}
+
+	timeout := time.NewTimer(500 * time.Millisecond)
+	capturing := true
+
+CaptureLoop:
+	for capturing {
+		if len(initialEntries) >= captureLimit {
+			break CaptureLoop
 		}
 
-		timeout := time.NewTimer(500 * time.Millisecond)
-		capturing := true
-
-	CaptureLoop:
-		for capturing {
-			if len(initialEntries) >= captureLimit {
+		select {
+		case <-ctx.Done():
+			return nil, nil, ctx.Err()
+		case line, ok := <-lineChan:
+			if !ok {
+				// Scanner finished during capture
 				break CaptureLoop
 			}
+			// Parse synchronously
+			lr.processLine(line, &pendingBlock, func(entry client.LogEntry) {
+				initialEntries = append(initialEntries, entry)
+			})
+		case <-timeout.C:
+			// Timeout reached, stop capturing
+			break CaptureLoop
+		}
+	}
 
+	// Flush any pending block from capture phase into initialEntries
+	lr.flushBlock(&pendingBlock, func(entry client.LogEntry) {
+		initialEntries = append(initialEntries, entry)
+	})
+
+	// If scanner finished, we are done
+	select {
+	case <-doneChan:
+		_ = lr.closer.Close()
+		return initialEntries, nil, nil
+	default:
+	}
+
+	// Phase 2: Stream remaining logs
+	c := make(chan []client.LogEntry)
+
+	go func() {
+		defer close(c)
+		defer func() { _ = lr.closer.Close() }()
+
+		// We might have a partial pending block from Phase 1?
+		// No, we flushed it above. pendingBlock is empty now.
+		// But wait, if processLine accumulated a partial line but didn't trigger onEntry,
+		// flushBlock forced it out as an entry.
+		// This effectively "breaks" a multiline log that straddles the capture boundary.
+		// However, given the timeout/limit, this is an acceptable tradeoff to ensure
+		// history is displayed. Multiline logs usually arrive in a burst anyway.
+
+		onEntry := func(entry client.LogEntry) {
+			c <- []client.LogEntry{entry}
+		}
+
+		// Reuse the flush-on-timeout logic for streaming
+		flushTimer := time.NewTimer(100 * time.Millisecond)
+		if !flushTimer.Stop() {
+			<-flushTimer.C
+		}
+
+		for {
 			select {
 			case <-ctx.Done():
-				return nil, nil, ctx.Err()
+				return
 			case line, ok := <-lineChan:
 				if !ok {
-					// Scanner finished during capture
-					break CaptureLoop
-				}
-				// Parse synchronously
-				lr.processLine(line, &pendingBlock, func(entry client.LogEntry) {
-					initialEntries = append(initialEntries, entry)
-				})
-			case <-timeout.C:
-				// Timeout reached, stop capturing
-				break CaptureLoop
-			}
-		}
-
-		// Flush any pending block from capture phase into initialEntries
-		lr.flushBlock(&pendingBlock, func(entry client.LogEntry) {
-			initialEntries = append(initialEntries, entry)
-		})
-
-		// If scanner finished, we are done
-		select {
-		case <-doneChan:
-			_ = lr.closer.Close()
-			return initialEntries, nil, nil
-		default:
-		}
-
-		// Phase 2: Stream remaining logs
-		c := make(chan []client.LogEntry)
-
-		go func() {
-			defer close(c)
-			defer func() { _ = lr.closer.Close() }()
-
-			// We might have a partial pending block from Phase 1?
-			// No, we flushed it above. pendingBlock is empty now.
-			// But wait, if processLine accumulated a partial line but didn't trigger onEntry,
-			// flushBlock forced it out as an entry.
-			// This effectively "breaks" a multiline log that straddles the capture boundary.
-			// However, given the timeout/limit, this is an acceptable tradeoff to ensure
-			// history is displayed. Multiline logs usually arrive in a burst anyway.
-
-			onEntry := func(entry client.LogEntry) {
-				c <- []client.LogEntry{entry}
-			}
-
-			// Reuse the flush-on-timeout logic for streaming
-			flushTimer := time.NewTimer(100 * time.Millisecond)
-			if !flushTimer.Stop() {
-				<-flushTimer.C
-			}
-
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case line, ok := <-lineChan:
-					if !ok {
-						lr.flushBlock(&pendingBlock, onEntry)
-						return
-					}
-					lr.processLine(line, &pendingBlock, onEntry)
-
-					// Reset the flush timer
-					if !flushTimer.Stop() {
-						select {
-						case <-flushTimer.C:
-						default:
-						}
-					}
-					flushTimer.Reset(100 * time.Millisecond)
-
-				case <-flushTimer.C:
 					lr.flushBlock(&pendingBlock, onEntry)
+					return
 				}
-			}
-		}()
+				lr.processLine(line, &pendingBlock, onEntry)
 
-		return initialEntries, c, nil
-	}
+				// Reset the flush timer
+				if !flushTimer.Stop() {
+					select {
+					case <-flushTimer.C:
+					default:
+					}
+				}
+				flushTimer.Reset(100 * time.Millisecond)
+
+			case <-flushTimer.C:
+				lr.flushBlock(&pendingBlock, onEntry)
+			}
+		}
+	}()
+
+	return initialEntries, c, nil
 }
 
 func (lr ReaderLogResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 	return lr.fields, nil, nil
 }
 
+// GetPaginationInfo returns nil as reader based logs don't support pagination.
 func (lr ReaderLogResult) GetPaginationInfo() *client.PaginationInfo {
 	return nil
 }
 
+// GetLogResult creates a new ReaderLogResult from a scanner.
 func GetLogResult(
 	search *client.LogSearch,
 	scanner *bufio.Scanner,
@@ -367,9 +373,7 @@ func GetLogResult(
 		// common user patterns, compile an unanchored version for detection
 		// and extraction by removing a leading '^' if present.
 		pattern := search.FieldExtraction.TimestampRegex.Value
-		if strings.HasPrefix(pattern, "^") {
-			pattern = strings.TrimPrefix(pattern, "^")
-		}
+		pattern = strings.TrimPrefix(pattern, "^")
 		regexDateExtraction, err = regexp.Compile(pattern)
 		if err != nil {
 			return nil, err

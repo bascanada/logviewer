@@ -13,6 +13,7 @@ import (
 	"github.com/bascanada/logviewer/pkg/ty"
 )
 
+// KibanaTarget describes the connection target for a Kibana-backed client.
 type KibanaTarget struct {
 	Endpoint string `json:"endpoint"`
 }
@@ -21,7 +22,7 @@ type KibanaTarget struct {
 
 type kibanaClient struct {
 	target KibanaTarget
-	client http.HTTPClient
+	client http.Client
 }
 
 func (kc kibanaClient) Get(_ context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
@@ -39,7 +40,7 @@ func (kc kibanaClient) Get(_ context.Context, search *client.LogSearch) (client.
 		return nil, err
 	}
 
-	return elk.GetSearchResult(&kc, search, searchResponse.RawResponse.Hits), nil
+	return elk.NewSearchResult(&kc, search, searchResponse.RawResponse.Hits), nil
 }
 
 // buildKibanaCondition builds a single Kibana query condition from a filter leaf.

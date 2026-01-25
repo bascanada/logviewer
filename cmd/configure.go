@@ -4,7 +4,7 @@
 package cmd
 
 import (
-	"crypto/md5"
+	"crypto/md5" //nolint:gosec
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -224,7 +224,7 @@ func runConfigWizard(cfgPath string) error {
 
 	// Create directory if it doesn't exist
 	configDir := filepath.Dir(configPath)
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0750); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
@@ -294,7 +294,7 @@ func runConfigWizard(cfgPath string) error {
 		}
 	}
 
-	if err := os.WriteFile(configPath, out, 0644); err != nil {
+	if err := os.WriteFile(configPath, out, 0600); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
 
@@ -563,7 +563,7 @@ func buildClientOptions(data *wizardData) ty.MI {
 			// This is used here because it's required by the legacy Splunk API.
 			// If the API supports SHA-256 or other secure algorithms, prefer those instead.
 			// Calculate MD5 hash of username:password for Bearer auth
-			hash := md5.Sum([]byte(data.username + ":" + data.password))
+			hash := md5.Sum([]byte(data.username + ":" + data.password)) //nolint:gosec
 			hashStr := hex.EncodeToString(hash[:])
 			headers["Authorization"] = "Bearer " + hashStr
 		}

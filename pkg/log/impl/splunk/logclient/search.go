@@ -14,6 +14,7 @@ import (
 	"github.com/bascanada/logviewer/pkg/ty"
 )
 
+// SplunkLogSearchResult implements LogSearchResult for Splunk.
 type SplunkLogSearchResult struct {
 	logClient *SplunkLogSearchClient
 	sid       string
@@ -29,10 +30,12 @@ type SplunkLogSearchResult struct {
 	useResultsEndpoint bool
 }
 
+// GetSearch returns the search configuration.
 func (s SplunkLogSearchResult) GetSearch() *client.LogSearch {
 	return s.search
 }
 
+// Close cancels the running Splunk search job.
 func (s *SplunkLogSearchResult) Close() error {
 	if s.isFollow {
 		log.Printf("closing splunk search job %s", s.sid)
@@ -41,6 +44,7 @@ func (s *SplunkLogSearchResult) Close() error {
 	return nil
 }
 
+// GetEntries returns log entries and a channel for streaming updates.
 func (s SplunkLogSearchResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
 	if !s.isFollow {
 		return s.parseResults(&s.results[0]), nil, nil
@@ -99,6 +103,7 @@ func (s SplunkLogSearchResult) GetFields(ctx context.Context) (ty.UniSet[string]
 	return fields, nil, nil
 }
 
+// GetPaginationInfo returns information for fetching the next page.
 func (s SplunkLogSearchResult) GetPaginationInfo() *client.PaginationInfo {
 	if s.isFollow || !s.search.Size.Set {
 		return nil
@@ -196,6 +201,7 @@ func (s SplunkLogSearchResult) formatAggregatedResult(result ty.MI) string {
 	return strings.Join(parts, "  ")
 }
 
+// Err returns an error channel (unused for Splunk).
 func (s SplunkLogSearchResult) Err() <-chan error {
 	return nil
 }

@@ -264,7 +264,7 @@ func TestLoadContextConfig_MultiFileMerge(t *testing.T) {
 	configDir := filepath.Join(tmpHome, DefaultConfigDir)
 	dropInDir := filepath.Join(configDir, "configs")
 
-	if err := os.MkdirAll(dropInDir, 0755); err != nil {
+	if err := os.MkdirAll(dropInDir, 0750); err != nil {
 		t.Fatalf("failed to create config dirs: %v", err)
 	}
 

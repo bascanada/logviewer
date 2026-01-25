@@ -13,13 +13,14 @@ import (
 	"github.com/bascanada/logviewer/pkg/ty"
 )
 
+// OpenSearchTarget describes the connection target for an OpenSearch-backed client.
 type OpenSearchTarget struct {
 	Endpoint string `json:"endpoint"`
 }
 
 type openSearchClient struct {
 	target OpenSearchTarget
-	client http.HTTPClient
+	client http.Client
 }
 
 func (kc openSearchClient) Get(_ context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
@@ -41,7 +42,7 @@ func (kc openSearchClient) Get(_ context.Context, search *client.LogSearch) (cli
 		return nil, err
 	}
 
-	res := elk.GetSearchResult(&kc, search, searchResult.Hits)
+	res := elk.NewSearchResult(&kc, search, searchResult.Hits)
 
 	// If a page token was provided we already validated and parsed it in
 	// GetSearchRequest; reuse that value for pagination calculation.

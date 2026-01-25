@@ -13,9 +13,10 @@ import (
 	"github.com/bascanada/logviewer/pkg/ty"
 )
 
+// CloudWatchLogSearchResult implements LogSearchResult for CloudWatch.
 type CloudWatchLogSearchResult struct {
 	client  CWClient
-	queryId string
+	queryID string
 	search  *client.LogSearch
 	logger  *slog.Logger
 
@@ -24,6 +25,7 @@ type CloudWatchLogSearchResult struct {
 	fields  ty.UniSet[string]
 }
 
+// GetSearch returns the search configuration.
 func (r *CloudWatchLogSearchResult) GetSearch() *client.LogSearch {
 	return r.search
 }
@@ -58,7 +60,7 @@ func (r *CloudWatchLogSearchResult) fetchEntries(ctx context.Context) error {
 	interval := baseInterval
 	for attempt := 0; ; attempt++ {
 		var err error
-		results, err = r.client.GetQueryResults(ctx, &cloudwatchlogs.GetQueryResultsInput{QueryId: &r.queryId})
+		results, err = r.client.GetQueryResults(ctx, &cloudwatchlogs.GetQueryResultsInput{QueryId: &r.queryID})
 		if err != nil {
 			return err
 		}
@@ -101,10 +103,12 @@ func (r *CloudWatchLogSearchResult) fetchEntries(ctx context.Context) error {
 	return nil
 }
 
+// Err returns an error channel (unused for CloudWatch).
 func (r *CloudWatchLogSearchResult) Err() <-chan error {
 	return nil
 }
 
+// GetEntries returns log entries and a channel for streaming updates.
 func (r *CloudWatchLogSearchResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
 	if err := r.fetchEntries(ctx); err != nil {
 		return nil, nil, err
@@ -112,6 +116,7 @@ func (r *CloudWatchLogSearchResult) GetEntries(ctx context.Context) ([]client.Lo
 	return r.entries, nil, nil
 }
 
+// GetFields retrieves distinct values for the specified fields.
 func (r *CloudWatchLogSearchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 	// If already computed, return cached
 	if len(r.fields) > 0 {
@@ -158,6 +163,7 @@ func parseCloudWatchTimestamp(v string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
+// GetPaginationInfo returns information for fetching the next page.
 func (r *CloudWatchLogSearchResult) GetPaginationInfo() *client.PaginationInfo {
 	if !r.search.Size.Set {
 		return nil

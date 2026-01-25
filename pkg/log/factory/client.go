@@ -116,7 +116,7 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 					authOptions.Header = authMap.GetMS("header")
 				}
 				vv, err := splunk.GetClient(splunk.SplunkLogSearchClientOptions{
-					Url:        v.Options.GetString("url"),
+					URL:        v.Options.GetString("url"),
 					Auth:       authOptions,
 					Headers:    v.Options.GetMS("headers").ResolveVariables(),
 					SearchBody: v.Options.GetMS("searchBody").ResolveVariables(),

@@ -101,6 +101,7 @@ func (i *Opt[T]) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
+// MarshalJSON implements json.Marshaler.
 func (i *Opt[T]) MarshalJSON() ([]byte, error) {
 	if !i.Set {
 		return []byte("null"), nil

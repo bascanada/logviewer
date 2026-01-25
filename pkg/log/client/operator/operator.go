@@ -2,14 +2,19 @@
 package operator
 
 const (
+	// Equals checks for exact string equality.
 	Equals   = "equals"
 	Match    = "match"
 	Wildcard = "wildcard"
 	Exists   = "exists"
 	Regex    = "regex"
-	// Comparison operators for hl-compatible syntax
-	Gt  = "gt"  // >
-	Gte = "gte" // >=
-	Lt  = "lt"  // <
-	Lte = "lte" // <=
+
+	// Gt is the greater than operator (>).
+	Gt  = "gt"
+	// Gte is the greater than or equal operator (>=).
+	Gte = "gte"
+	// Lt is the less than operator (<).
+	Lt  = "lt"
+	// Lte is the less than or equal operator (<=).
+	Lte = "lte"
 )

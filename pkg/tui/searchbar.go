@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+// Package tui provides the terminal user interface components.
 package tui
 
 import (
@@ -179,9 +179,8 @@ func (s *SearchBar) Blur() {
 
 // Update handles messages for the search bar
 func (s SearchBar) Update(msg tea.Msg) (SearchBar, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		return s.handleKey(msg)
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		return s.handleKey(keyMsg)
 	}
 
 	// Pass through to text input

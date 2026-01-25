@@ -15,6 +15,7 @@ import (
 	"github.com/bascanada/logviewer/pkg/log/factory"
 )
 
+// Server represents the API server instance.
 type Server struct {
 	config        *config.ContextConfig
 	router        *http.ServeMux
@@ -26,6 +27,7 @@ type Server struct {
 	openapiSpec   []byte
 }
 
+// NewServer creates a new API server instance.
 func NewServer(host, port string, cfg *config.ContextConfig, logger *slog.Logger, openapiSpec []byte) (*Server, error) {
 	clientFactory, err := factory.GetLogClientFactory(cfg.Clients)
 	if err != nil {
@@ -59,6 +61,7 @@ func (s *Server) routes() {
 	s.router.HandleFunc("/openapi.yaml", s.openapiHandler)
 }
 
+// Start runs the HTTP server and blocks until a signal is received.
 func (s *Server) Start() error {
 	handler := s.chainMiddleware(s.router, s.recoveryMiddleware, s.corsMiddleware, s.requestIDMiddleware, s.loggingMiddleware)
 
@@ -105,6 +108,7 @@ func (s *Server) Start() error {
 	return nil
 }
 
+// Stop gracefully shuts down the server.
 func (s *Server) Stop(ctx context.Context) error {
 	s.logger.Info("stopping server")
 	return s.httpServer.Shutdown(ctx)

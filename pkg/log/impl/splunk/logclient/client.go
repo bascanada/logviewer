@@ -1,3 +1,4 @@
+// Package logclient provides the Splunk implementation of the log client interface.
 package logclient
 
 import (
@@ -19,12 +20,14 @@ import (
 // to dispatch on a fresh dev instance.
 const maxRetryDoneJob = 30
 
+// SplunkAuthOptions defines authentication headers.
 type SplunkAuthOptions struct {
 	Header ty.MS `json:"header" yaml:"header"`
 }
 
+// SplunkLogSearchClientOptions defines configuration for the Splunk client.
 type SplunkLogSearchClientOptions struct {
-	Url string `json:"url" yaml:"url"`
+	URL string `json:"url" yaml:"url"`
 
 	Auth       SplunkAuthOptions `json:"auth" yaml:"auth"`
 	Headers    ty.MS             `json:"headers" yaml:"headers"`
@@ -35,12 +38,14 @@ type SplunkLogSearchClientOptions struct {
 	MaxRetries                int `json:"maxRetries" yaml:"maxRetries"`
 }
 
+// SplunkLogSearchClient implements LogClient for Splunk.
 type SplunkLogSearchClient struct {
 	client restapi.SplunkRestClient
 
 	options SplunkLogSearchClientOptions
 }
 
+// Get executes a search against Splunk.
 func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
 	// initiate the things and wait for query to be done
 
@@ -126,7 +131,7 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 			break
 		}
 
-		tryCount += 1
+		tryCount++
 	}
 
 	offset := 0
@@ -154,6 +159,7 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 	}, nil
 }
 
+// GetFieldValues retrieves distinct values for the specified fields.
 func (s SplunkLogSearchClient) GetFieldValues(ctx context.Context, search *client.LogSearch, fields []string) (map[string][]string, error) {
 	if s.options.Headers == nil {
 		s.options.Headers = ty.MS{}
@@ -287,21 +293,21 @@ func (s SplunkLogSearchClient) getFieldValuesFromSearch(ctx context.Context, sea
 
 func GetClient(options SplunkLogSearchClientOptions) (client.LogClient, error) {
 
-	if options.Url == "" {
+	if options.URL == "" {
 		return nil, fmt.Errorf("splunk client Url is empty; set the Url option in config or pass --splunk-endpoint")
 	}
 
 	target := restapi.SplunkTarget{
-		Endpoint: options.Url,
+		Endpoint: options.URL,
 		Headers:  options.Headers,
 	}
 
 	// If headers include Authorization or other fixed headers, pass them as
 	// an Auth implementation so GET requests also include those headers.
-	if options.Auth.Header != nil && len(options.Auth.Header) > 0 {
+	if len(options.Auth.Header) > 0 {
 		// set the Auth on the target so Get requests include the same headers
 		target.Auth = httpPkg.HeaderAuth{Headers: options.Auth.Header}
-	} else if options.Headers != nil && len(options.Headers) > 0 {
+	} else if len(options.Headers) > 0 {
 		// Also check options.Headers for ad-hoc queries that pass headers directly
 		target.Auth = httpPkg.HeaderAuth{Headers: options.Headers}
 	}

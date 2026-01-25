@@ -18,7 +18,7 @@ var (
 	ColorTextMuted = lipgloss.Color("#9CA3AF") // Muted text
 )
 
-// Log level colors
+// LogLevelColors maps log levels to their display colors.
 var LogLevelColors = map[string]lipgloss.Color{
 	"ERROR":   ColorError,
 	"WARN":    ColorWarning,

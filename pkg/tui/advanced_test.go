@@ -130,7 +130,7 @@ func (m *InMemoryLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, 
 
 	offset := 0
 	if m.Search.PageToken.Set && m.Search.PageToken.Value != "" {
-		fmt.Sscanf(m.Search.PageToken.Value, "offset-%d", &offset)
+		_, _ = fmt.Sscanf(m.Search.PageToken.Value, "offset-%d", &offset)
 	}
 
 	startIdx := offset
@@ -262,7 +262,7 @@ func (m *InMemoryLogResult) GetPaginationInfo() *client.PaginationInfo {
 
 	offset := 0
 	if m.Search.PageToken.Set && m.Search.PageToken.Value != "" {
-		fmt.Sscanf(m.Search.PageToken.Value, "offset-%d", &offset)
+		_, _ = fmt.Sscanf(m.Search.PageToken.Value, "offset-%d", &offset)
 	}
 
 	pageSize := 10
@@ -444,7 +444,7 @@ func TestTUI_ComplexInteraction(t *testing.T) {
 	}
 
 	RunScenario(t, tm, steps)
-	tm.Quit()
+	_ = tm.Quit()
 }
 
 func TestTUI_Integration_Workflow(t *testing.T) {
@@ -522,5 +522,5 @@ func TestTUI_Integration_Workflow(t *testing.T) {
 	})
 
 	// Cleanup
-	tm.Quit()
+	_ = tm.Quit()
 }

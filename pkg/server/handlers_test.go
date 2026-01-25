@@ -143,7 +143,7 @@ func TestContextsHandler_Detail(t *testing.T) {
 	var resp ContextInfo
 	err = json.Unmarshal(rr.Body.Bytes(), &resp)
 	assert.NoError(t, err)
-	assert.Equal(t, "ctx1", resp.Id)
+	assert.Equal(t, "ctx1", resp.ID)
 }
 
 func TestQueryLogsHandler(t *testing.T) {

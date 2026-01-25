@@ -13,10 +13,15 @@ type APIError struct {
 }
 
 const (
+	// ErrCodeContextNotFound is returned when a requested context ID is invalid.
 	ErrCodeContextNotFound = "CONTEXT_NOT_FOUND"
-	ErrCodeInvalidSearch   = "INVALID_SEARCH"
-	ErrCodeBackendError    = "BACKEND_ERROR"
-	ErrCodeConfigError     = "CONFIG_ERROR"
+	// ErrCodeInvalidSearch is returned when the search parameters are malformed.
+	ErrCodeInvalidSearch = "INVALID_SEARCH"
+	// ErrCodeBackendError is returned when an upstream log backend fails.
+	ErrCodeBackendError = "BACKEND_ERROR"
+	// ErrCodeConfigError is returned when there is a configuration issue.
+	ErrCodeConfigError = "CONFIG_ERROR"
+	// ErrCodeValidationError is returned when request validation fails.
 	ErrCodeValidationError = "VALIDATION_ERROR"
 )
 

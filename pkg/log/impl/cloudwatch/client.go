@@ -27,8 +27,8 @@ type CWClient interface {
 	FilterLogEvents(ctx context.Context, params *cloudwatchlogs.FilterLogEventsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.FilterLogEventsOutput, error)
 }
 
-// CloudWatchLogClient implements the client.LogClient interface for AWS CloudWatch.
-type CloudWatchLogClient struct {
+// LogClient implements the client.LogClient interface for AWS CloudWatch.
+type LogClient struct {
 	client CWClient
 	logger *slog.Logger
 }
@@ -57,7 +57,7 @@ func isSafeFieldName(name string) bool {
 }
 
 // Get will be implemented in Phase 2.
-func (c *CloudWatchLogClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
+func (c *LogClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
 	logGroupName, ok := search.Options.GetStringOk("logGroupName")
 	if !ok {
 		return nil, errors.New("logGroupName is required in options for CloudWatch Logs")
@@ -116,11 +116,12 @@ func (c *CloudWatchLogClient) Get(ctx context.Context, search *client.LogSearch)
 		layouts := []string{time.RFC3339Nano, time.RFC3339, "2006-01-02 15:04:05.000"}
 		var lastErr error
 		for _, l := range layouts {
-			if ts, err := time.Parse(l, v); err == nil {
+			var ts time.Time
+			var err error
+			if ts, err = time.Parse(l, v); err == nil {
 				return ts, nil
-			} else {
-				lastErr = err
 			}
+			lastErr = err
 		}
 		return time.Time{}, lastErr
 	}
@@ -161,7 +162,7 @@ func (c *CloudWatchLogClient) Get(ctx context.Context, search *client.LogSearch)
 		if startQueryOutput.QueryId == nil {
 			return nil, errors.New("StartQuery did not return a QueryId")
 		}
-		return &CloudWatchLogSearchResult{client: c.client, queryId: *startQueryOutput.QueryId, search: search, logger: c.logger}, nil
+		return &CloudWatchLogSearchResult{client: c.client, queryID: *startQueryOutput.QueryId, search: search, logger: c.logger}, nil
 	}
 
 	// FilterLogEvents fallback
@@ -236,7 +237,8 @@ func (r *staticCloudWatchResult) GetFields(ctx context.Context) (ty.UniSet[strin
 func (r *staticCloudWatchResult) GetPaginationInfo() *client.PaginationInfo { return nil }
 func (r *staticCloudWatchResult) Err() <-chan error                         { return nil }
 
-func (c *CloudWatchLogClient) GetFieldValues(ctx context.Context, search *client.LogSearch, fields []string) (map[string][]string, error) {
+// GetFieldValues retrieves distinct values for the specified fields.
+func (c *LogClient) GetFieldValues(ctx context.Context, search *client.LogSearch, fields []string) (map[string][]string, error) {
 	// For CloudWatch, we need to run a search and extract field values from the results
 	result, err := c.Get(ctx, search)
 	if err != nil {
@@ -263,13 +265,13 @@ func GetLogClient(options ty.MI) (client.LogClient, error) {
 	// Optional custom endpoint (e.g. LocalStack) for integration tests
 	// Key name: "endpoint" (lowercase) to be consistent with region/profile
 	if endpoint, ok := options.GetStringOk("endpoint"); ok && endpoint != "" {
-		resolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, _ ...interface{}) (aws.Endpoint, error) {
+		resolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, _ ...interface{}) (aws.Endpoint, error) { //nolint:staticcheck
 			if strings.Contains(strings.ToLower(service), "logs") {
-				return aws.Endpoint{URL: endpoint, PartitionID: "aws", SigningRegion: region}, nil
+				return aws.Endpoint{URL: endpoint, PartitionID: "aws", SigningRegion: region}, nil //nolint:staticcheck
 			}
-			return aws.Endpoint{}, &aws.EndpointNotFoundError{}
+			return aws.Endpoint{}, &aws.EndpointNotFoundError{} //nolint:staticcheck
 		})
-		cfgOptions = append(cfgOptions, config.WithEndpointResolverWithOptions(resolver))
+		cfgOptions = append(cfgOptions, config.WithEndpointResolverWithOptions(resolver)) //nolint:staticcheck
 	}
 
 	cfg, err := config.LoadDefaultConfig(context.TODO(), cfgOptions...)
@@ -277,5 +279,5 @@ func GetLogClient(options ty.MI) (client.LogClient, error) {
 		return nil, err
 	}
 
-	return &CloudWatchLogClient{client: cloudwatchlogs.NewFromConfig(cfg), logger: slog.Default()}, nil
+	return &LogClient{client: cloudwatchlogs.NewFromConfig(cfg), logger: slog.Default()}, nil
 }

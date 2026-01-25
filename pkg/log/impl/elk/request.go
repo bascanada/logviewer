@@ -10,6 +10,7 @@ import (
 	"github.com/bascanada/logviewer/pkg/ty"
 )
 
+// GetDateRange calculates the date range (gte, lte) for a search.
 func GetDateRange(search *client.LogSearch) (string, string, error) {
 	var gte, lte string
 
@@ -50,6 +51,7 @@ func GetDateRange(search *client.LogSearch) (string, string, error) {
 	return gte, lte, nil
 }
 
+// GetDateRangeConditon builds the range condition for a query.
 func GetDateRangeConditon(gte, lte string) ty.MI {
 
 	return ty.MI{

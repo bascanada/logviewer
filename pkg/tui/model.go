@@ -29,6 +29,7 @@ import (
 type FocusMode int
 
 const (
+	// FocusList means the main log list has focus.
 	FocusList FocusMode = iota
 	FocusSearch
 	FocusSidebar
@@ -41,6 +42,7 @@ const (
 type ConfirmationType int
 
 const (
+	// ConfirmCloseTab means we are confirming closing a tab.
 	ConfirmCloseTab ConfirmationType = iota
 	ConfirmQuitApp
 )
@@ -49,6 +51,7 @@ const (
 type SidebarMode int
 
 const (
+	// SidebarModeEntry shows selected entry details.
 	SidebarModeEntry  SidebarMode = iota // Show selected entry details
 	SidebarModeFields                    // Show global fields with values
 	SidebarModeJSON                      // Show formatted JSON from selected entry
@@ -309,7 +312,9 @@ func (m *Model) addTabCmd(contextID string, search *client.LogSearch) tea.Cmd {
 	}
 	if search != nil {
 		// Merge overrides (CLI args / manual search)
-		effectiveSearch.MergeInto(search)
+		if err := effectiveSearch.MergeInto(search); err != nil {
+			log.Printf("[ERROR] Failed to merge search overrides: %v", err)
+		}
 	}
 
 	// 1. Populate from merged search (handles context + CLI overrides without duplicates)

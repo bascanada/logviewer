@@ -43,8 +43,8 @@ func (h HeaderAuth) Login(req *http.Request) error {
 	return nil
 }
 
-// HTTPClient is a wrapper around http.Client with convenience methods for JSON/Data requests.
-type HTTPClient struct {
+// Client is a wrapper around http.Client with convenience methods for JSON/Data requests.
+type Client struct {
 	client http.Client
 	url    string
 }
@@ -63,7 +63,7 @@ func DebugEnabled() bool {
 	return Debug
 }
 
-func (c HTTPClient) post(path string, headers ty.MS, buf *bytes.Buffer, responseData interface{}, auth Auth) error {
+func (c Client) post(path string, headers ty.MS, buf *bytes.Buffer, responseData interface{}, auth Auth) error {
 	path = c.url + path
 
 	if Debug {
@@ -114,7 +114,7 @@ func (c HTTPClient) post(path string, headers ty.MS, buf *bytes.Buffer, response
 }
 
 // PostData performs a POST request with URL-encoded form data.
-func (c HTTPClient) PostData(path string, headers ty.MS, body ty.MS, responseData interface{}, auth Auth) error {
+func (c Client) PostData(path string, headers ty.MS, body ty.MS, responseData interface{}, auth Auth) error {
 
 	headers["Content-Type"] = "application/x-www-form-urlencoded"
 
@@ -132,7 +132,7 @@ func (c HTTPClient) PostData(path string, headers ty.MS, body ty.MS, responseDat
 }
 
 // PostJSON performs a POST request with a JSON body.
-func (c HTTPClient) PostJSON(path string, headers ty.MS, body interface{}, responseData interface{}, auth Auth) error {
+func (c Client) PostJSON(path string, headers ty.MS, body interface{}, responseData interface{}, auth Auth) error {
 
 	headers["Content-Type"] = "application/json"
 
@@ -147,7 +147,7 @@ func (c HTTPClient) PostJSON(path string, headers ty.MS, body interface{}, respo
 }
 
 // Get performs a GET request.
-func (c HTTPClient) Get(path string, queryParams ty.MS, headers ty.MS, body interface{}, responseData interface{}, auth Auth) error {
+func (c Client) Get(path string, queryParams ty.MS, headers ty.MS, body interface{}, responseData interface{}, auth Auth) error {
 
 	var buf bytes.Buffer
 
@@ -231,7 +231,7 @@ func (c HTTPClient) Get(path string, queryParams ty.MS, headers ty.MS, body inte
 }
 
 // Delete performs a DELETE request.
-func (c HTTPClient) Delete(path string, headers ty.MS, auth Auth) error {
+func (c Client) Delete(path string, headers ty.MS, auth Auth) error {
 	path = c.url + path
 
 	if Debug {
@@ -281,8 +281,8 @@ func (c HTTPClient) Delete(path string, headers ty.MS, auth Auth) error {
 	return nil
 }
 
-// GetClient returns a new HTTPClient for the given URL.
-func GetClient(url string) HTTPClient {
+// GetClient returns a new Client for the given URL.
+func GetClient(url string) Client {
 	// Normalize URL: if scheme is missing, default to https. Also remove
 	// any trailing slash to avoid double slashes when appending paths.
 	if url != "" {
@@ -295,7 +295,7 @@ func GetClient(url string) HTTPClient {
 
 	spaceClient := getSpaceClient()
 
-	return HTTPClient{
+	return Client{
 		client: spaceClient,
 		url:    url,
 	}

@@ -9,8 +9,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -24,6 +24,7 @@ import (
 )
 
 const (
+	// OptionsCmd is the key for the command to execute.
 	OptionsCmd = "cmd"
 	// OptionsPaths specifies file paths to read logs from on the remote host.
 	// When paths are provided, a hybrid command will be used that checks for hl on the remote host.
@@ -32,6 +33,7 @@ const (
 	OptionsPreferNativeDriver = "preferNativeDriver"
 )
 
+// SSHLogClientOptions defines configuration for the SSH client.
 type SSHLogClientOptions struct {
 	User string `json:"user"`
 	Addr string `json:"addr"`
@@ -251,6 +253,7 @@ func (lc sshLogClient) GetFieldValues(ctx context.Context, search *client.LogSea
 	return client.GetFieldValuesFromResult(ctx, result, fields)
 }
 
+// GetLogClient returns a new SSH log client.
 func GetLogClient(options SSHLogClientOptions) (client.LogClient, error) {
 
 	if options.Addr == "" {
@@ -267,7 +270,7 @@ func GetLogClient(options SSHLogClientOptions) (client.LogClient, error) {
 		privateKeyFile = filepath.Join(homedir.HomeDir(), ".ssh", "id_rsa")
 	}
 
-	key, err := ioutil.ReadFile(privateKeyFile)
+	key, err := os.ReadFile(privateKeyFile) //nolint:gosec
 	if err != nil {
 		return nil, err
 	}
