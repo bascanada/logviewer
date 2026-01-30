@@ -5,12 +5,12 @@ import (
 )
 
 func (s *Server) validateQueryRequest(req *QueryRequest) error {
-	if req.ContextId == "" {
+	if req.ContextID == "" {
 		return fmt.Errorf("contextId is required")
 	}
 
-	if _, ok := s.config.Contexts[req.ContextId]; !ok {
-		return fmt.Errorf("contextId '%s' not found in configuration", req.ContextId)
+	if _, ok := s.config.Contexts[req.ContextID]; !ok {
+		return fmt.Errorf("contextId '%s' not found in configuration", req.ContextID)
 	}
 
 	for _, inherit := range req.Inherits {

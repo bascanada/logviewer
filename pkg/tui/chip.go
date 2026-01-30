@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+// Package tui provides the terminal user interface components.
 package tui
 
 import "github.com/bascanada/logviewer/pkg/log/client"

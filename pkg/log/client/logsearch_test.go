@@ -20,16 +20,16 @@ func TestMerging(t *testing.T) {
 		},
 	}
 
-	searchParent.MergeInto(&searchChild)
+	_ = searchParent.MergeInto(&searchChild)
 
-	str, _ := ty.ToJsonString(&searchParent)
+	str, _ := ty.ToJSONString(&searchParent)
 
 	restoreParent := LogSearch{}
 
-	ty.FromJsonString(str, &restoreParent)
+	_ = ty.FromJSONString(str, &restoreParent)
 
 	assert.Equal(t, searchParent.Refresh.Duration.Value, "15s", "should be the same")
-	//assert.Equal(t, searchParent)
+	// assert.Equal(t, searchParent)
 
 }
 
@@ -42,7 +42,7 @@ func TestMergingFollow(t *testing.T) {
 		Follow: true,
 	}
 
-	searchParent.MergeInto(&searchChild)
+	_ = searchParent.MergeInto(&searchChild)
 
 	assert.True(t, searchParent.Follow, "Follow should be true after merge")
 }

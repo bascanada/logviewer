@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+// Package tui provides the terminal user interface components.
 package tui
 
 import (
@@ -179,9 +179,8 @@ func (s *SearchBar) Blur() {
 
 // Update handles messages for the search bar
 func (s SearchBar) Update(msg tea.Msg) (SearchBar, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		return s.handleKey(msg)
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		return s.handleKey(keyMsg)
 	}
 
 	// Pass through to text input
@@ -192,6 +191,8 @@ func (s SearchBar) Update(msg tea.Msg) (SearchBar, tea.Cmd) {
 }
 
 // handleKey processes keyboard input
+//
+//nolint:gocyclo // Keyboard handler with many key combinations
 func (s SearchBar) handleKey(msg tea.KeyMsg) (SearchBar, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyTab:
@@ -254,11 +255,12 @@ func (s SearchBar) handleKey(msg tea.KeyMsg) (SearchBar, tea.Cmd) {
 			s.State.Chips = append(s.State.Chips[:deletedIndex], s.State.Chips[deletedIndex+1:]...)
 
 			// Adjust selection
-			if len(s.State.Chips) == 0 {
+			switch {
+			case len(s.State.Chips) == 0:
 				s.State.SelectedChip = -1
-			} else if deletedIndex >= len(s.State.Chips) {
+			case deletedIndex >= len(s.State.Chips):
 				s.State.SelectedChip = len(s.State.Chips) - 1
-			} else {
+			default:
 				s.State.SelectedChip = deletedIndex
 			}
 
@@ -326,11 +328,12 @@ func (s SearchBar) handleKey(msg tea.KeyMsg) (SearchBar, tea.Cmd) {
 			s.State.Chips = append(s.State.Chips[:deletedIndex], s.State.Chips[deletedIndex+1:]...)
 
 			// Adjust selection to stay on a nearby chip
-			if len(s.State.Chips) == 0 {
+			switch {
+			case len(s.State.Chips) == 0:
 				s.State.SelectedChip = -1 // No chips left, back to input
-			} else if deletedIndex >= len(s.State.Chips) {
+			case deletedIndex >= len(s.State.Chips):
 				s.State.SelectedChip = len(s.State.Chips) - 1 // Move to last chip
-			} else {
+			default:
 				s.State.SelectedChip = deletedIndex // Stay at same position (now showing next chip)
 			}
 
@@ -368,11 +371,12 @@ func (s SearchBar) View() string {
 	}
 
 	// Input field
-	if s.Focused {
+	switch {
+	case s.Focused:
 		parts = append(parts, s.Styles.InputActive.Render(s.TextInput.View()))
-	} else if s.State.CurrentInput != "" {
+	case s.State.CurrentInput != "":
 		parts = append(parts, s.Styles.InputInactive.Render(s.State.CurrentInput))
-	} else if len(s.State.Chips) == 0 {
+	case len(s.State.Chips) == 0:
 		parts = append(parts, s.Styles.InputInactive.Render("Press / to search..."))
 	}
 
@@ -450,6 +454,8 @@ func (s SearchBar) getChipStyle(chipType ChipType) lipgloss.Style {
 }
 
 // generateSuggestions creates autocomplete suggestions based on current input
+//
+//nolint:gocyclo // Complex suggestion generation with multiple input patterns
 func (s *SearchBar) generateSuggestions() []Suggestion {
 	input := strings.TrimSpace(s.State.CurrentInput)
 
@@ -624,18 +630,7 @@ func (s *SearchBar) suggestFields(prefix string) []Suggestion {
 	return suggestions
 }
 
-// suggestOperators suggests available operators
-func (s *SearchBar) suggestOperators() []Suggestion {
-	return []Suggestion{
-		{Text: "=", Description: "equals", Context: AutocompleteContextOperator},
-		{Text: "!=", Description: "not equals", Context: AutocompleteContextOperator},
-		{Text: "~=", Description: "regex match", Context: AutocompleteContextOperator},
-		{Text: ">", Description: "greater than", Context: AutocompleteContextOperator},
-		{Text: ">=", Description: "greater or equal", Context: AutocompleteContextOperator},
-		{Text: "<", Description: "less than", Context: AutocompleteContextOperator},
-		{Text: "<=", Description: "less or equal", Context: AutocompleteContextOperator},
-	}
-}
+
 
 // suggestValues suggests values for a field
 func (s *SearchBar) suggestValues(field string) []Suggestion {
@@ -680,13 +675,14 @@ func (s *SearchBar) suggestTimeValues(input string) []Suggestion {
 	// Determine the prefix (last:, from:, to:)
 	var prefix string
 	var currentValue string
-	if strings.HasPrefix(input, "last:") {
+	switch {
+	case strings.HasPrefix(input, "last:"):
 		prefix = "last:"
 		currentValue = strings.TrimPrefix(input, "last:")
-	} else if strings.HasPrefix(input, "from:") {
+	case strings.HasPrefix(input, "from:"):
 		prefix = "from:"
 		currentValue = strings.TrimPrefix(input, "from:")
-	} else if strings.HasPrefix(input, "to:") {
+	case strings.HasPrefix(input, "to:"):
 		prefix = "to:"
 		currentValue = strings.TrimPrefix(input, "to:")
 	}
@@ -929,29 +925,7 @@ func (s *SearchBar) BuildFilter() *client.Filter {
 	return nil
 }
 
-// mapOperatorToClient converts UI operator to client operator
-func mapOperatorToClient(op string) (string, bool) {
-	switch op {
-	case "=", "==":
-		return operator.Equals, false
-	case "!=":
-		return operator.Equals, true // negate
-	case "~=", "=~":
-		return operator.Regex, false
-	case "!~=", "!~":
-		return operator.Regex, true // negate
-	case ">":
-		return operator.Gt, false
-	case ">=":
-		return operator.Gte, false
-	case "<":
-		return operator.Lt, false
-	case "<=":
-		return operator.Lte, false
-	default:
-		return operator.Match, false
-	}
-}
+
 
 // UpdateAvailableFields refreshes field suggestions from entries
 func (s *SearchBar) UpdateAvailableFields(entries []client.LogEntry) {
@@ -1141,7 +1115,7 @@ func groupFilterToChips(filter *client.Filter, depth int) []Chip {
 	switch filter.Logic {
 	case client.LogicAnd:
 		// AND at root level: flatten to separate chips (implicit AND between chips)
-		var chips []Chip
+		chips := make([]Chip, 0, len(filter.Filters))
 		for i := range filter.Filters {
 			chips = append(chips, filterToChipsWithDepth(&filter.Filters[i], depth+1)...)
 		}

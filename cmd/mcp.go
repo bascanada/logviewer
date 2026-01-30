@@ -11,7 +11,7 @@ package cmd
 // 2. Summarization / Analytics Tool:
 //    - Provide a "summarize_logs" tool that groups by level, extracts top error
 //      signatures, counts occurrences, and surfaces anomaly hints. Could accept
-//      parameters: contextId, last, groupBy (level/service), topN.
+//      parameters: contextID, last, groupBy (level/service), topN.
 // 3. Explicit Time Range Parameters:
 //    - Support gte / lte absolute timestamps (RFC3339) alongside "last" to allow
 //      precise investigations and reproducibility of queries.
@@ -216,7 +216,7 @@ var mcpCmd = &cobra.Command{
 	Use:   "mcp",
 	Short: "Starts a MCP server",
 	Long:  `Starts a MCP server, exposing the logviewer's core functionalities as a tool.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		// Centralized config handling (matching query command):
 		// - If an explicit configPath is given, use it.
 		// - If no configPath, attempt to load the default config.
@@ -253,6 +253,7 @@ type ConfigManager struct {
 	closeChan     chan struct{}
 }
 
+// NewConfigManager creates a new ConfigManager that watches the given config path for changes.
 func NewConfigManager(path string) (*ConfigManager, error) {
 	cm := &ConfigManager{
 		configPath: path,
@@ -266,7 +267,7 @@ func NewConfigManager(path string) (*ConfigManager, error) {
 	cm.watcher = watcher
 
 	if err := cm.Reload(); err != nil {
-		watcher.Close()
+		_ = watcher.Close()
 		return nil, err
 	}
 
@@ -332,6 +333,7 @@ func (cm *ConfigManager) watch() {
 	}
 }
 
+// Reload reloads the configuration from disk and updates the search factory.
 func (cm *ConfigManager) Reload() error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
@@ -396,13 +398,14 @@ func (cm *ConfigManager) Close() error {
 	return cm.watcher.Close()
 }
 
-// BuildMCPServer creates an MCP server instance with all tools/resources/prompts registered.
+// MCPServerBundle contains the MCP server instance and tool handlers.
 // Exposed for testing so we can spin up the server without invoking cobra.Run path.
 type MCPServerBundle struct {
 	Server       *server.MCPServer
 	ToolHandlers map[string]func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error)
 }
 
+// BuildMCPServer creates an MCP server instance with all tools/resources/prompts registered.
 func BuildMCPServer(configPath string) (*MCPServerBundle, error) {
 	// Initialize config manager
 	cm, err := NewConfigManager(configPath)
@@ -414,6 +417,8 @@ func BuildMCPServer(configPath string) (*MCPServerBundle, error) {
 
 // buildMCPServerWithManager creates the MCP server with a provided ConfigManager.
 // Internal function for testing.
+//
+//nolint:gocyclo // Registering multiple MCP tools/handlers in a single function
 func buildMCPServerWithManager(cm *ConfigManager) (*MCPServerBundle, error) {
 	s := server.NewMCPServer(
 		"logviewer",
@@ -428,7 +433,7 @@ func buildMCPServerWithManager(cm *ConfigManager) (*MCPServerBundle, error) {
 	reloadTool := mcp.NewTool("reload_config",
 		mcp.WithDescription("Reload the configuration file from disk. Use this if you have modified the config.yaml file."),
 	)
-	reloadHandler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	reloadHandler := func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		if err := cm.Reload(); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Reload failed: %v", err)), nil
 		}
@@ -444,10 +449,10 @@ Usage: list_contexts
 
 Returns: JSON array of context identifiers (strings) that can be used in other tools.
 
-Note: You don't have to call this before every query. You can attempt query_logs directly; if the contextId is invalid the server will now return suggestions including available contexts.
+Note: You don't have to call this before every query. You can attempt query_logs directly; if the contextID is invalid the server will now return suggestions including available contexts.
 `),
 	)
-	listHandler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	listHandler := func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		cfg, _ := cm.Get()
 		contextIDs := make([]string, 0, len(cfg.Contexts))
 		for id := range cfg.Contexts {
@@ -466,25 +471,25 @@ Note: You don't have to call this before every query. You can attempt query_logs
 	getFieldsTool := mcp.NewTool("get_fields",
 		mcp.WithDescription(`Discover available structured log fields for a given context.
 
-Usage: get_fields contextId=<context>
+Usage: get_fields contextID=<context>
 
 Parameters:
-  contextId (string, required): Context identifier.
+  contextID (string, required): Context identifier.
 
 Returns: JSON object mapping field names to arrays of distinct values.
 
 You may skip this and directly call query_logs. If a query returns no results, consider then calling get_fields to validate field names or broaden the time window.
 `),
-		mcp.WithString("contextId", mcp.Required(), mcp.Description("Context identifier to inspect.")),
+		mcp.WithString("contextID", mcp.Required(), mcp.Description("Context identifier to inspect.")),
 		mcp.WithString("last", mcp.Description("Optional relative time window for field discovery (e.g. 30m, 2h). Defaults to 15m.")),
 	)
 	getFieldsHandler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		_, searchFactory := cm.Get()
 
-		// Extract required parameter contextId
-		contextId, err := request.RequireString("contextId")
-		if err != nil || contextId == "" {
-			return mcp.NewToolResultError(fmt.Sprintf("invalid or missing contextId: %v", err)), nil
+		// Extract required parameter contextID
+		contextID, err := request.RequireString("contextID")
+		if err != nil || contextID == "" {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid or missing contextID: %v", err)), nil
 		}
 
 		// Provide a small default time window unless user overrides with last
@@ -495,7 +500,7 @@ You may skip this and directly call query_logs. If a query returns no results, c
 			search.Range.Last.S("15m")
 		}
 
-		searchResult, err := searchFactory.GetSearchResult(ctx, contextId, []string{}, search, nil)
+		searchResult, err := searchFactory.GetSearchResult(ctx, contextID, []string{}, search, nil)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -517,12 +522,12 @@ You may skip this and directly call query_logs. If a query returns no results, c
 		mcp.WithDescription(`Query log entries for a context with optional filters and time window.
 
 Usage Examples:
-  - Simple field filter: query_logs contextId=prod-api fields={"level":"ERROR"}
-  - Text pattern search: query_logs contextId=prod-api nativeQuery="_~=.*Exception.*"
-  - Combined: query_logs contextId=prod-api nativeQuery="level=ERROR AND _~=.*timeout.*"
+  - Simple field filter: query_logs contextID=prod-api fields={"level":"ERROR"}
+  - Text pattern search: query_logs contextID=prod-api nativeQuery="_~=.*Exception.*"
+  - Combined: query_logs contextID=prod-api nativeQuery="level=ERROR AND _~=.*timeout.*"
 
 Parameters:
-	contextId (string, required): Context identifier.
+	contextID (string, required): Context identifier.
 	last (string, optional): Relative duration window (e.g. 15m, 2h, 1d). Defaults to 15m.
 	start_time (string, optional): Absolute start time (RFC3339).
 	end_time (string, optional): Absolute end time (RFC3339).
@@ -567,13 +572,13 @@ Parameters:
 		  - Other backends: message field
 
 Behavior:
-	- If contextId is invalid, the response includes suggestions (no need to pre-call list_contexts).
+	- If contextID is invalid, the response includes suggestions (no need to pre-call list_contexts).
 	- If results are empty, meta.hints will recommend next actions (e.g. broaden last, call get_fields).
 	- If more results are available, meta.nextPageToken will be included for pagination.
 
-Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?, nextPageToken? } }
+Returns: { "entries": [...], "meta": { resultCount, contextID, queryTime, hints?, nextPageToken? } }
 `),
-		mcp.WithString("contextId", mcp.Required(), mcp.Description("Context identifier to query.")),
+		mcp.WithString("contextID", mcp.Required(), mcp.Description("Context identifier to query.")),
 		mcp.WithString("last", mcp.Description(`Relative time window like 15m, 2h, 1d.`)),
 		mcp.WithString("start_time", mcp.Description("Absolute start time (RFC3339).")),
 		mcp.WithString("end_time", mcp.Description("Absolute end time (RFC3339).")),
@@ -586,9 +591,9 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 	queryLogsHandler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		cfg, searchFactory := cm.Get()
 		start := time.Now()
-		contextId, err := request.RequireString("contextId")
-		if err != nil || contextId == "" {
-			return mcp.NewToolResultError(fmt.Sprintf("invalid or missing contextId: %v", err)), nil
+		contextID, err := request.RequireString("contextID")
+		if err != nil || contextID == "" {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid or missing contextID: %v", err)), nil
 		}
 
 		searchRequest := client.LogSearch{}
@@ -636,10 +641,10 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 		}
 
 		// Pre-flight check for required variables
-		mergedContext, err := searchFactory.GetSearchContext(ctx, contextId, []string{}, searchRequest, runtimeVars)
+		mergedContext, err := searchFactory.GetSearchContext(ctx, contextID, []string{}, searchRequest, runtimeVars)
 		if err != nil {
 			if errors.Is(err, config.ErrContextNotFound) {
-				return handleContextNotFound(contextId, cfg, err), nil
+				return handleContextNotFound(contextID, cfg, err), nil
 			}
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get search context: %v", err)), nil
 		}
@@ -660,7 +665,7 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 			searchRequest.Range.Last.S("15m")
 		}
 
-		searchResult, err := searchFactory.GetSearchResult(ctx, contextId, []string{}, searchRequest, runtimeVars)
+		searchResult, err := searchFactory.GetSearchResult(ctx, contextID, []string{}, searchRequest, runtimeVars)
 		if err != nil {
 			// This logic can be simplified now as we have a pre-flight check
 			return mcp.NewToolResultError(err.Error()), nil
@@ -673,7 +678,7 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 
 		meta := map[string]any{
 			"resultCount": len(entries),
-			"contextId":   contextId,
+			"contextID":   contextID,
 			"queryTime":   time.Since(start).String(),
 		}
 		if pagination := searchResult.GetPaginationInfo(); pagination != nil && pagination.NextPageToken != "" {
@@ -699,10 +704,10 @@ Returns: { "entries": [...], "meta": { resultCount, contextId, queryTime, hints?
 	getFieldValuesTool := mcp.NewTool("get_field_values",
 		mcp.WithDescription(`Get distinct values for specific log fields to understand data distribution or find specific values.
 
-Usage: get_field_values contextId=<context> fields=["level","error_code"] [last=15m]
+Usage: get_field_values contextID=<context> fields=["level","error_code"] [last=15m]
 
 Parameters:
-  contextId (string, required): Context identifier.
+  contextID (string, required): Context identifier.
   fields (array of strings, required): Field names to get distinct values for.
   last (string, optional): Relative time window (e.g. 15m, 2h). Defaults to 15m.
   start_time (string, optional): Absolute start time (RFC3339).
@@ -717,7 +722,7 @@ Example response:
   "error_code": ["TIMEOUT", "AUTH_FAILURE", "DB_CONN_ERR"]
 }
 `),
-		mcp.WithString("contextId", mcp.Required(), mcp.Description("Context identifier to query.")),
+		mcp.WithString("contextID", mcp.Required(), mcp.Description("Context identifier to query.")),
 		mcp.WithArray("fields", mcp.Required(), mcp.Description("Field names to get distinct values for (array of strings).")),
 		mcp.WithString("last", mcp.Description("Relative time window like 15m, 2h, 1d.")),
 		mcp.WithString("start_time", mcp.Description("Absolute start time (RFC3339).")),
@@ -727,9 +732,9 @@ Example response:
 	)
 	getFieldValuesHandler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		cfg, searchFactory := cm.Get()
-		contextId, err := request.RequireString("contextId")
-		if err != nil || contextId == "" {
-			return mcp.NewToolResultError(fmt.Sprintf("invalid or missing contextId: %v", err)), nil
+		contextID, err := request.RequireString("contextID")
+		if err != nil || contextID == "" {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid or missing contextID: %v", err)), nil
 		}
 
 		// Extract fields array
@@ -793,15 +798,15 @@ Example response:
 		}
 
 		// Pre-flight check for context existence
-		_, err = searchFactory.GetSearchContext(ctx, contextId, []string{}, searchRequest, runtimeVars)
+		_, err = searchFactory.GetSearchContext(ctx, contextID, []string{}, searchRequest, runtimeVars)
 		if err != nil {
 			if errors.Is(err, config.ErrContextNotFound) {
-				return handleContextNotFound(contextId, cfg, err), nil
+				return handleContextNotFound(contextID, cfg, err), nil
 			}
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get search context: %v", err)), nil
 		}
 
-		fieldValues, err := searchFactory.GetFieldValues(ctx, contextId, []string{}, searchRequest, fieldNames, runtimeVars)
+		fieldValues, err := searchFactory.GetFieldValues(ctx, contextID, []string{}, searchRequest, fieldNames, runtimeVars)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get field values: %v", err)), nil
 		}
@@ -818,10 +823,10 @@ Example response:
 	getContextDetailsTool := mcp.NewTool("get_context_details",
 		mcp.WithDescription(`Inspect a context's configuration including required variables, backend type, and capabilities.
 
-Usage: get_context_details contextId=<context>
+Usage: get_context_details contextID=<context>
 
 Parameters:
-  contextId (string, required): Context identifier to inspect.
+  contextID (string, required): Context identifier to inspect.
 
 Returns: JSON object with context configuration (backend type, variables, field mappings).
 
@@ -830,18 +835,18 @@ When to use:
   - To discover backend-specific capabilities (e.g., native query syntax)
   - To understand field mappings and available filters for a context
 `),
-		mcp.WithString("contextId", mcp.Required(), mcp.Description("The context ID to inspect.")),
+		mcp.WithString("contextID", mcp.Required(), mcp.Description("The context ID to inspect.")),
 	)
 	getContextDetailsHandler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		cfg, searchFactory := cm.Get()
-		contextId, err := request.RequireString("contextId")
+		contextID, err := request.RequireString("contextID")
 		if err != nil {
-			return mcp.NewToolResultError("contextId is required"), nil
+			return mcp.NewToolResultError("contextID is required"), nil
 		}
-		searchContext, err := searchFactory.GetSearchContext(ctx, contextId, []string{}, client.LogSearch{}, nil)
+		searchContext, err := searchFactory.GetSearchContext(ctx, contextID, []string{}, client.LogSearch{}, nil)
 		if err != nil {
 			if errors.Is(err, config.ErrContextNotFound) {
-				return handleContextNotFound(contextId, cfg, err), nil
+				return handleContextNotFound(contextID, cfg, err), nil
 			}
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get context details: %v", err)), nil
 		}
@@ -861,7 +866,7 @@ When to use:
 		mcp.WithResourceDescription("JSON array of available context IDs; server also suggests them on invalid context query."),
 		mcp.WithMIMEType("application/json"),
 	)
-	s.AddResource(contextsResource, func(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	s.AddResource(contextsResource, func(_ context.Context, _ mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 		cfg, _ := cm.Get()
 		ids := make([]string, 0, len(cfg.Contexts))
 		for id := range cfg.Contexts {
@@ -883,31 +888,31 @@ When to use:
 		"log_investigation",
 		mcp.WithPromptDescription("Guide for investigating logs: query first, broaden or discover fields only if needed."),
 		mcp.WithArgument("objective", mcp.ArgumentDescription("High-level goal (e.g. detect payment errors).")),
-		mcp.WithArgument("contextId", mcp.ArgumentDescription("Optional starting context.")),
+		mcp.WithArgument("contextID", mcp.ArgumentDescription("Optional starting context.")),
 	)
-	s.AddPrompt(investigationPrompt, func(ctx context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+	s.AddPrompt(investigationPrompt, func(_ context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 		cfg, _ := cm.Get()
 		obj := request.Params.Arguments["objective"]
-		ctxId := request.Params.Arguments["contextId"]
-		if ctxId == "" {
+		ctxID := request.Params.Arguments["contextID"]
+		if ctxID == "" {
 			ids := make([]string, 0, len(cfg.Contexts))
 			for id := range cfg.Contexts {
 				ids = append(ids, id)
 			}
 			sort.Strings(ids)
 			if len(ids) > 0 {
-				ctxId = ids[0]
+				ctxID = ids[0]
 			}
 		}
 		text := fmt.Sprintf(`Objective: %s
 Strategy:
-1. query_logs contextId=%s last=15m size=20
+1. query_logs contextID=%s last=15m size=20
 2. If no results: increase last (e.g. 1h) or drop filters
 3. Only call get_fields if filters might be invalid or repeated empty result
 4. On context error: check suggestions or resource logviewer://contexts
 5. Summarize anomalies, refine with additional field filters
 Return a short plan then perform tool calls.
-`, obj, ctxId)
+`, obj, ctxID)
 		return mcp.NewGetPromptResult("Log Investigation", []mcp.PromptMessage{mcp.NewPromptMessage(mcp.RoleAssistant, mcp.NewTextContent(text))}), nil
 	})
 	return &MCPServerBundle{Server: s, ToolHandlers: handlers}, nil
@@ -920,20 +925,20 @@ func init() {
 
 // handleContextNotFound creates a standardized MCP response for context not found errors.
 // It includes suggestions for similar context names to help users correct typos.
-func handleContextNotFound(contextId string, cfg *config.ContextConfig, err error) *mcp.CallToolResult {
+func handleContextNotFound(contextID string, cfg *config.ContextConfig, err error) *mcp.CallToolResult {
 	all := make([]string, 0, len(cfg.Contexts))
 	for id := range cfg.Contexts {
 		all = append(all, id)
 	}
 	sort.Strings(all)
-	suggestions := suggestSimilar(contextId, all, 3)
+	suggestions := suggestSimilar(contextID, all, 3)
 	payload := map[string]any{
 		"code":              "CONTEXT_NOT_FOUND",
 		"error":             err.Error(),
-		"invalidContext":    contextId,
+		"invalidContext":    contextID,
 		"availableContexts": all,
 		"suggestions":       suggestions,
-		"hint":              "Use a suggested contextId or call list_contexts for enumeration.",
+		"hint":              "Use a suggested contextID or call list_contexts for enumeration.",
 	}
 	b, mErr := json.Marshal(payload)
 	if mErr != nil {
@@ -942,8 +947,8 @@ func handleContextNotFound(contextId string, cfg *config.ContextConfig, err erro
 	return mcp.NewToolResultText(string(b))
 }
 
-// suggestSimilar returns up to max suggestions ranked by simple edit distance (Levenshtein) and substring match boost.
-func suggestSimilar(target string, candidates []string, max int) []string {
+// suggestSimilar returns up to maxCount suggestions ranked by simple edit distance (Levenshtein) and substring match boost.
+func suggestSimilar(target string, candidates []string, maxCount int) []string {
 	type scored struct {
 		v     string
 		d     int
@@ -963,10 +968,10 @@ func suggestSimilar(target string, candidates []string, max int) []string {
 		}
 		return scoredList[i].boost && !scoredList[j].boost
 	})
-	out := make([]string, 0, max)
+	out := make([]string, 0, maxCount)
 	for _, s := range scoredList {
 		out = append(out, s.v)
-		if len(out) >= max {
+		if len(out) >= maxCount {
 			break
 		}
 	}
@@ -995,18 +1000,18 @@ func levenshtein(a, b string) int {
 			if r1[i-1] != r2[j-1] {
 				cost = 1
 			}
-			insert := dp[j] + 1
-			delete := dp[j-1] + 1
+			ins := dp[j] + 1
+			del := dp[j-1] + 1
 			subst := prev + cost
 			prev = dp[j]
-			min := insert
-			if delete < min {
-				min = delete
+			minVal := ins
+			if del < minVal {
+				minVal = del
 			}
-			if subst < min {
-				min = subst
+			if subst < minVal {
+				minVal = subst
 			}
-			dp[j] = min
+			dp[j] = minVal
 		}
 	}
 	return dp[m]
@@ -1016,7 +1021,7 @@ func levenshtein(a, b string) int {
 func generateContextPrompts(s *server.MCPServer, cm *ConfigManager) {
 	cfg, _ := cm.Get()
 
-	for contextId, ctx := range cfg.Contexts {
+	for contextID, ctx := range cfg.Contexts {
 		// Skip if prompt generation is disabled for this context
 		if ctx.Prompt.Disabled {
 			continue
@@ -1031,7 +1036,7 @@ func generateContextPrompts(s *server.MCPServer, cm *ConfigManager) {
 		// Build prompt description
 		promptDesc := ctx.Prompt.Description
 		if promptDesc == "" {
-			promptDesc = fmt.Sprintf("Investigation guide for %s (%s backend)", contextId, backendType)
+			promptDesc = fmt.Sprintf("Investigation guide for %s (%s backend)", contextID, backendType)
 			if ctx.Description != "" {
 				promptDesc = fmt.Sprintf("%s - %s", promptDesc, ctx.Description)
 			}
@@ -1039,28 +1044,28 @@ func generateContextPrompts(s *server.MCPServer, cm *ConfigManager) {
 
 		// Create prompt with arguments
 		prompt := mcp.NewPrompt(
-			fmt.Sprintf("investigate_%s", contextId),
+			fmt.Sprintf("investigate_%s", contextID),
 			mcp.WithPromptDescription(promptDesc),
 			mcp.WithArgument("objective", mcp.ArgumentDescription("What you're investigating (e.g., 'find payment failures', 'trace latency issues')")),
 			mcp.WithArgument("timeRange", mcp.ArgumentDescription("Time window to search (e.g., '15m', '1h', '24h'). Default: 15m")),
 		)
 
 		// Capture variables for closure
-		ctxId := contextId
+		ctxID := contextID
 		ctxConfig := ctx
 		backend := backendType
 
 		// Register prompt with handler
-		s.AddPrompt(prompt, func(ctx context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
-			return generatePromptContent(cm, ctxId, ctxConfig, backend, request)
+		s.AddPrompt(prompt, func(_ context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+			return generatePromptContent(cm, ctxID, ctxConfig, backend, request)
 		})
 	}
 }
 
 // generatePromptContent builds the full prompt text for a context.
 func generatePromptContent(
-	cm *ConfigManager,
-	contextId string,
+	_ *ConfigManager,
+	contextID string,
 	ctxConfig config.SearchContext,
 	backendType string,
 	request mcp.GetPromptRequest,
@@ -1082,7 +1087,7 @@ func generatePromptContent(
 	var sb strings.Builder
 
 	// Section 1: Context Overview
-	sb.WriteString(fmt.Sprintf("# Investigation Guide: %s\n\n", contextId))
+	sb.WriteString(fmt.Sprintf("# Investigation Guide: %s\n\n", contextID))
 	sb.WriteString(fmt.Sprintf("**Objective:** %s\n", objective))
 	sb.WriteString(fmt.Sprintf("**Time Range:** %s\n\n", timeRange))
 
@@ -1112,17 +1117,17 @@ func generatePromptContent(
 
 	// Section 3: Field Extraction Info
 	fe := ctxConfig.Search.FieldExtraction
-	if fe.Json.Set && fe.Json.Value {
+	if fe.JSON.Set && fe.JSON.Value {
 		sb.WriteString("## Field Extraction\n")
 		sb.WriteString("- **Format:** JSON structured logs\n")
-		if fe.JsonMessageKey.Set {
-			sb.WriteString(fmt.Sprintf("  - Message key: `%s`\n", fe.JsonMessageKey.Value))
+		if fe.JSONMessageKey.Set {
+			sb.WriteString(fmt.Sprintf("  - Message key: `%s`\n", fe.JSONMessageKey.Value))
 		}
-		if fe.JsonLevelKey.Set {
-			sb.WriteString(fmt.Sprintf("  - Level key: `%s`\n", fe.JsonLevelKey.Value))
+		if fe.JSONLevelKey.Set {
+			sb.WriteString(fmt.Sprintf("  - Level key: `%s`\n", fe.JSONLevelKey.Value))
 		}
-		if fe.JsonTimestampKey.Set {
-			sb.WriteString(fmt.Sprintf("  - Timestamp key: `%s`\n", fe.JsonTimestampKey.Value))
+		if fe.JSONTimestampKey.Set {
+			sb.WriteString(fmt.Sprintf("  - Timestamp key: `%s`\n", fe.JSONTimestampKey.Value))
 		}
 		sb.WriteString("\n")
 	}
@@ -1151,39 +1156,39 @@ func generatePromptContent(
 	sb.WriteString("### Structured Field Filtering (fields parameter)\n")
 	sb.WriteString("Use for exact field value matching:\n")
 	sb.WriteString("```\n")
-	sb.WriteString(fmt.Sprintf("query_logs contextId=%s fields={\"level\":\"ERROR\"}\n", contextId))
-	sb.WriteString(fmt.Sprintf("query_logs contextId=%s fields={\"level\":\"ERROR\",\"service\":\"api\"}\n", contextId))
+	sb.WriteString(fmt.Sprintf("query_logs contextID=%s fields={\"level\":\"ERROR\"}\n", contextID))
+	sb.WriteString(fmt.Sprintf("query_logs contextID=%s fields={\"level\":\"ERROR\",\"service\":\"api\"}\n", contextID))
 	sb.WriteString("```\n\n")
 
 	sb.WriteString("### Text Pattern Search (nativeQuery with _)\n")
 	sb.WriteString("Use for finding text anywhere in log messages:\n")
 	sb.WriteString("```\n")
-	sb.WriteString(fmt.Sprintf("query_logs contextId=%s nativeQuery=\"_~=.*Exception.*\"\n", contextId))
-	sb.WriteString(fmt.Sprintf("query_logs contextId=%s nativeQuery=\"_~=.*timeout.*\"\n", contextId))
-	sb.WriteString(fmt.Sprintf("query_logs contextId=%s nativeQuery=\"_=ConnectionError\"\n", contextId))
+	sb.WriteString(fmt.Sprintf("query_logs contextID=%s nativeQuery=\"_~=.*Exception.*\"\n", contextID))
+	sb.WriteString(fmt.Sprintf("query_logs contextID=%s nativeQuery=\"_~=.*timeout.*\"\n", contextID))
+	sb.WriteString(fmt.Sprintf("query_logs contextID=%s nativeQuery=\"_=ConnectionError\"\n", contextID))
 	sb.WriteString("```\n\n")
 
 	sb.WriteString("### Combined Filtering (nativeQuery with field filters)\n")
 	sb.WriteString("Use for complex queries:\n")
 	sb.WriteString("```\n")
-	sb.WriteString(fmt.Sprintf("query_logs contextId=%s nativeQuery=\"level=ERROR AND _~=.*Exception.*\"\n", contextId))
-	sb.WriteString(fmt.Sprintf("query_logs contextId=%s nativeQuery=\"(level=ERROR OR level=WARN) AND _~=.*retry.*\"\n", contextId))
+	sb.WriteString(fmt.Sprintf("query_logs contextID=%s nativeQuery=\"level=ERROR AND _~=.*Exception.*\"\n", contextID))
+	sb.WriteString(fmt.Sprintf("query_logs contextID=%s nativeQuery=\"(level=ERROR OR level=WARN) AND _~=.*retry.*\"\n", contextID))
 	sb.WriteString("```\n\n")
 
 	// Section 7: Investigation Workflow
 	sb.WriteString("## Investigation Workflow\n")
-	sb.WriteString(fmt.Sprintf(`1. **Start broad:** query_logs contextId=%s last=%s size=50
+	sb.WriteString(fmt.Sprintf(`1. **Start broad:** query_logs contextID=%s last=%s size=50
 2. **Review results:** Look for patterns, errors, anomalies
 3. **Narrow down:** Add filters (e.g., fields={"level":"ERROR"})
 4. **Use native query:** For complex searches, use nativeQuery parameter
-5. **Discover fields:** If unsure about field names, call get_fields contextId=%s
+5. **Discover fields:** If unsure about field names, call get_fields contextID=%s
 
-`, contextId, timeRange, contextId))
+`, contextID, timeRange, contextID))
 
 	// Section 8: Quick Start Command
 	sb.WriteString("## Quick Start\n")
 	sb.WriteString("```\n")
-	sb.WriteString(fmt.Sprintf("query_logs contextId=%s last=%s", contextId, timeRange))
+	sb.WriteString(fmt.Sprintf("query_logs contextID=%s last=%s", contextID, timeRange))
 
 	// Add any required variables to the example as a single JSON object
 	var requiredVarParts []string
@@ -1202,7 +1207,7 @@ func generatePromptContent(
 	sb.WriteString("\n```\n")
 
 	return mcp.NewGetPromptResult(
-		fmt.Sprintf("Investigation Guide: %s", contextId),
+		fmt.Sprintf("Investigation Guide: %s", contextID),
 		[]mcp.PromptMessage{
 			mcp.NewPromptMessage(mcp.RoleAssistant, mcp.NewTextContent(sb.String())),
 		},

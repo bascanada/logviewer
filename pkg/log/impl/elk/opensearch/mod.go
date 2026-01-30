@@ -1,3 +1,4 @@
+// Package opensearch provides an OpenSearch implementation of the LogClient interface.
 package opensearch
 
 import (
@@ -13,16 +14,17 @@ import (
 	"github.com/bascanada/logviewer/pkg/ty"
 )
 
-type OpenSearchTarget struct {
+// Target describes the connection target for an OpenSearch-backed client.
+type Target struct {
 	Endpoint string `json:"endpoint"`
 }
 
 type openSearchClient struct {
-	target OpenSearchTarget
-	client http.HttpClient
+	target Target
+	client http.Client
 }
 
-func (kc openSearchClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
+func (kc openSearchClient) Get(_ context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
 	var searchResult SearchResult
 
 	index := search.Options.GetString("index")
@@ -41,7 +43,7 @@ func (kc openSearchClient) Get(ctx context.Context, search *client.LogSearch) (c
 		return nil, err
 	}
 
-	res := elk.GetSearchResult(&kc, search, searchResult.Hits)
+	res := elk.NewSearchResult(&kc, search, searchResult.Hits)
 
 	// If a page token was provided we already validated and parsed it in
 	// GetSearchRequest; reuse that value for pagination calculation.
@@ -188,7 +190,8 @@ func (kc openSearchClient) getFieldValuesFromSearch(ctx context.Context, search 
 	return client.GetFieldValuesFromResult(ctx, searchResult, nil)
 }
 
-func GetClient(target OpenSearchTarget) (client.LogClient, error) {
+// GetClient returns a LogClient configured to communicate with the given OpenSearch endpoint.
+func GetClient(target Target) (client.LogClient, error) {
 	client := new(openSearchClient)
 	client.target = target
 	client.client = http.GetClient(target.Endpoint)

@@ -1,3 +1,4 @@
+// Package docker provides a Docker-backed log client implementation.
 package docker
 
 import (
@@ -22,12 +23,14 @@ import (
 const regexDockerTimestamp = "(([0-9]*)-([0-9]*)-([0-9]*)T([0-9]*):([0-9]*):([0-9]*).([0-9]*)Z)"
 const dockerPingTimeout = 10 * time.Second
 
-type DockerLogClient struct {
+// LogClient implements the client.LogClient interface for Docker.
+type LogClient struct {
 	apiClient *client.Client
 	host      string
 }
 
-func (lc DockerLogClient) Get(ctx context.Context, search *logclient.LogSearch) (logclient.LogSearchResult, error) {
+// Get executes a search against Docker logs.
+func (lc LogClient) Get(ctx context.Context, search *logclient.LogSearch) (logclient.LogSearchResult, error) {
 
 	if !search.FieldExtraction.TimestampRegex.Set {
 		search.FieldExtraction.TimestampRegex.S(regexDockerTimestamp)
@@ -120,8 +123,8 @@ func (lc DockerLogClient) Get(ctx context.Context, search *logclient.LogSearch) 
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error demultiplexing docker log stream: %v\n", err)
 			}
-			pw.CloseWithError(err)
-			out.Close()
+			_ = pw.CloseWithError(err)
+			_ = out.Close()
 		}()
 		logReader = pr
 		closer = pr
@@ -136,7 +139,8 @@ func (lc DockerLogClient) Get(ctx context.Context, search *logclient.LogSearch) 
 	return reader.GetLogResult(search, scanner, closer)
 }
 
-func (lc DockerLogClient) GetFieldValues(ctx context.Context, search *logclient.LogSearch, fields []string) (map[string][]string, error) {
+// GetFieldValues retrieves distinct values for the specified fields.
+func (lc LogClient) GetFieldValues(ctx context.Context, search *logclient.LogSearch, fields []string) (map[string][]string, error) {
 	// For docker/text-based backends, we need to run a search and extract field values
 	result, err := lc.Get(ctx, search)
 	if err != nil {
@@ -145,6 +149,7 @@ func (lc DockerLogClient) GetFieldValues(ctx context.Context, search *logclient.
 	return logclient.GetFieldValuesFromResult(ctx, result, fields)
 }
 
+// GetLogClient returns a new Docker log client.
 func GetLogClient(host string) (logclient.LogClient, error) {
 	// Prepare basic options
 	opts := []client.Opt{
@@ -182,9 +187,7 @@ func GetLogClient(host string) (logclient.LogClient, error) {
 		// For SSH connections, provide helpful diagnostic information
 		if helper != nil {
 			sshHost := host
-			if strings.HasPrefix(sshHost, "ssh://") {
-				sshHost = strings.TrimPrefix(sshHost, "ssh://")
-			}
+			sshHost = strings.TrimPrefix(sshHost, "ssh://")
 			return nil, fmt.Errorf("failed to connect to docker daemon via SSH: %w\n\nTroubleshooting:\n"+
 				"1. Ensure Docker is installed on the remote host (version 18.09 or later required for SSH)\n"+
 				"2. Verify SSH connection works: ssh %s docker version\n"+
@@ -194,7 +197,7 @@ func GetLogClient(host string) (logclient.LogClient, error) {
 		return nil, fmt.Errorf("failed to connect to docker daemon: %w", err)
 	}
 
-	return DockerLogClient{
+	return LogClient{
 		apiClient: apiClient,
 		host:      host,
 	}, nil

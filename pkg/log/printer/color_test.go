@@ -38,13 +38,13 @@ func TestInitColorState_NOCOLOREnv(t *testing.T) {
 	originalValue := os.Getenv("NO_COLOR")
 	defer func() {
 		if originalValue != "" {
-			os.Setenv("NO_COLOR", originalValue)
+			_ = os.Setenv("NO_COLOR", originalValue)
 		} else {
-			os.Unsetenv("NO_COLOR")
+			_ = os.Unsetenv("NO_COLOR")
 		}
 	}()
 
-	os.Setenv("NO_COLOR", "1")
+	_ = os.Setenv("NO_COLOR", "1")
 
 	// Reset color state before test
 	color.NoColor = false
@@ -65,12 +65,12 @@ func TestInitColorState_UnknownWriter(t *testing.T) {
 	originalValue := os.Getenv("NO_COLOR")
 	defer func() {
 		if originalValue != "" {
-			os.Setenv("NO_COLOR", originalValue)
+			_ = os.Setenv("NO_COLOR", originalValue)
 		} else {
-			os.Unsetenv("NO_COLOR")
+			_ = os.Unsetenv("NO_COLOR")
 		}
 	}()
-	os.Unsetenv("NO_COLOR")
+	_ = os.Unsetenv("NO_COLOR")
 
 	// Use a buffer (not a file) as unknown writer
 	buf := &bytes.Buffer{}
@@ -201,7 +201,7 @@ func TestBold(t *testing.T) {
 	assert.Equal(t, text, result)
 }
 
-func TestColorFunctionsThreadSafety(t *testing.T) {
+func TestColorFunctionsThreadSafety(_ *testing.T) {
 	// This test ensures color functions can be called concurrently
 	// without panicking (fatih/color is thread-safe)
 

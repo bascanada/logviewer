@@ -47,8 +47,8 @@ type OllamaOptions struct {
 
 // OllamaMessage represents a chat message.
 type OllamaMessage struct {
-	Role      string         `json:"role"`
-	Content   string         `json:"content"`
+	Role      string           `json:"role"`
+	Content   string           `json:"content"`
 	ToolCalls []OllamaToolCall `json:"tool_calls,omitempty"`
 }
 
@@ -80,10 +80,10 @@ type OllamaToolFunction struct {
 
 // OllamaChatResponse represents Ollama's response.
 type OllamaChatResponse struct {
-	Model     string        `json:"model"`
-	Message   OllamaMessage `json:"message"`
-	Done      bool          `json:"done"`
-	DoneReason string       `json:"done_reason,omitempty"`
+	Model      string        `json:"model"`
+	Message    OllamaMessage `json:"message"`
+	Done       bool          `json:"done"`
+	DoneReason string        `json:"done_reason,omitempty"`
 }
 
 // NewOllamaClient creates a new Ollama client.
@@ -107,7 +107,7 @@ func (o *OllamaClient) IsAvailable() bool {
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	return resp.StatusCode == 200
 }
 
@@ -139,7 +139,7 @@ func (o *OllamaClient) Chat(ctx context.Context, messages []OllamaMessage, tools
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -186,7 +186,7 @@ func (o *OllamaClient) ChatDebug(ctx context.Context, messages []OllamaMessage, 
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -211,10 +211,10 @@ func (o *OllamaClient) ChatDebug(ctx context.Context, messages []OllamaMessage, 
 
 // MCPAgentTestHarness connects an LLM to an MCP server for testing.
 type MCPAgentTestHarness struct {
-	MCPClient   *mcpclient.Client
+	MCPClient    *mcpclient.Client
 	OllamaClient *OllamaClient
-	Tools       []mcp.Tool
-	MaxTurns    int
+	Tools        []mcp.Tool
+	MaxTurns     int
 }
 
 // AgentTestResult captures the outcome of an agent test.
@@ -228,10 +228,10 @@ type AgentTestResult struct {
 
 // ToolCallRecord records a single tool invocation.
 type ToolCallRecord struct {
-	ToolName   string
-	Arguments  map[string]interface{}
-	Result     string
-	IsError    bool
+	ToolName  string
+	Arguments map[string]interface{}
+	Result    string
+	IsError   bool
 }
 
 // NewMCPAgentTestHarness creates a test harness with the given MCP server and Ollama client.
@@ -282,7 +282,7 @@ func NewMCPAgentTestHarness(mcpServer *MCPServerBundle, ollamaClient *OllamaClie
 // ConvertToolsToOllamaFormat converts MCP tools to Ollama's tool format.
 // It simplifies complex schemas to work better with smaller models.
 func (h *MCPAgentTestHarness) ConvertToolsToOllamaFormat() []OllamaTool {
-	var tools []OllamaTool
+	tools := make([]OllamaTool, 0, len(h.Tools))
 	for _, tool := range h.Tools {
 		// Simplify the schema for better LLM compatibility
 		params := simplifySchema(tool.InputSchema)
@@ -413,7 +413,7 @@ Always execute tool calls to complete the user's request.`
 	// Debug: log tools being sent on first call
 	if len(ollamaTools) > 0 {
 		toolsJSON, _ := json.MarshalIndent(ollamaTools[:1], "", "  ") // Just first tool
-		_ = toolsJSON // Avoid unused variable in non-debug builds
+		_ = toolsJSON                                                 // Avoid unused variable in non-debug builds
 	}
 
 	for turn := 0; turn < h.MaxTurns; turn++ {
@@ -510,10 +510,10 @@ func createTestConfig() *config.ContextConfig {
 
 	// Add JSON extraction search
 	jsonSearch := client.LogSearch{}
-	jsonSearch.FieldExtraction.Json.S(true)
-	jsonSearch.FieldExtraction.JsonLevelKey.S("level")
-	jsonSearch.FieldExtraction.JsonMessageKey.S("message")
-	jsonSearch.FieldExtraction.JsonTimestampKey.S("@timestamp")
+	jsonSearch.FieldExtraction.JSON.S(true)
+	jsonSearch.FieldExtraction.JSONLevelKey.S("level")
+	jsonSearch.FieldExtraction.JSONMessageKey.S("message")
+	jsonSearch.FieldExtraction.JSONTimestampKey.S("@timestamp")
 	cfg.Searches["json-extraction"] = jsonSearch
 
 	// Add test contexts
@@ -593,7 +593,7 @@ func TestMCPAgent_DiscoveryWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create test harness: %v", err)
 	}
-	defer harness.Close()
+	defer func() { _ = harness.Close() }()
 
 	// Run the test
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -652,7 +652,7 @@ func TestMCPAgent_ErrorInvestigation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create test harness: %v", err)
 	}
-	defer harness.Close()
+	defer func() { _ = harness.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -669,9 +669,9 @@ func TestMCPAgent_ErrorInvestigation(t *testing.T) {
 		if call.ToolName == "query_logs" {
 			foundQueryLogs = true
 			// Check contextId
-			if ctxId, ok := call.Arguments["contextId"].(string); ok {
-				if ctxId != "payment-service" {
-					t.Errorf("expected contextId=payment-service, got: %s", ctxId)
+			if ctxID, ok := call.Arguments["contextId"].(string); ok {
+				if ctxID != "payment-service" {
+					t.Errorf("expected contextId=payment-service, got: %s", ctxID)
 				}
 			}
 			t.Logf("query_logs called with args: %+v", call.Arguments)
@@ -709,7 +709,7 @@ func TestMCPAgent_TextPatternSearch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create test harness: %v", err)
 	}
-	defer harness.Close()
+	defer func() { _ = harness.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -787,7 +787,7 @@ func TestMCPAgent_MultiStepReasoning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create test harness: %v", err)
 	}
-	defer harness.Close()
+	defer func() { _ = harness.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
@@ -839,7 +839,7 @@ func TestMCPAgent_ContextNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create test harness: %v", err)
 	}
-	defer harness.Close()
+	defer func() { _ = harness.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -891,7 +891,7 @@ func TestMCPAgent_DynamicPrompts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create test harness: %v", err)
 	}
-	defer harness.Close()
+	defer func() { _ = harness.Close() }()
 
 	// List prompts via MCP client
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -946,7 +946,7 @@ func TestMCPAgent_SimpleToolCall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create test harness: %v", err)
 	}
-	defer harness.Close()
+	defer func() { _ = harness.Close() }()
 
 	// Use only list_contexts tool - simple with no required params
 	simpleTool := OllamaTool{
@@ -1070,7 +1070,7 @@ func BenchmarkMCPToolCall(b *testing.B) {
 	if err != nil {
 		b.Fatalf("failed to create MCP client: %v", err)
 	}
-	defer mcpClient.Close()
+	defer func() { _ = mcpClient.Close() }()
 
 	ctx := context.Background()
 	if err := mcpClient.Start(ctx); err != nil {

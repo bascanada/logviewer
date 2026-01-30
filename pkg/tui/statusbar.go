@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+// Package tui provides the terminal user interface components.
 package tui
 
 import (
@@ -143,7 +143,8 @@ func (s *StatusBar) UpdateTimeRangeFromChips(chips []Chip) {
 	hasTimeChip := false
 
 	for _, chip := range chips {
-		if chip.Type == ChipTypeTimeRange {
+		switch chip.Type {
+		case ChipTypeTimeRange:
 			hasTimeChip = true
 			switch chip.Field {
 			case "last":
@@ -153,7 +154,7 @@ func (s *StatusBar) UpdateTimeRangeFromChips(chips []Chip) {
 			case "to":
 				timeRange.Lte.S(chip.Value)
 			}
-		} else if chip.Type == ChipTypeSize {
+		case ChipTypeSize:
 			// Also extract size from chips
 			var sizeVal int
 			if _, err := fmt.Sscanf(chip.Value, "%d", &sizeVal); err == nil && sizeVal > 0 {

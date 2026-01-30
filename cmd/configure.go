@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
+
 package cmd
 
 import (
-	"crypto/md5"
+	"crypto/md5" //nolint:gosec
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -28,7 +29,7 @@ Kubernetes, Docker, SSH, or CloudWatch) and generate a ready-to-use config file.
 Example:
   logviewer configure
   logviewer configure -c /path/to/config.yaml`,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		if err := runConfigWizard(configPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -71,6 +72,7 @@ func resolveConfigPath(cfgPath string) (string, error) {
 	return filepath.Join(home, config.DefaultConfigDir, config.DefaultConfigFile), nil
 }
 
+//nolint:gocyclo // Interactive wizard with many user prompts and branching paths
 func runConfigWizard(cfgPath string) error {
 	var (
 		clientName string
@@ -222,7 +224,7 @@ func runConfigWizard(cfgPath string) error {
 
 	// Create directory if it doesn't exist
 	configDir := filepath.Dir(configPath)
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0750); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
@@ -292,7 +294,7 @@ func runConfigWizard(cfgPath string) error {
 		}
 	}
 
-	if err := os.WriteFile(configPath, out, 0644); err != nil {
+	if err := os.WriteFile(configPath, out, 0600); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
 
@@ -551,17 +553,18 @@ func buildClientOptions(data *wizardData) ty.MI {
 		opts["url"] = data.endpoint
 		headers := ty.MS{}
 
-		if data.authType == "splunk" {
+		switch data.authType {
+		case "splunk":
 			headers["Authorization"] = "Splunk " + data.token
-		} else if data.authType == "bearer-hash" {
+		case "bearer-hash":
 			// Use pre-computed hash directly
 			headers["Authorization"] = "Bearer " + data.token
-		} else {
+		default:
 			// Security Warning: MD5 is cryptographically weak and vulnerable to collisions.
 			// This is used here because it's required by the legacy Splunk API.
 			// If the API supports SHA-256 or other secure algorithms, prefer those instead.
 			// Calculate MD5 hash of username:password for Bearer auth
-			hash := md5.Sum([]byte(data.username + ":" + data.password))
+			hash := md5.Sum([]byte(data.username + ":" + data.password)) //nolint:gosec
 			hashStr := hex.EncodeToString(hash[:])
 			headers["Authorization"] = "Bearer " + hashStr
 		}

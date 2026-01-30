@@ -88,9 +88,10 @@ func ExtractJSON(runes []rune, start int) string {
 			continue
 		}
 
-		if r == '{' || r == '[' {
+		switch r {
+		case '{', '[':
 			depth++
-		} else if r == '}' || r == ']' {
+		case '}', ']':
 			depth--
 			if depth == 0 {
 				return string(runes[start : i+1])
@@ -101,6 +102,7 @@ func ExtractJSON(runes []rune, start int) string {
 	return ""
 }
 
+// FormatDate formats a time.Time object according to the layout.
 func FormatDate(layout string, t time.Time) string {
 	return t.Format(layout)
 }
@@ -116,7 +118,8 @@ func FormatTimestamp(t time.Time, layout string) string {
 	return t.Local().Format(layout)
 }
 
-func MultlineFields(values ty.MI) string {
+// MultilineFields formats map fields into a multiline string prefixed with " * ".
+func MultilineFields(values ty.MI) string {
 	str := ""
 
 	for k, v := range values {
@@ -131,6 +134,7 @@ func MultlineFields(values ty.MI) string {
 	return str
 }
 
+// KV formats map fields into a key=value string.
 func KV(values ty.MI) string {
 	items := make([]string, 0, len(values))
 	for k, v := range values {
@@ -139,10 +143,10 @@ func KV(values ty.MI) string {
 	return strings.Join(items, " ")
 }
 
-// ExpandJson detects and formats all JSON objects and arrays in the message.
+// ExpandJSON detects and formats all JSON objects and arrays in the message.
 // Outputs formatted, indented (and colored if enabled) JSON on new lines.
 // Usage in template: {{.Message}}{{ExpandJson .Message}}
-func ExpandJson(value string) string {
+func ExpandJSON(value string) string {
 	jsonStrings := FindJSON(value)
 	if len(jsonStrings) == 0 {
 		return ""
@@ -179,11 +183,11 @@ func ExpandJson(value string) string {
 	return result.String()
 }
 
-// ExpandJsonLimit detects and formats JSON with a maximum line limit.
+// ExpandJSONLimit detects and formats JSON with a maximum line limit.
 // If the formatted JSON exceeds maxLines, it's truncated with "... (truncated)" indicator.
 // Usage in template: {{ExpandJsonLimit .Message 10}}
-func ExpandJsonLimit(value string, maxLines int) string {
-	fullExpanded := ExpandJson(value)
+func ExpandJSONLimit(value string, maxLines int) string {
+	fullExpanded := ExpandJSON(value)
 	if fullExpanded == "" {
 		return ""
 	}
@@ -198,11 +202,11 @@ func ExpandJsonLimit(value string, maxLines int) string {
 	return truncated + "\n  ... (truncated, " + fmt.Sprintf("%d", len(lines)-maxLines-1) + " more lines)"
 }
 
-// ExpandJsonLimitDepth detects and formats JSON with a maximum depth limit.
+// ExpandJSONLimitDepth detects and formats JSON with a maximum depth limit.
 // Nested objects/arrays beyond maxDepth are replaced with "..." indicator.
 // Useful for preventing deeply nested JSON from cluttering output.
 // Usage in template: {{ExpandJsonLimitDepth .Message 3}}
-func ExpandJsonLimitDepth(value string, maxDepth int) string {
+func ExpandJSONLimitDepth(value string, maxDepth int) string {
 	jsonStrings := FindJSON(value)
 	if len(jsonStrings) == 0 {
 		return ""
@@ -276,10 +280,10 @@ func truncateDepth(obj interface{}, maxDepth, currentDepth int) interface{} {
 	}
 }
 
-// ExpandJsonCompact detects and formats JSON on a single line (no indentation).
+// ExpandJSONCompact detects and formats JSON on a single line (no indentation).
 // Useful for short JSON payloads where vertical space is limited.
 // Usage in template: {{ExpandJsonCompact .Message}}
-func ExpandJsonCompact(value string) string {
+func ExpandJSONCompact(value string) string {
 	jsonStrings := FindJSON(value)
 	if len(jsonStrings) == 0 {
 		return ""
@@ -412,18 +416,19 @@ func Bold(text string) string {
 	return color.New(color.Bold).Sprint(text)
 }
 
+// GetTemplateFunctionsMap returns a map of custom template functions.
 func GetTemplateFunctionsMap() template.FuncMap {
 	return template.FuncMap{
-		"Format":          FormatDate,
-		"FormatTimestamp": FormatTimestamp,
-		"MultiLine":       MultlineFields,
-		"ExpandJson":      ExpandJson,
-		"ExpandJsonLimit": ExpandJsonLimit,
-		"ExpandJsonLimitDepth": ExpandJsonLimitDepth,
-		"ExpandJsonCompact": ExpandJsonCompact,
-		"Field":           GetField,
-		"KV":              KV,
-		"Trim":            Trim,
+		"Format":               FormatDate,
+		"FormatTimestamp":      FormatTimestamp,
+		"MultiLine":            MultilineFields,
+		"ExpandJson":           ExpandJSON,
+		"ExpandJsonLimit":      ExpandJSONLimit,
+		"ExpandJsonLimitDepth": ExpandJSONLimitDepth,
+		"ExpandJsonCompact":    ExpandJSONCompact,
+		"Field":                GetField,
+		"KV":                   KV,
+		"Trim":                 Trim,
 		// Color functions
 		"ColorLevel":     ColorLevel,
 		"ColorTimestamp": ColorTimestamp,

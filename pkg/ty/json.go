@@ -2,29 +2,24 @@ package ty
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"os"
 )
 
+// LB is the line break constant.
 const LB = "\n"
 
-func ReadJsonFile(path string, object interface{}) error {
-	jsonFile, err := os.Open(path)
+// ReadJSONFile reads and unmarshals a JSON file into object.
+func ReadJSONFile(path string, object interface{}) error {
+	data, err := os.ReadFile(path) //nolint:gosec
 	if err != nil {
 		return err
 	}
 
-	defer jsonFile.Close()
-
-	byteValue, err := ioutil.ReadAll(jsonFile)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(byteValue, object)
+	return json.Unmarshal(data, object)
 }
 
-func ToJsonString(data any) (string, error) {
+// ToJSONString converts data to a JSON string.
+func ToJSONString(data any) (string, error) {
 	bytes, err := json.Marshal(data)
 	if err != nil {
 		return "", err
@@ -32,6 +27,7 @@ func ToJsonString(data any) (string, error) {
 	return string(bytes), nil
 }
 
-func FromJsonString(data string, placeholder any) error {
+// FromJSONString parses a JSON string into placeholder.
+func FromJSONString(data string, placeholder any) error {
 	return json.Unmarshal([]byte(data), placeholder)
 }

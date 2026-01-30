@@ -20,7 +20,7 @@ import (
 
 type MockClientFactory struct{}
 
-func (m *MockClientFactory) Get(name string) (*client.LogClient, error) {
+func (m *MockClientFactory) Get(_ string) (*client.LogClient, error) {
 	return nil, nil
 }
 
@@ -42,8 +42,8 @@ type MockSearchFactory struct {
 	Store *InMemoryLogStore
 }
 
-func (m *MockSearchFactory) GetSearchResult(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (client.LogSearchResult, error) {
-	allEntries, ok := m.Store.Entries[contextId]
+func (m *MockSearchFactory) GetSearchResult(_ context.Context, contextID string, _ []string, logSearch client.LogSearch, _ map[string]string) (client.LogSearchResult, error) {
+	allEntries, ok := m.Store.Entries[contextID]
 	if !ok {
 		allEntries = []client.LogEntry{}
 	}
@@ -54,12 +54,12 @@ func (m *MockSearchFactory) GetSearchResult(ctx context.Context, contextId strin
 	}, nil
 }
 
-func (m *MockSearchFactory) GetSearchContext(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (*config.SearchContext, error) {
+func (m *MockSearchFactory) GetSearchContext(_ context.Context, _ string, _ []string, _ client.LogSearch, _ map[string]string) (*config.SearchContext, error) {
 	return &config.SearchContext{}, nil
 }
 
-func (m *MockSearchFactory) GetFieldValues(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, fields []string, runtimeVars map[string]string) (map[string][]string, error) {
-	entries, ok := m.Store.Entries[contextId]
+func (m *MockSearchFactory) GetFieldValues(_ context.Context, contextID string, _ []string, _ client.LogSearch, fields []string, _ map[string]string) (map[string][]string, error) {
+	entries, ok := m.Store.Entries[contextID]
 	if !ok {
 		return map[string][]string{}, nil
 	}
@@ -87,7 +87,7 @@ func (m *InMemoryLogResult) GetSearch() *client.LogSearch {
 	return m.Search
 }
 
-func (m *InMemoryLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
+func (m *InMemoryLogResult) GetEntries(_ context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
 	var filtered []client.LogEntry
 
 	// Use GetEffectiveFilter to combine legacy Fields and new AST Filter
@@ -112,6 +112,7 @@ func (m *InMemoryLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, 
 			parts := bytes.Split([]byte(query), []byte(":"))
 			if len(parts) == 2 {
 				// handled by Fields/Filter above if correctly parsed
+				continue
 			} else if !bytes.Contains([]byte(entry.Message), []byte(query)) {
 				matches = false
 			}
@@ -130,7 +131,7 @@ func (m *InMemoryLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, 
 
 	offset := 0
 	if m.Search.PageToken.Set && m.Search.PageToken.Value != "" {
-		fmt.Sscanf(m.Search.PageToken.Value, "offset-%d", &offset)
+		_, _ = fmt.Sscanf(m.Search.PageToken.Value, "offset-%d", &offset)
 	}
 
 	startIdx := offset
@@ -197,14 +198,17 @@ func matchFilterRecursive(entry client.LogEntry, f *client.Filter) bool {
 	val, ok := entry.Fields[f.Field]
 
 	// Handle special fields
-	if f.Field == "level" {
+	switch f.Field {
+	case "level":
 		strVal = entry.Level
 		ok = true
-	} else if f.Field == "message" {
+	case "message":
 		strVal = entry.Message
 		ok = true
-	} else if ok {
-		strVal, _ = val.(string)
+	default:
+		if ok {
+			strVal, _ = val.(string)
+		}
 	}
 
 	match := false
@@ -229,7 +233,7 @@ func matchFilterRecursive(entry client.LogEntry, f *client.Filter) bool {
 	return match
 }
 
-func (m *InMemoryLogResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
+func (m *InMemoryLogResult) GetFields(_ context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 	fields := make(ty.UniSet[string])
 	for _, entry := range m.AllEntries {
 		for k, v := range entry.Fields {
@@ -262,7 +266,7 @@ func (m *InMemoryLogResult) GetPaginationInfo() *client.PaginationInfo {
 
 	offset := 0
 	if m.Search.PageToken.Set && m.Search.PageToken.Value != "" {
-		fmt.Sscanf(m.Search.PageToken.Value, "offset-%d", &offset)
+		_, _ = fmt.Sscanf(m.Search.PageToken.Value, "offset-%d", &offset)
 	}
 
 	pageSize := 10
@@ -444,7 +448,7 @@ func TestTUI_ComplexInteraction(t *testing.T) {
 	}
 
 	RunScenario(t, tm, steps)
-	tm.Quit()
+	_ = tm.Quit()
 }
 
 func TestTUI_Integration_Workflow(t *testing.T) {
@@ -522,5 +526,5 @@ func TestTUI_Integration_Workflow(t *testing.T) {
 	})
 
 	// Cleanup
-	tm.Quit()
+	_ = tm.Quit()
 }

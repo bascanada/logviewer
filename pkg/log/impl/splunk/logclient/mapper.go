@@ -76,12 +76,13 @@ func buildSplunkCondition(f *client.Filter) (condition string, isRegex bool) {
 
 	// Handle free-text search (field is "_" or empty)
 	if f.Field == "_" {
-		if op == operator.Regex {
+		switch {
+		case op == operator.Regex:
 			cond = fmt.Sprintf(`regex _raw="%s"`, escapeSplunkValue(f.Value))
 			isRegexCond = true
-		} else if strings.Contains(f.Value, " ") {
+		case strings.Contains(f.Value, " "):
 			cond = fmt.Sprintf(`"%s"`, escapeSplunkValue(f.Value))
-		} else {
+		default:
 			cond = escapeSplunkValue(f.Value)
 		}
 	} else {

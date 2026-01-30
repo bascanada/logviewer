@@ -5,9 +5,13 @@ import (
 	"strings"
 )
 
+// MI is a shorthand for map[string]interface{}
 type MI map[string]interface{}
+
+// MS is a shorthand for map[string]string
 type MS map[string]string
 
+// Merge merges another MI into this one.
 func (mi *MI) Merge(mi2 MI) {
 	// TODO: maybe support deep inspection
 	for k, v := range mi2 {
@@ -15,12 +19,14 @@ func (mi *MI) Merge(mi2 MI) {
 	}
 }
 
+// Merge merges another MS into this one.
 func (ms *MS) Merge(ms2 MS) {
 	for k, v := range ms2 {
 		(*ms)[k] = v
 	}
 }
 
+// GetOr returns the value for the key if it exists, otherwise the default value.
 func (mi MI) GetOr(key string, def interface{}) interface{} {
 	if v, b := mi[key]; b {
 		return v
@@ -28,6 +34,7 @@ func (mi MI) GetOr(key string, def interface{}) interface{} {
 	return def
 }
 
+// GetString returns the value as a string if it exists and is a string, otherwise empty string.
 func (mi MI) GetString(key string) string {
 	if v, b := mi[key]; b {
 		return v.(string)
@@ -35,6 +42,7 @@ func (mi MI) GetString(key string) string {
 	return ""
 }
 
+// GetStringOk returns the value as a string if it exists and is a string, along with true.
 func (mi MI) GetStringOk(key string) (string, bool) {
 	v, ok := mi[key]
 	if ok {
@@ -43,6 +51,7 @@ func (mi MI) GetStringOk(key string) (string, bool) {
 	return "", false
 }
 
+// GetMS returns the value as a MS if it exists and is a MS, or converts map[string]interface{} to MS.
 func (mi MI) GetMS(key string) MS {
 	if v, b := mi[key]; b {
 		switch vv := v.(type) {
@@ -69,6 +78,7 @@ func (mi MI) GetMS(key string) MS {
 	return MS{}
 }
 
+// GetBool returns the value as a bool if it exists and is a bool, otherwise false.
 func (mi MI) GetBool(key string) bool {
 	if v, b := mi[key]; b {
 		return v.(bool)
@@ -76,6 +86,7 @@ func (mi MI) GetBool(key string) bool {
 	return false
 }
 
+// GetBoolOk returns the value as a bool if it exists and can be interpreted as boolean, along with true.
 func (mi MI) GetBoolOk(key string) (bool, bool) {
 	v, ok := mi[key]
 	if !ok {
@@ -97,6 +108,7 @@ func (mi MI) GetBoolOk(key string) (bool, bool) {
 	return false, false
 }
 
+// GetListOfStringsOk returns the value as a slice of strings if it exists and can be converted, along with true.
 func (mi MI) GetListOfStringsOk(key string) ([]string, bool) {
 	v, ok := mi[key]
 	if !ok {
@@ -117,6 +129,7 @@ func (mi MI) GetListOfStringsOk(key string) ([]string, bool) {
 	}
 }
 
+// MergeM merges two maps and returns the parent map (modified).
 func MergeM[T interface{}](parent map[string]T, child map[string]T) map[string]T {
 	for k, v := range child {
 		parent[k] = v

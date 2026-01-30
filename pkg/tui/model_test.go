@@ -18,11 +18,11 @@ func (m *MockSearchResult) GetSearch() *client.LogSearch {
 	return m.Search
 }
 
-func (m *MockSearchResult) GetEntries(context context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
+func (m *MockSearchResult) GetEntries(_ context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
 	return []client.LogEntry{}, nil, nil
 }
 
-func (m *MockSearchResult) GetFields(context context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
+func (m *MockSearchResult) GetFields(_ context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 	return nil, nil, nil
 }
 

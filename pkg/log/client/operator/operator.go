@@ -1,14 +1,24 @@
+// Package operator defines the supported filter operators.
 package operator
 
 const (
-	Equals   = "equals"
-	Match    = "match"
+	// Equals checks for exact string equality.
+	Equals = "equals"
+	// Match performs a match query.
+	Match = "match"
+	// Wildcard performs a wildcard query.
 	Wildcard = "wildcard"
-	Exists   = "exists"
-	Regex    = "regex"
-	// Comparison operators for hl-compatible syntax
-	Gt  = "gt"  // >
-	Gte = "gte" // >=
-	Lt  = "lt"  // <
-	Lte = "lte" // <=
+	// Exists checks if a field exists.
+	Exists = "exists"
+	// Regex performs a regular expression match.
+	Regex = "regex"
+
+	// Gt is the greater than operator (>).
+	Gt  = "gt"
+	// Gte is the greater than or equal operator (>=).
+	Gte = "gte"
+	// Lt is the less than operator (<).
+	Lt  = "lt"
+	// Lte is the less than or equal operator (<=).
+	Lte = "lte"
 )

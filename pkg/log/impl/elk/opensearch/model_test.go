@@ -232,6 +232,8 @@ func TestGetSearchRequest_RecursiveFilter(t *testing.T) {
 }
 
 // Tests for hl-compatible query operators
+//
+//nolint:gocyclo // Comprehensive test suite with many subtests
 func TestGetSearchRequest_HLCompatibleOperators(t *testing.T) {
 	t.Run("comparison operator - greater than", func(t *testing.T) {
 		logSearch := &client.LogSearch{

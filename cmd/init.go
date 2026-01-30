@@ -36,7 +36,7 @@ var (
 	dockerProject   string
 
 	// ssh options
-	sshOptions ssh.SSHLogClientOptions
+	sshOptions ssh.LogClientOptions
 	cmd        string
 
 	// cloudwatch
@@ -79,23 +79,23 @@ var (
 
 	template string
 
-	contextIds []string
+	contextIDs []string
 
 	logger log.MyLoggerOptions
 
 	myLog     bool
-	debugHttp bool
+	debugHTTP bool
 
 	pageToken   string
 	jsonOutput  bool
 	colorOutput string
 )
 
-func onCommandStart(cmd *cobra.Command, args []string) {
+func onCommandStart(_ *cobra.Command, _ []string) {
 	log.ConfigureMyLogger(&logger)
 	// enable HTTP debug logs when requested via flag or debug logging level
 	level := strings.ToUpper(logger.Level)
-	if debugHttp || level == "DEBUG" || level == "TRACE" {
+	if debugHTTP || level == "DEBUG" || level == "TRACE" {
 		httpPkg.SetDebug(true)
 	}
 }
@@ -116,10 +116,10 @@ func loadConfigForCompletion(cmd *cobra.Command) (*config.ContextConfig, cobra.S
 // addSharedQueryFlags adds flags common to both query and tui commands
 func addSharedQueryFlags(cmd *cobra.Command) {
 	// CONFIG
-	cmd.PersistentFlags().StringArrayVarP(&contextIds, "id", "i", []string{}, "Context id to execute")
+	cmd.PersistentFlags().StringArrayVarP(&contextIDs, "id", "i", []string{}, "Context id to execute")
 
 	// Register completion function for the --id flag
-	_ = cmd.RegisterFlagCompletionFunc("id", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	_ = cmd.RegisterFlagCompletionFunc("id", func(cmd *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		cfg, directive := loadConfigForCompletion(cmd)
 		if cfg == nil {
 			return nil, directive
@@ -140,7 +140,7 @@ func addSharedQueryFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&last, "last", "", "Get entry in the last duration")
 
 	// Register completion for --last flag
-	_ = cmd.RegisterFlagCompletionFunc("last", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	_ = cmd.RegisterFlagCompletionFunc("last", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return []string{
 			"1m\t1 minute",
 			"5m\t5 minutes",
@@ -170,7 +170,7 @@ func addSharedQueryFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringArrayVar(&vars, "var", []string{}, "Define a runtime variable for the search context (e.g., --var 'sessionId=abc-123')")
 
 	// Register completion for --var flag
-	_ = cmd.RegisterFlagCompletionFunc("var", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	_ = cmd.RegisterFlagCompletionFunc("var", func(cmd *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		cfg, directive := loadConfigForCompletion(cmd)
 		if cfg == nil {
 			return nil, directive
@@ -211,7 +211,7 @@ func addSharedQueryFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringArrayVar(&inherits, "inherits", []string{}, "When using config, list of inherits to execute on top of the one configure for the search")
 
 	// Register completion function for the --inherits flag
-	_ = cmd.RegisterFlagCompletionFunc("inherits", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	_ = cmd.RegisterFlagCompletionFunc("inherits", func(cmd *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		cfg, directive := loadConfigForCompletion(cmd)
 		if cfg == nil {
 			return nil, directive
@@ -237,7 +237,7 @@ func init() {
 
 	// ME
 	queryCommand.PersistentFlags().BoolVar(&myLog, "mylog", false, "read from logviewer logs file")
-	queryCommand.PersistentFlags().BoolVar(&debugHttp, "debug-http", false, "enable HTTP debug logs (prints request bodies and masked headers)")
+	queryCommand.PersistentFlags().BoolVar(&debugHTTP, "debug-http", false, "enable HTTP debug logs (prints request bodies and masked headers)")
 
 	// K8S
 	queryCommand.PersistentFlags().StringVar(&k8sNamespace, "k8s-namespace", "", "K8s namespace")
@@ -261,7 +261,7 @@ func init() {
 	// SSH
 	queryCommand.PersistentFlags().StringVar(&sshOptions.Addr, "ssh-addr", "", "SSH address and port localhost:22")
 	queryCommand.PersistentFlags().StringVar(&sshOptions.User, "ssh-user", "", "SSH user")
-	queryCommand.PersistentFlags().StringVar(&sshOptions.PrivateKey, "ssh-identifiy", "", "SSH private key , by default $HOME/.ssh/id_rsa")
+	queryCommand.PersistentFlags().StringVar(&sshOptions.PrivateKey, "ssh-identify", "", "SSH private key , by default $HOME/.ssh/id_rsa")
 	queryCommand.PersistentFlags().BoolVar(&sshOptions.DisablePTY, "ssh-disable-pty", false, "Disable requesting a PTY on SSH connections (useful for network devices)")
 
 	// CLOUDWATCH
@@ -294,7 +294,7 @@ func init() {
 	)
 
 	// Register completion for --fields-condition flag
-	_ = queryCommand.RegisterFlagCompletionFunc("fields-condition", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	_ = queryCommand.RegisterFlagCompletionFunc("fields-condition", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return []string{
 			"match\tExact match",
 			"exists\tField must exist",
@@ -322,7 +322,7 @@ func init() {
 	queryCommand.PersistentFlags().StringVar(&colorOutput, "color", "auto", "Color output mode: auto (detect TTY), always, never")
 
 	// Register completion function for the --color flag
-	_ = queryCommand.RegisterFlagCompletionFunc("color", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	_ = queryCommand.RegisterFlagCompletionFunc("color", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return []string{"auto", "always", "never"}, cobra.ShellCompDirectiveNoFileComp
 	})
 
