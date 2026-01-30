@@ -33,8 +33,8 @@ const (
 	OptionsPreferNativeDriver = "preferNativeDriver"
 )
 
-// SSHLogClientOptions defines configuration for the SSH client.
-type SSHLogClientOptions struct {
+// LogClientOptions defines configuration for the SSH client.
+type LogClientOptions struct {
 	User string `json:"user"`
 	Addr string `json:"addr"`
 
@@ -44,7 +44,7 @@ type SSHLogClientOptions struct {
 
 type sshLogClient struct {
 	conn    *sshc.Client
-	options SSHLogClientOptions
+	options LogClientOptions
 }
 
 func getCommand(search *client.LogSearch) (string, error) {
@@ -254,7 +254,7 @@ func (lc sshLogClient) GetFieldValues(ctx context.Context, search *client.LogSea
 }
 
 // GetLogClient returns a new SSH log client.
-func GetLogClient(options SSHLogClientOptions) (client.LogClient, error) {
+func GetLogClient(options LogClientOptions) (client.LogClient, error) {
 
 	if options.Addr == "" {
 		return nil, errors.New("ssh address (addr) is empty")
@@ -285,7 +285,7 @@ func GetLogClient(options SSHLogClientOptions) (client.LogClient, error) {
 			sshc.PublicKeys(signer),
 		},
 		HostKeyCallback: sshc.HostKeyCallback(
-			func(_ string, remote net.Addr, key sshc.PublicKey) error {
+			func(_ string, _ net.Addr, _ sshc.PublicKey) error {
 				return nil
 			}),
 	}

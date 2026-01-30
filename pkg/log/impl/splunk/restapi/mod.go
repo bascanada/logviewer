@@ -1,3 +1,4 @@
+// Package restapi provides a REST client for interacting with the Splunk API.
 package restapi
 
 import (
@@ -29,17 +30,20 @@ type SearchResultsResponse struct {
 	Results []ty.MI `json:"results"`
 }
 
+// SplunkTarget describes the connection target for a Splunk client.
 type SplunkTarget struct {
 	Endpoint string `json:"endpoint"`
 	Headers  ty.MS
 	Auth     http.Auth
 }
 
+// SplunkRestClient provides methods to interact with the Splunk REST API.
 type SplunkRestClient struct {
 	target SplunkTarget
 	client http.Client
 }
 
+// CreateSearchJob creates a new search job in Splunk.
 func (src SplunkRestClient) CreateSearchJob(
 	searchQuery string,
 	earliestTime string,
@@ -89,11 +93,9 @@ func buildSearchJobData(searchQuery, earliestTime, latestTime string, isFollow b
 		} else if !strings.HasPrefix(latestTime, "rt") {
 			latestTime = "rt" + latestTime
 		}
-	} else {
-		if earliestTime == "" && latestTime == "" {
-			earliestTime = "-24h@h"
-			latestTime = "now"
-		}
+	} else if earliestTime == "" && latestTime == "" {
+		earliestTime = "-24h@h"
+		latestTime = "now"
 	}
 
 	if latestTime != "" {
@@ -108,6 +110,7 @@ func buildSearchJobData(searchQuery, earliestTime, latestTime string, isFollow b
 	return data
 }
 
+// CancelSearchJob cancels a running search job in Splunk.
 func (src SplunkRestClient) CancelSearchJob(sid string) error {
 	searchPath := fmt.Sprintf("/search/jobs/%s", sid)
 	err := src.client.Delete(searchPath, src.target.Headers, src.target.Auth)
@@ -118,6 +121,7 @@ func (src SplunkRestClient) CancelSearchJob(sid string) error {
 	return nil
 }
 
+// GetSearchStatus retrieves the status of a search job in Splunk.
 func (src SplunkRestClient) GetSearchStatus(
 	sid string,
 ) (JobStatusResponse, error) {
@@ -144,6 +148,7 @@ func (src SplunkRestClient) GetSearchStatus(
 	return response, err
 }
 
+// GetSearchResult retrieves the results of a search job in Splunk.
 func (src SplunkRestClient) GetSearchResult(
 	sid string,
 	offset int,
@@ -171,6 +176,7 @@ func (src SplunkRestClient) GetSearchResult(
 
 }
 
+// GetSplunkRestClient returns a SplunkRestClient configured to communicate with the given endpoint.
 func GetSplunkRestClient(
 	target SplunkTarget,
 ) (SplunkRestClient, error) {

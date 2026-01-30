@@ -17,7 +17,7 @@ import (
 
 func TestTimestampExtraction(t *testing.T) {
 
-	logResult := ReaderLogResult{
+	logResult := LogResult{
 		entries: make([]client.LogEntry, 0),
 		search: &client.LogSearch{
 			Fields: ty.MS{},
@@ -36,12 +36,12 @@ func TestTimestampExtraction(t *testing.T) {
 
 }
 
-func TestReaderLogResult_GetPaginationInfo(t *testing.T) {
-	result := ReaderLogResult{}
+func TestLogResult_GetPaginationInfo(t *testing.T) {
+	result := LogResult{}
 	assert.Nil(t, result.GetPaginationInfo())
 }
 
-func TestReaderLogResult_parseBlock(t *testing.T) {
+func TestLogResult_parseBlock(t *testing.T) {
 	type fields struct {
 		search                    *client.LogSearch
 		kvRegexExtraction         *regexp.Regexp
@@ -114,7 +114,7 @@ func TestReaderLogResult_parseBlock(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			lr := &ReaderLogResult{
+			lr := &LogResult{
 				search:                    tt.fields.search,
 				kvRegexExtraction:         tt.fields.kvRegexExtraction,
 				namedGroupRegexExtraction: tt.fields.namedGroupRegexExtraction,
@@ -123,7 +123,7 @@ func TestReaderLogResult_parseBlock(t *testing.T) {
 			}
 			entry, got := lr.parseBlock(tt.args.line)
 			if got != tt.want {
-				t.Errorf("ReaderLogResult.parseBlock() = %v, want %v", got, tt.want)
+				t.Errorf("LogResult.parseBlock() = %v, want %v", got, tt.want)
 			}
 			if tt.wantEntry != nil {
 				assert.Equal(t, tt.wantEntry.Message, entry.Message)
@@ -144,7 +144,7 @@ func (n *nopCloser) Close() error {
 	return nil
 }
 
-func TestReaderLogResult_GetEntries_NonFollow(t *testing.T) {
+func TestLogResult_GetEntries_NonFollow(t *testing.T) {
 	t.Run("Reads all entries when Follow is false", func(t *testing.T) {
 		input := "line 1\nline 2\nline 3\n"
 		reader := strings.NewReader(input)
@@ -187,7 +187,7 @@ func TestReaderLogResult_GetEntries_NonFollow(t *testing.T) {
 	})
 }
 
-func TestReaderLogResult_GetEntries_Follow(t *testing.T) {
+func TestLogResult_GetEntries_Follow(t *testing.T) {
 	t.Run("Returns channel when Follow is true", func(t *testing.T) {
 		// Use a pipe to simulate streaming input
 		pr, pw := io.Pipe()
@@ -214,7 +214,7 @@ func TestReaderLogResult_GetEntries_Follow(t *testing.T) {
 			_ = pw.Close()
 		}()
 
-		received := make([]string, 0)
+		received := make([]string, 0, 2)
 		for batch := range ch {
 			for _, entry := range batch {
 				received = append(received, entry.Message)
@@ -253,27 +253,28 @@ func TestReaderLogResult_GetEntries_Follow(t *testing.T) {
 		_ = pw.Close()
 
 		// Channel should eventually close
-		select {
-		case _, ok := <-ch:
-			if !ok {
-				// Channel closed as expected
+			select {
+			case _, ok := <-ch:
+				if !ok {
+					// Channel closed as expected
+					return
+				}
+			case <-time.After(1 * time.Second):
+				t.Fatal("timed out waiting for channel to close")
 			}
-		case <-time.After(100 * time.Millisecond):
-			// Timeout is acceptable
-		}
 	})
 }
 
-func TestReaderLogResult_GetSearch(t *testing.T) {
+func TestLogResult_GetSearch(t *testing.T) {
 	search := &client.LogSearch{Follow: true}
-	result := ReaderLogResult{search: search}
+	result := LogResult{search: search}
 
 	assert.Equal(t, search, result.GetSearch())
 }
 
-func TestReaderLogResult_GetFields(t *testing.T) {
+func TestLogResult_GetFields(t *testing.T) {
 	fields := ty.UniSet[string]{"level": {"INFO", "ERROR"}}
-	result := ReaderLogResult{fields: fields}
+	result := LogResult{fields: fields}
 
 	returnedFields, ch, err := result.GetFields(context.Background())
 	require.NoError(t, err)
@@ -281,9 +282,9 @@ func TestReaderLogResult_GetFields(t *testing.T) {
 	assert.Equal(t, fields, returnedFields)
 }
 
-func TestReaderLogResult_Err(t *testing.T) {
+func TestLogResult_Err(t *testing.T) {
 	errChan := make(chan error, 1)
-	result := ReaderLogResult{ErrChan: errChan}
+	result := LogResult{ErrChan: errChan}
 
 	assert.Equal(t, (<-chan error)(errChan), result.Err())
 }
@@ -388,9 +389,9 @@ func TestGetLogResult(t *testing.T) {
 	})
 }
 
-func TestReaderLogResult_processLine(t *testing.T) {
+func TestLogResult_processLine(t *testing.T) {
 	t.Run("New entry when no timestamp regex", func(t *testing.T) {
-		lr := &ReaderLogResult{
+		lr := &LogResult{
 			search:  &client.LogSearch{},
 			fields:  ty.UniSet[string]{},
 			entries: []client.LogEntry{},
@@ -410,7 +411,7 @@ func TestReaderLogResult_processLine(t *testing.T) {
 	})
 
 	t.Run("Multiline entry with timestamp regex", func(t *testing.T) {
-		lr := &ReaderLogResult{
+		lr := &LogResult{
 			search:    &client.LogSearch{},
 			fields:    ty.UniSet[string]{},
 			entries:   []client.LogEntry{},
@@ -436,13 +437,13 @@ func TestReaderLogResult_processLine(t *testing.T) {
 	})
 }
 
-func TestReaderLogResult_loadEntries(t *testing.T) {
+func TestLogResult_loadEntries(t *testing.T) {
 	t.Run("Returns true when entries are loaded", func(t *testing.T) {
 		input := "line 1\nline 2\n"
 		reader := strings.NewReader(input)
 		scanner := bufio.NewScanner(reader)
 
-		lr := &ReaderLogResult{
+		lr := &LogResult{
 			search:  &client.LogSearch{},
 			scanner: scanner,
 			fields:  ty.UniSet[string]{},
@@ -459,7 +460,7 @@ func TestReaderLogResult_loadEntries(t *testing.T) {
 		reader := strings.NewReader(input)
 		scanner := bufio.NewScanner(reader)
 
-		lr := &ReaderLogResult{
+		lr := &LogResult{
 			search:  &client.LogSearch{},
 			scanner: scanner,
 			fields:  ty.UniSet[string]{},
@@ -500,7 +501,7 @@ func TestParseTimestamp(t *testing.T) {
 	})
 }
 
-func TestReaderLogResult_PreFiltered(t *testing.T) {
+func TestLogResult_PreFiltered(t *testing.T) {
 	t.Run("Skips filtering when __preFiltered__ is true", func(t *testing.T) {
 		search := &client.LogSearch{
 			Fields: ty.MS{"level": "ERROR"},
@@ -510,7 +511,7 @@ func TestReaderLogResult_PreFiltered(t *testing.T) {
 		}
 		search.FieldExtraction.JSON.S(true)
 
-		lr := &ReaderLogResult{
+		lr := &LogResult{
 			search:  search,
 			fields:  ty.UniSet[string]{},
 			entries: []client.LogEntry{},
@@ -529,7 +530,7 @@ func TestReaderLogResult_PreFiltered(t *testing.T) {
 		}
 		search.FieldExtraction.JSON.S(true)
 
-		lr := &ReaderLogResult{
+		lr := &LogResult{
 			search:  search,
 			fields:  ty.UniSet[string]{},
 			entries: []client.LogEntry{},

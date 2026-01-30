@@ -17,7 +17,7 @@ func (ms *MS) LoadMS(path string) error {
 
 	r := regexp.MustCompile(lineRegex)
 
-	file, err := os.Open(path)
+	file, err := os.Open(path) //nolint:gosec
 	if err != nil {
 		return err
 	}

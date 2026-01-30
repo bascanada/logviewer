@@ -18,12 +18,19 @@ const (
 	TokenField
 	// TokenOperator represents an operator (=, !=, etc.)
 	TokenOperator
+	// TokenValue represents a literal value
 	TokenValue
+	// TokenAnd represents the AND operator
 	TokenAnd
+	// TokenOr represents the OR operator
 	TokenOr
+	// TokenNot represents the NOT operator
 	TokenNot
+	// TokenLParen represents a left parenthesis
 	TokenLParen
+	// TokenRParen represents a right parenthesis
 	TokenRParen
+	// TokenExists represents the exists function
 	TokenExists
 )
 

@@ -76,7 +76,7 @@ func (sr SearchResult) GetEntries(context context.Context) ([]client.LogEntry, c
 // GetFields extracts a set of field names and values present in the
 // search results. It returns the set, an update channel (currently
 // unused) and an error if one occurs.
-func (sr SearchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
+func (sr SearchResult) GetFields(_ context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 
 	fields := ty.UniSet[string]{}
 

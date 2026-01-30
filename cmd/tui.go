@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+
 package cmd
 
 import (
@@ -44,7 +45,7 @@ Examples:
 	Run:    runTUI,
 }
 
-func runTUI(cmd *cobra.Command, args []string) {
+func runTUI(_ *cobra.Command, _ []string) {
 	// Load configuration
 	cfg, _, err := loadConfig(configPath)
 	if err != nil {
@@ -73,8 +74,8 @@ func runTUI(cmd *cobra.Command, args []string) {
 	runtimeVars := parseRuntimeVars()
 
 	// Resolve context IDs
-	resolvedContextIds := resolveContextIdsFromConfig(cfg)
-	if len(resolvedContextIds) == 0 {
+	resolvedContextIDs := resolveContextIDsFromConfig(cfg)
+	if len(resolvedContextIDs) == 0 {
 		// If no context specified, try to show available contexts
 		if len(cfg.Contexts) > 0 {
 			fmt.Fprintln(os.Stderr, "No context specified. Available contexts:")
@@ -93,7 +94,7 @@ func runTUI(cmd *cobra.Command, args []string) {
 	// Create TUI model
 	model := tui.New(cfg, clientFactory, searchFactory)
 	model.RuntimeVars = runtimeVars
-	model.InitialContexts = resolvedContextIds
+	model.InitialContexts = resolvedContextIDs
 	model.InitialInherits = inherits
 	searchCopy := deepCopyLogSearch(searchRequest)
 	model.InitialSearch = &searchCopy

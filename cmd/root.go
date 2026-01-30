@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
+
 // Package cmd contains the CLI entrypoints and top-level commands used by
-// the `logviewer` executable.
+// the logviewer executable.
 package cmd
 
 import (
@@ -21,7 +22,7 @@ var rootCmd = &cobra.Command{
 	Short:  "Log viewer for different backend (OpenSearch, SSH, Local Files)",
 	Long:   ``,
 	PreRun: onCommandStart,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		// Check if config exists before showing generic help
 		home, err := os.UserHomeDir()
 		if err == nil {
@@ -38,6 +39,7 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+// Execute runs the root command.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -53,7 +55,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&logger.Stdout, "logging-stdout", false, "output appplication log in the stdout")
 
 	// Register completion for --logging-level flag
-	_ = rootCmd.RegisterFlagCompletionFunc("logging-level", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	_ = rootCmd.RegisterFlagCompletionFunc("logging-level", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return []string{"TRACE", "DEBUG", "INFO", "WARN", "ERROR"}, cobra.ShellCompDirectiveNoFileComp
 	})
 

@@ -401,11 +401,11 @@ func (m *mockLogSearchResult) GetSearch() *client.LogSearch {
 	return m.search
 }
 
-func (m *mockLogSearchResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
+func (m *mockLogSearchResult) GetEntries(_ context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
 	return m.entries, m.channel, nil
 }
 
-func (m *mockLogSearchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
+func (m *mockLogSearchResult) GetFields(_ context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 	return ty.UniSet[string]{}, nil, nil
 }
 

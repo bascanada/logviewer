@@ -34,7 +34,8 @@ type MyLoggerOptions struct {
 func ConfigureMyLogger(options *MyLoggerOptions) {
 	var writer io.Writer
 
-	if options.Path != "" {
+	switch {
+	case options.Path != "":
 		logfile, err := os.OpenFile(options.Path, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0600)
 		if err != nil {
 			panic(err)
@@ -44,9 +45,9 @@ func ConfigureMyLogger(options *MyLoggerOptions) {
 		} else {
 			writer = logfile
 		}
-	} else if options.Stdout {
+	case options.Stdout:
 		writer = os.Stdout
-	} else {
+	default:
 		writer, _ = os.OpenFile(os.DevNull, os.O_APPEND, 0600)
 	}
 

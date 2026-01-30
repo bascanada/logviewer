@@ -3,11 +3,15 @@ package operator
 
 const (
 	// Equals checks for exact string equality.
-	Equals   = "equals"
-	Match    = "match"
+	Equals = "equals"
+	// Match performs a match query.
+	Match = "match"
+	// Wildcard performs a wildcard query.
 	Wildcard = "wildcard"
-	Exists   = "exists"
-	Regex    = "regex"
+	// Exists checks if a field exists.
+	Exists = "exists"
+	// Regex performs a regular expression match.
+	Regex = "regex"
 
 	// Gt is the greater than operator (>).
 	Gt  = "gt"

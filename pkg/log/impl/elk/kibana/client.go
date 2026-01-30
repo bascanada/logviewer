@@ -13,15 +13,13 @@ import (
 	"github.com/bascanada/logviewer/pkg/ty"
 )
 
-// KibanaTarget describes the connection target for a Kibana-backed client.
-type KibanaTarget struct {
+// Target describes the connection target for a Kibana-backed client.
+type Target struct {
 	Endpoint string `json:"endpoint"`
 }
 
-// KibanaTarget describes the connection target for a Kibana-backed client.
-
 type kibanaClient struct {
-	target KibanaTarget
+	target Target
 	client http.Client
 }
 
@@ -267,12 +265,10 @@ func (kc kibanaClient) GetFieldValues(ctx context.Context, search *client.LogSea
 	return client.GetFieldValuesFromResult(ctx, result, fields)
 }
 
-func GetClient(target KibanaTarget) (client.LogClient, error) {
+// GetClient returns a LogClient configured to communicate with the given Kibana endpoint.
+func GetClient(target Target) (client.LogClient, error) {
 	client := new(kibanaClient)
 	client.target = target
 	client.client = http.GetClient(target.Endpoint)
 	return client, nil
 }
-
-// GetClient returns a LogClient configured to communicate with the given
-// Kibana endpoint.

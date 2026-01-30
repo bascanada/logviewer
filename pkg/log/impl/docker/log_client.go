@@ -23,14 +23,14 @@ import (
 const regexDockerTimestamp = "(([0-9]*)-([0-9]*)-([0-9]*)T([0-9]*):([0-9]*):([0-9]*).([0-9]*)Z)"
 const dockerPingTimeout = 10 * time.Second
 
-// DockerLogClient implements the LogClient interface for Docker.
-type DockerLogClient struct {
+// LogClient implements the client.LogClient interface for Docker.
+type LogClient struct {
 	apiClient *client.Client
 	host      string
 }
 
 // Get executes a search against Docker logs.
-func (lc DockerLogClient) Get(ctx context.Context, search *logclient.LogSearch) (logclient.LogSearchResult, error) {
+func (lc LogClient) Get(ctx context.Context, search *logclient.LogSearch) (logclient.LogSearchResult, error) {
 
 	if !search.FieldExtraction.TimestampRegex.Set {
 		search.FieldExtraction.TimestampRegex.S(regexDockerTimestamp)
@@ -140,7 +140,7 @@ func (lc DockerLogClient) Get(ctx context.Context, search *logclient.LogSearch) 
 }
 
 // GetFieldValues retrieves distinct values for the specified fields.
-func (lc DockerLogClient) GetFieldValues(ctx context.Context, search *logclient.LogSearch, fields []string) (map[string][]string, error) {
+func (lc LogClient) GetFieldValues(ctx context.Context, search *logclient.LogSearch, fields []string) (map[string][]string, error) {
 	// For docker/text-based backends, we need to run a search and extract field values
 	result, err := lc.Get(ctx, search)
 	if err != nil {
@@ -197,7 +197,7 @@ func GetLogClient(host string) (logclient.LogClient, error) {
 		return nil, fmt.Errorf("failed to connect to docker daemon: %w", err)
 	}
 
-	return DockerLogClient{
+	return LogClient{
 		apiClient: apiClient,
 		host:      host,
 	}, nil

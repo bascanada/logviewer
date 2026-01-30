@@ -12,8 +12,8 @@ import (
 // SearchResult represents the result of an OpenSearch query.
 type SearchResult struct {
 	Took int `json:"took"`
-	//timeout_out
-	//_shards
+	// timeout_out
+	// _shards
 	Hits elk.Hits `json:"hits"`
 }
 
@@ -186,6 +186,7 @@ func buildOpenSearchQuery(f *client.Filter) Map {
 	return nil
 }
 
+// GetSearchRequest builds an OpenSearch query request from the given LogSearch parameters.
 func GetSearchRequest(logSearch *client.LogSearch) (SearchRequest, error) {
 	gte, lte, err := elk.GetDateRange(logSearch)
 	if err != nil {

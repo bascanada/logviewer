@@ -21,15 +21,15 @@ import (
 // mockSearchFactory is a mock implementation of factory.SearchFactory
 type mockSearchFactory struct{}
 
-func (m *mockSearchFactory) GetSearchResult(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (client.LogSearchResult, error) {
-	if contextId == "error" {
+func (m *mockSearchFactory) GetSearchResult(_ context.Context, contextID string, _ []string, _ client.LogSearch, _ map[string]string) (client.LogSearchResult, error) {
+	if contextID == "error" {
 		return nil, errors.New("backend error")
 	}
 	return &mockLogSearchResult{}, nil
 }
 
-func (m *mockSearchFactory) GetSearchContext(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (*config.SearchContext, error) {
-	if contextId == "error" {
+func (m *mockSearchFactory) GetSearchContext(_ context.Context, contextID string, _ []string, _ client.LogSearch, _ map[string]string) (*config.SearchContext, error) {
+	if contextID == "error" {
 		return nil, errors.New("context error")
 	}
 	return &config.SearchContext{
@@ -38,8 +38,8 @@ func (m *mockSearchFactory) GetSearchContext(ctx context.Context, contextId stri
 	}, nil
 }
 
-func (m *mockSearchFactory) GetFieldValues(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, fields []string, runtimeVars map[string]string) (map[string][]string, error) {
-	if contextId == "error" {
+func (m *mockSearchFactory) GetFieldValues(_ context.Context, contextID string, _ []string, _ client.LogSearch, fields []string, _ map[string]string) (map[string][]string, error) {
+	if contextID == "error" {
 		return nil, errors.New("backend error")
 	}
 	result := make(map[string][]string)
@@ -54,10 +54,10 @@ type mockLogSearchResult struct {
 	client.LogSearchResult
 }
 
-func (m *mockLogSearchResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
+func (m *mockLogSearchResult) GetEntries(_ context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
 	return []client.LogEntry{{Message: "test log"}}, nil, nil
 }
-func (m *mockLogSearchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
+func (m *mockLogSearchResult) GetFields(_ context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 	return ty.UniSet[string]{"field1": {"value1"}}, nil, nil
 }
 
@@ -65,7 +65,7 @@ func (m *mockLogSearchResult) Err() <-chan error {
 	return nil
 }
 
-func newTestServer(t *testing.T, cfg *config.ContextConfig, searchFactory factory.SearchFactory) *Server {
+func newTestServer(_ *testing.T, cfg *config.ContextConfig, searchFactory factory.SearchFactory) *Server {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	if cfg == nil {
 		cfg = &config.ContextConfig{}

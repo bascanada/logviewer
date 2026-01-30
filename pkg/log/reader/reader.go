@@ -15,8 +15,8 @@ import (
 	"github.com/bascanada/logviewer/pkg/ty"
 )
 
-// ReaderLogResult wraps a generic io.Reader (scanner) as a LogSearchResult.
-type ReaderLogResult struct {
+// LogResult wraps a generic io.Reader (scanner) as a LogSearchResult.
+type LogResult struct {
 	search  *client.LogSearch
 	scanner *bufio.Scanner
 	closer  io.Closer
@@ -33,16 +33,16 @@ type ReaderLogResult struct {
 }
 
 // Err returns an error channel.
-func (lr ReaderLogResult) Err() <-chan error {
+func (lr LogResult) Err() <-chan error {
 	return lr.ErrChan
 }
 
 // GetSearch returns the search configuration.
-func (lr ReaderLogResult) GetSearch() *client.LogSearch {
+func (lr LogResult) GetSearch() *client.LogSearch {
 	return lr.search
 }
 
-func (lr *ReaderLogResult) parseBlock(block string) (*client.LogEntry, bool) {
+func (lr *LogResult) parseBlock(block string) (*client.LogEntry, bool) {
 	// Split into first line and rest
 	var firstLine string
 	var rest string
@@ -155,7 +155,7 @@ func (lr *ReaderLogResult) parseBlock(block string) (*client.LogEntry, bool) {
 	return &entry, true
 }
 
-func (lr *ReaderLogResult) processLine(line string, pendingBlock *strings.Builder, onEntry func(client.LogEntry)) {
+func (lr *LogResult) processLine(line string, pendingBlock *strings.Builder, onEntry func(client.LogEntry)) {
 	// Consider a line as a new entry when no timestamp regex is configured,
 	// or when the configured timestamp regex matches anywhere in the line.
 	// Some log producers (or PTY vs non-PTY SSH outputs) prefix lines with
@@ -177,7 +177,7 @@ func (lr *ReaderLogResult) processLine(line string, pendingBlock *strings.Builde
 	}
 }
 
-func (lr *ReaderLogResult) flushBlock(pendingBlock *strings.Builder, onEntry func(client.LogEntry)) {
+func (lr *LogResult) flushBlock(pendingBlock *strings.Builder, onEntry func(client.LogEntry)) {
 	if pendingBlock.Len() > 0 {
 		if entry, ok := lr.parseBlock(pendingBlock.String()); ok {
 			onEntry(*entry)
@@ -186,7 +186,7 @@ func (lr *ReaderLogResult) flushBlock(pendingBlock *strings.Builder, onEntry fun
 	}
 }
 
-func (lr *ReaderLogResult) loadEntries() bool {
+func (lr *LogResult) loadEntries() bool {
 	lr.entries = make([]client.LogEntry, 0)
 	var pendingBlock strings.Builder
 
@@ -203,7 +203,7 @@ func (lr *ReaderLogResult) loadEntries() bool {
 }
 
 // GetEntries returns log entries and a channel for streaming updates.
-func (lr *ReaderLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
+func (lr *LogResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
 
 	if !lr.search.Follow {
 		lr.loadEntries()
@@ -331,21 +331,22 @@ CaptureLoop:
 	return initialEntries, c, nil
 }
 
-func (lr ReaderLogResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
+// GetFields returns the extracted fields from log entries.
+func (lr LogResult) GetFields(_ context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 	return lr.fields, nil, nil
 }
 
 // GetPaginationInfo returns nil as reader based logs don't support pagination.
-func (lr ReaderLogResult) GetPaginationInfo() *client.PaginationInfo {
+func (lr LogResult) GetPaginationInfo() *client.PaginationInfo {
 	return nil
 }
 
-// GetLogResult creates a new ReaderLogResult from a scanner.
+// GetLogResult creates a new LogResult from a scanner.
 func GetLogResult(
 	search *client.LogSearch,
 	scanner *bufio.Scanner,
 	closer io.Closer,
-) (*ReaderLogResult, error) {
+) (*LogResult, error) {
 
 	var namedGroupRegexExtraction *regexp.Regexp
 	if search.FieldExtraction.GroupRegex.Value != "" {
@@ -380,7 +381,7 @@ func GetLogResult(
 		}
 	}
 
-	result := &ReaderLogResult{
+	result := &LogResult{
 		search:                    search,
 		scanner:                   scanner,
 		closer:                    closer,

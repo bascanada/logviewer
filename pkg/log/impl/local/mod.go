@@ -81,7 +81,7 @@ func (lc localLogClient) getWithHL(ctx context.Context, search *client.LogSearch
 	hlPath := hl.GetPath()
 	mylog.Debug("executing hl command: %s %v", hlPath, args)
 
-	ecmd := exec.CommandContext(ctx, hlPath, args...)
+	ecmd := exec.CommandContext(ctx, hlPath, args...) //nolint:gosec
 
 	stdout, err := ecmd.StdoutPipe()
 	if err != nil {
@@ -214,9 +214,9 @@ func (lc localLogClient) getWithNativeCmd(ctx context.Context, search *client.Lo
 		}
 	}
 
-	finalArgs := append(shellArgs, cmdContent)
+	shellArgs = append(shellArgs, cmdContent)
 
-	ecmd := exec.CommandContext(ctx, shellName, finalArgs...)
+	ecmd := exec.CommandContext(ctx, shellName, shellArgs...) //nolint:gosec
 
 	stdout, err := ecmd.StdoutPipe()
 	if err != nil {

@@ -85,7 +85,8 @@ func (s SplunkLogSearchResult) GetEntries(ctx context.Context) ([]client.LogEntr
 	return nil, entryChan, nil
 }
 
-func (s SplunkLogSearchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
+// GetFields extracts the set of unique field names from the search results.
+func (s SplunkLogSearchResult) GetFields(_ context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 	fields := ty.UniSet[string]{}
 
 	for _, resultEntry := range s.results {

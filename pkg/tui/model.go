@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
+
+// Package tui provides the terminal user interface components.
 package tui
 
 import (
@@ -31,10 +33,15 @@ type FocusMode int
 const (
 	// FocusList means the main log list has focus.
 	FocusList FocusMode = iota
+	// FocusSearch means the search bar has focus.
 	FocusSearch
+	// FocusSidebar means the sidebar has focus.
 	FocusSidebar
+	// FocusContextSelect means the context selection menu has focus.
 	FocusContextSelect
+	// FocusInheritSelect means the inherit selection menu has focus.
 	FocusInheritSelect
+	// FocusConfirmation means a confirmation dialog has focus.
 	FocusConfirmation
 )
 
@@ -44,6 +51,7 @@ type ConfirmationType int
 const (
 	// ConfirmCloseTab means we are confirming closing a tab.
 	ConfirmCloseTab ConfirmationType = iota
+	// ConfirmQuitApp means we are confirming quitting the application.
 	ConfirmQuitApp
 )
 
@@ -53,7 +61,9 @@ type SidebarMode int
 const (
 	// SidebarModeEntry shows selected entry details.
 	SidebarModeEntry  SidebarMode = iota // Show selected entry details
+	// SidebarModeFields shows the list of available fields.
 	SidebarModeFields                    // Show global fields with values
+	// SidebarModeJSON shows the log entry as formatted JSON.
 	SidebarModeJSON                      // Show formatted JSON from selected entry
 )
 
@@ -631,6 +641,8 @@ func waitForError(tab *Tab) tea.Cmd {
 }
 
 // Update handles messages and updates the model
+//
+//nolint:gocyclo // TUI message handler with many message types
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
@@ -863,6 +875,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // handleKeyPress processes keyboard input
+//
+//nolint:gocyclo // Keyboard handler with many keybindings
 func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.Keys.Quit):
@@ -1411,7 +1425,7 @@ func (m *Model) copyJSONToClipboard() tea.Cmd {
 // Returns a command that will clear the message after a delay
 func (m *Model) showStatusMessage(message string) tea.Cmd {
 	m.StatusBar.SetMessage(message)
-	return tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+	return tea.Tick(3*time.Second, func(_ time.Time) tea.Msg {
 		return ClearStatusMsg{}
 	})
 }
@@ -1456,6 +1470,8 @@ func (m *Model) updateViewportSizes() {
 }
 
 // updateViewportContent refreshes the log list content
+//
+//nolint:gocyclo // Complex viewport rendering with multiple display modes
 func (m *Model) updateViewportContent() {
 	tab := m.CurrentTab()
 	if tab == nil {
@@ -2214,7 +2230,7 @@ func (m Model) View() string {
 		return m.renderConfirmationOverlay()
 	}
 
-	var sections []string
+	sections := make([]string, 0, 4)
 
 	// Header (tabs)
 	sections = append(sections, m.renderTabs())
@@ -2275,7 +2291,7 @@ func (m Model) renderContextSelectOverlay() string {
 	title := m.Styles.SidebarTitle.Render("Select Context for New Tab")
 
 	// Context list
-	var items []string
+	items := make([]string, 0, len(m.AvailableContexts))
 	for i, ctx := range m.AvailableContexts {
 		style := m.Styles.LogEntry
 		if i == m.ContextCursor {
@@ -2334,7 +2350,7 @@ func (m Model) renderInheritSelectOverlay() string {
 	subtitle := lipgloss.NewStyle().Foreground(ColorMuted).Render("Toggle search templates to inherit")
 
 	// Search list with checkboxes
-	var items []string
+	items := make([]string, 0, len(m.AvailableSearches))
 	for i, search := range m.AvailableSearches {
 		style := m.Styles.LogEntry
 		if i == m.InheritCursor {
@@ -2442,15 +2458,16 @@ func (m Model) renderSidebarWithTabs() string {
 
 	// Render tabs
 	var entryTab, jsonTab, fieldsTab string
-	if m.SidebarMode == SidebarModeEntry {
+	switch m.SidebarMode {
+	case SidebarModeEntry:
 		entryTab = activeTab.Render("Entry")
 		jsonTab = inactiveTab.Render("JSON")
 		fieldsTab = inactiveTab.Render("Fields")
-	} else if m.SidebarMode == SidebarModeJSON {
+	case SidebarModeJSON:
 		entryTab = inactiveTab.Render("Entry")
 		jsonTab = activeTab.Render("JSON")
 		fieldsTab = inactiveTab.Render("Fields")
-	} else {
+	default:
 		entryTab = inactiveTab.Render("Entry")
 		jsonTab = inactiveTab.Render("JSON")
 		fieldsTab = activeTab.Render("Fields")
@@ -2469,7 +2486,7 @@ func (m Model) renderSidebarWithTabs() string {
 
 // renderSearchFooter renders the chip-based search bar and help text
 func (m Model) renderSearchFooter() string {
-	var parts []string
+	parts := make([]string, 0, 2)
 
 	// Search bar (chip-based)
 	parts = append(parts, m.SearchBar.View())

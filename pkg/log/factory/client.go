@@ -25,12 +25,11 @@ const (
 	defaultDockerHostUnix    = "unix:///var/run/docker.sock"
 )
 
+// LogClientFactory provides an abstraction for obtaining a configured
+// client.LogClient by name.
 type LogClientFactory interface {
 	Get(name string) (*client.LogClient, error)
 }
-
-// LogClientFactory provides an abstraction for obtaining a configured
-// `client.LogClient` by name.
 
 type logClientFactory struct {
 	clients ty.LazyMap[string, client.LogClient]
@@ -40,6 +39,7 @@ func (lcf *logClientFactory) Get(name string) (*client.LogClient, error) {
 	return lcf.clients.Get(name)
 }
 
+// GetLogClientFactory returns a factory for creating log clients from configuration.
 func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 
 	logClientFactory := new(logClientFactory)
@@ -54,7 +54,7 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 		case "opensearch":
 			options := v.Options
 			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
-				vv, err := opensearch.GetClient(opensearch.OpenSearchTarget{
+				vv, err := opensearch.GetClient(opensearch.Target{
 					Endpoint: options.GetString("endpoint"),
 				})
 				if err != nil {
@@ -66,7 +66,7 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 		case "kibana":
 			options := v.Options
 			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
-				vv, err := kibana.GetClient(kibana.KibanaTarget{Endpoint: options.GetString("endpoint")})
+				vv, err := kibana.GetClient(kibana.Target{Endpoint: options.GetString("endpoint")})
 				if err != nil {
 					return nil, err
 				}
@@ -84,7 +84,7 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 			})
 		case "k8s":
 			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
-				vv, err := k8s.GetLogClient(k8s.K8sLogClientOptions{
+				vv, err := k8s.GetLogClient(k8s.LogClientOptions{
 					KubeConfig: v.Options.GetString("kubeConfig"),
 				})
 				if err != nil {
@@ -98,7 +98,7 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 				user := v.Options.GetString("user")
 				addr := v.Options.GetString("addr")
 				pk := v.Options.GetString("privateKey")
-				vv, err := ssh.GetLogClient(ssh.SSHLogClientOptions{
+				vv, err := ssh.GetLogClient(ssh.LogClientOptions{
 					User:       user,
 					Addr:       addr,
 					PrivateKey: pk,

@@ -56,7 +56,9 @@ func isSafeFieldName(name string) bool {
 	return true
 }
 
-// Get will be implemented in Phase 2.
+// Get executes a CloudWatch Logs query and returns the results.
+//
+//nolint:gocyclo // Complex search parameter handling and API orchestration
 func (c *LogClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
 	logGroupName, ok := search.Options.GetStringOk("logGroupName")
 	if !ok {
@@ -162,7 +164,7 @@ func (c *LogClient) Get(ctx context.Context, search *client.LogSearch) (client.L
 		if startQueryOutput.QueryId == nil {
 			return nil, errors.New("StartQuery did not return a QueryId")
 		}
-		return &CloudWatchLogSearchResult{client: c.client, queryID: *startQueryOutput.QueryId, search: search, logger: c.logger}, nil
+		return &LogSearchResult{client: c.client, queryID: *startQueryOutput.QueryId, search: search, logger: c.logger}, nil
 	}
 
 	// FilterLogEvents fallback
@@ -228,10 +230,10 @@ type staticCloudWatchResult struct {
 }
 
 func (r *staticCloudWatchResult) GetSearch() *client.LogSearch { return r.search }
-func (r *staticCloudWatchResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
+func (r *staticCloudWatchResult) GetEntries(_ context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
 	return r.entries, nil, nil
 }
-func (r *staticCloudWatchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
+func (r *staticCloudWatchResult) GetFields(_ context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 	return ty.UniSet[string]{}, nil, nil
 }
 func (r *staticCloudWatchResult) GetPaginationInfo() *client.PaginationInfo { return nil }

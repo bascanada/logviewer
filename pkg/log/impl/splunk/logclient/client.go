@@ -291,6 +291,7 @@ func (s SplunkLogSearchClient) getFieldValuesFromSearch(ctx context.Context, sea
 	return client.GetFieldValuesFromResult(ctx, searchResult, nil)
 }
 
+// GetClient returns a LogClient configured to communicate with the given Splunk endpoint.
 func GetClient(options SplunkLogSearchClientOptions) (client.LogClient, error) {
 
 	if options.URL == "" {

@@ -21,11 +21,11 @@ func (m *MockLogSearchResult) GetSearch() *LogSearch {
 	return &LogSearch{Options: ty.MI{"__context_id__": "test-ctx"}}
 }
 
-func (m *MockLogSearchResult) GetEntries(ctx context.Context) ([]LogEntry, chan []LogEntry, error) {
+func (m *MockLogSearchResult) GetEntries(_ context.Context) ([]LogEntry, chan []LogEntry, error) {
 	return m.Entries, m.Channel, nil
 }
 
-func (m *MockLogSearchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
+func (m *MockLogSearchResult) GetFields(_ context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 	return nil, nil, nil
 }
 

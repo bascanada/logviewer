@@ -16,15 +16,15 @@ type mockCWClientSanitize struct {
 	startCaptured *cloudwatchlogs.StartQueryInput
 }
 
-func (m *mockCWClientSanitize) StartQuery(ctx context.Context, params *cloudwatchlogs.StartQueryInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.StartQueryOutput, error) {
+func (m *mockCWClientSanitize) StartQuery(_ context.Context, params *cloudwatchlogs.StartQueryInput, _ ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.StartQueryOutput, error) {
 	m.startCaptured = params
 	return &cloudwatchlogs.StartQueryOutput{QueryId: aws.String("qid")}, nil
 }
 
-func (m *mockCWClientSanitize) GetQueryResults(ctx context.Context, params *cloudwatchlogs.GetQueryResultsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error) {
+func (m *mockCWClientSanitize) GetQueryResults(_ context.Context, _ *cloudwatchlogs.GetQueryResultsInput, _ ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error) {
 	return &cloudwatchlogs.GetQueryResultsOutput{}, nil
 }
-func (m *mockCWClientSanitize) FilterLogEvents(ctx context.Context, params *cloudwatchlogs.FilterLogEventsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.FilterLogEventsOutput, error) {
+func (m *mockCWClientSanitize) FilterLogEvents(_ context.Context, _ *cloudwatchlogs.FilterLogEventsInput, _ ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.FilterLogEventsOutput, error) {
 	return &cloudwatchlogs.FilterLogEventsOutput{}, nil
 }
 

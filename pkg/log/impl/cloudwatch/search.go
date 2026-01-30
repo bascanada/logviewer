@@ -13,8 +13,8 @@ import (
 	"github.com/bascanada/logviewer/pkg/ty"
 )
 
-// CloudWatchLogSearchResult implements LogSearchResult for CloudWatch.
-type CloudWatchLogSearchResult struct {
+// LogSearchResult implements LogSearchResult for CloudWatch.
+type LogSearchResult struct {
 	client  CWClient
 	queryID string
 	search  *client.LogSearch
@@ -26,12 +26,12 @@ type CloudWatchLogSearchResult struct {
 }
 
 // GetSearch returns the search configuration.
-func (r *CloudWatchLogSearchResult) GetSearch() *client.LogSearch {
+func (r *LogSearchResult) GetSearch() *client.LogSearch {
 	return r.search
 }
 
 // GetEntries polls for the query results and converts them.
-func (r *CloudWatchLogSearchResult) fetchEntries(ctx context.Context) error {
+func (r *LogSearchResult) fetchEntries(ctx context.Context) error {
 	if len(r.entries) > 0 { // already fetched
 		return nil
 	}
@@ -87,10 +87,8 @@ func (r *CloudWatchLogSearchResult) fetchEntries(ctx context.Context) error {
 			case "@timestamp":
 				if ts, ok := parseCloudWatchTimestamp(fVal); ok {
 					entry.Timestamp = ts
-				} else {
-					if r.logger != nil {
-						r.logger.Warn("cloudwatch: failed to parse timestamp", "value", fVal)
-					}
+				} else if r.logger != nil {
+					r.logger.Warn("cloudwatch: failed to parse timestamp", "value", fVal)
 				}
 			case "@message":
 				entry.Message = fVal
@@ -104,12 +102,12 @@ func (r *CloudWatchLogSearchResult) fetchEntries(ctx context.Context) error {
 }
 
 // Err returns an error channel (unused for CloudWatch).
-func (r *CloudWatchLogSearchResult) Err() <-chan error {
+func (r *LogSearchResult) Err() <-chan error {
 	return nil
 }
 
 // GetEntries returns log entries and a channel for streaming updates.
-func (r *CloudWatchLogSearchResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
+func (r *LogSearchResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
 	if err := r.fetchEntries(ctx); err != nil {
 		return nil, nil, err
 	}
@@ -117,7 +115,7 @@ func (r *CloudWatchLogSearchResult) GetEntries(ctx context.Context) ([]client.Lo
 }
 
 // GetFields retrieves distinct values for the specified fields.
-func (r *CloudWatchLogSearchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
+func (r *LogSearchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 	// If already computed, return cached
 	if len(r.fields) > 0 {
 		return r.fields, nil, nil
@@ -164,7 +162,7 @@ func parseCloudWatchTimestamp(v string) (time.Time, bool) {
 }
 
 // GetPaginationInfo returns information for fetching the next page.
-func (r *CloudWatchLogSearchResult) GetPaginationInfo() *client.PaginationInfo {
+func (r *LogSearchResult) GetPaginationInfo() *client.PaginationInfo {
 	if !r.search.Size.Set {
 		return nil
 	}

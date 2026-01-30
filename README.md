@@ -2,7 +2,11 @@
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/bascanada/logviewer)](https://goreportcard.com/report/github.com/bascanada/logviewer)
 [![Build Status](https://github.com/bascanada/logviewer/actions/workflows/main.yaml/badge.svg)](https://github.com/bascanada/logviewer/actions/workflows/main.yaml)
+[![codecov](https://codecov.io/gh/bascanada/logviewer/branch/main/graph/badge.svg)](https://codecov.io/gh/bascanada/logviewer)
+[![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/wquintal/235e796b13295c2cce47516d088c54f7/raw/coverage-badge.json)](https://github.com/bascanada/logviewer)
 [![Go Reference](https://pkg.go.dev/badge/github.com/bascanada/logviewer.svg)](https://pkg.go.dev/github.com/bascanada/logviewer)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/bascanada/logviewer)](go.mod)
+[![Release](https://img.shields.io/github/v/release/bascanada/logviewer)](https://github.com/bascanada/logviewer/releases/latest)
 [![License](https://img.shields.io/github/license/bascanada/logviewer)](LICENSE)
 
 <p align="center">
@@ -12,13 +16,6 @@
   <br>
   <em>Kubernetes • Docker • Splunk • OpenSearch • CloudWatch • SSH</em>
 </p>
-
-<p align="center">
-  <a href="https://github.com/bascanada/logviewer/wiki">Documentation</a> •
-  <a href="https://github.com/bascanada/logviewer/issues">Issues</a> •
-  <a href="https://github.com/bascanada/logviewer/discussions">Discussions</a>
-</p>
-
 ---
 
 LogViewer is a unified CLI tool for querying logs from multiple sources with consistent syntax. Stop juggling different tools and query languages—learn once, use everywhere.

@@ -305,7 +305,7 @@ func getSpaceClient() http.Client {
 	switch v := http.DefaultTransport.(type) {
 	case (*http.Transport):
 		customTransport := v.Clone()
-		customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // G402: intentionally skip TLS verification for development/internal use
 		return http.Client{Transport: customTransport}
 	default:
 		return http.Client{}

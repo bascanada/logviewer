@@ -88,9 +88,10 @@ func ExtractJSON(runes []rune, start int) string {
 			continue
 		}
 
-		if r == '{' || r == '[' {
+		switch r {
+		case '{', '[':
 			depth++
-		} else if r == '}' || r == ']' {
+		case '}', ']':
 			depth--
 			if depth == 0 {
 				return string(runes[start : i+1])

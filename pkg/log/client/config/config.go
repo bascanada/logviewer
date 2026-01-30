@@ -164,7 +164,7 @@ func LoadContextConfig(explicitPath string) (*ContextConfig, error) {
 
 func loadSingleFile(configPath string) (*ContextConfig, error) {
 	// Read file contents and support JSON or YAML formats
-	data, err := os.ReadFile(configPath)
+	data, err := os.ReadFile(configPath) //nolint:gosec
 	if err != nil {
 		return nil, fmt.Errorf("error reading config file: %w", err)
 	}
@@ -274,14 +274,14 @@ type ContextConfig struct {
 }
 
 // GetSearchContext resolves a search context by ID, merging with defaults and overrides.
-func (cc ContextConfig) GetSearchContext(contextId string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (SearchContext, error) {
-	if contextId == "" {
-		return SearchContext{}, errors.New("contextId is empty, required when using config")
+func (cc ContextConfig) GetSearchContext(contextID string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (SearchContext, error) {
+	if contextID == "" {
+		return SearchContext{}, errors.New("contextID is empty, required when using config")
 	}
 
-	searchContext, ok := cc.Contexts[contextId]
+	searchContext, ok := cc.Contexts[contextID]
 	if !ok {
-		return SearchContext{}, fmt.Errorf("%w: %s", ErrContextNotFound, contextId)
+		return SearchContext{}, fmt.Errorf("%w: %s", ErrContextNotFound, contextID)
 	}
 
 	// Deep copy the search to avoid mutating the original config's maps

@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Package cmd contains subcommands and helpers to generate shell completion
-// scripts and other CLI utilities for the `logviewer` tool.
+
 package cmd
 
 import (

@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestDockerLogClient_Get_Follow_Flag verifies that the Follow flag is correctly
+// TestLogClient_Get_Follow_Flag verifies that the Follow flag is correctly
 // derived from search.Follow for streaming logs
-func TestDockerLogClient_Get_Follow_Flag(t *testing.T) {
+func TestLogClient_Get_Follow_Flag(t *testing.T) {
 	t.Run("Follow should use search.Follow field", func(t *testing.T) {
 		// Test case: Follow=true should enable streaming
 		search := &logclient.LogSearch{
@@ -57,7 +57,7 @@ func TestDockerLogClient_Get_Follow_Flag(t *testing.T) {
 	})
 }
 
-func TestDockerLogClient_Options_Parsing(t *testing.T) {
+func TestLogClient_Options_Parsing(t *testing.T) {
 	t.Run("Parses container from options", func(t *testing.T) {
 		search := &logclient.LogSearch{
 			Options: ty.MI{
@@ -154,7 +154,7 @@ func TestDockerLogClient_Options_Parsing(t *testing.T) {
 	})
 }
 
-func TestDockerLogClient_TimeRange(t *testing.T) {
+func TestLogClient_TimeRange(t *testing.T) {
 	t.Run("Since from Range.Last", func(t *testing.T) {
 		search := &logclient.LogSearch{
 			Options: ty.MI{
@@ -232,7 +232,7 @@ func TestDockerLogClient_TimeRange(t *testing.T) {
 	})
 }
 
-func TestDockerLogClient_Tail(t *testing.T) {
+func TestLogClient_Tail(t *testing.T) {
 	t.Run("Tail is all when size not set", func(t *testing.T) {
 		search := &logclient.LogSearch{
 			Options: ty.MI{
@@ -264,7 +264,7 @@ func TestDockerLogClient_Tail(t *testing.T) {
 	})
 }
 
-func TestDockerLogClient_TimestampRegex(t *testing.T) {
+func TestLogClient_TimestampRegex(t *testing.T) {
 	t.Run("Default timestamp regex is set", func(t *testing.T) {
 		search := &logclient.LogSearch{
 			Options: ty.MI{
@@ -300,7 +300,7 @@ func TestDockerLogClient_TimestampRegex(t *testing.T) {
 	})
 }
 
-func TestDockerLogClient_LogsOptions(t *testing.T) {
+func TestLogClient_LogsOptions(t *testing.T) {
 	t.Run("LogsOptions are correctly built from search", func(t *testing.T) {
 		search := &logclient.LogSearch{
 			Follow: true,
@@ -368,7 +368,7 @@ func TestDockerTimestampRegex(t *testing.T) {
 }
 
 func TestGetLogClient(t *testing.T) {
-	t.Run("Returns error for invalid SSH host", func(t *testing.T) {
+	t.Run("Returns error for invalid SSH host", func(_ *testing.T) {
 		// Testing with an SSH URL that can't connect
 		// This will fail at ping timeout
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -379,7 +379,7 @@ func TestGetLogClient(t *testing.T) {
 		_ = ctx
 	})
 
-	t.Run("Host parameter handling", func(t *testing.T) {
+	t.Run("Host parameter handling", func(_ *testing.T) {
 		// Test that various host formats are handled
 		hosts := []string{
 			"",                            // Default
@@ -393,8 +393,8 @@ func TestGetLogClient(t *testing.T) {
 	})
 }
 
-// TestDockerLogClient_ServiceDiscovery tests the service discovery logic
-func TestDockerLogClient_ServiceDiscovery(t *testing.T) {
+// TestLogClient_ServiceDiscovery tests the service discovery logic
+func TestLogClient_ServiceDiscovery(t *testing.T) {
 	t.Run("Service and project labels", func(t *testing.T) {
 		search := &logclient.LogSearch{
 			Options: ty.MI{

@@ -304,10 +304,8 @@ contexts:
 	// 4. Verify merge
 	if _, ok := cfg.Contexts["mainCtx"]; !ok {
 		t.Errorf("expected mainCtx to be present")
-	} else {
-		if cfg.Contexts["mainCtx"].Description != "overridden" {
-			t.Errorf("expected mainCtx to be overridden, got desc: %s", cfg.Contexts["mainCtx"].Description)
-		}
+	} else if cfg.Contexts["mainCtx"].Description != "overridden" {
+		t.Errorf("expected mainCtx to be overridden, got desc: %s", cfg.Contexts["mainCtx"].Description)
 	}
 
 	if _, ok := cfg.Contexts["dropInCtx"]; !ok {

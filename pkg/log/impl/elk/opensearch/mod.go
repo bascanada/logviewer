@@ -1,3 +1,4 @@
+// Package opensearch provides an OpenSearch implementation of the LogClient interface.
 package opensearch
 
 import (
@@ -13,13 +14,13 @@ import (
 	"github.com/bascanada/logviewer/pkg/ty"
 )
 
-// OpenSearchTarget describes the connection target for an OpenSearch-backed client.
-type OpenSearchTarget struct {
+// Target describes the connection target for an OpenSearch-backed client.
+type Target struct {
 	Endpoint string `json:"endpoint"`
 }
 
 type openSearchClient struct {
-	target OpenSearchTarget
+	target Target
 	client http.Client
 }
 
@@ -189,7 +190,8 @@ func (kc openSearchClient) getFieldValuesFromSearch(ctx context.Context, search 
 	return client.GetFieldValuesFromResult(ctx, searchResult, nil)
 }
 
-func GetClient(target OpenSearchTarget) (client.LogClient, error) {
+// GetClient returns a LogClient configured to communicate with the given OpenSearch endpoint.
+func GetClient(target Target) (client.LogClient, error) {
 	client := new(openSearchClient)
 	client.target = target
 	client.client = http.GetClient(target.Endpoint)

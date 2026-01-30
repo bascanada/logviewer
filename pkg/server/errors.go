@@ -1,3 +1,4 @@
+// Package server provides the HTTP server implementation for the logviewer API.
 package server
 
 import (

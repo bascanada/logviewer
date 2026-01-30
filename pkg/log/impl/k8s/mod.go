@@ -1,3 +1,4 @@
+// Package k8s provides a Kubernetes implementation of the LogClient interface.
 package k8s
 
 import (
@@ -31,15 +32,19 @@ const (
 	FieldNamespace     = "namespace"
 	// FieldContainer is the field name for Kubernetes container.
 	FieldContainer     = "container"
+	// FieldPrevious is the field name for fetching previous pod logs.
 	FieldPrevious      = "previous"
+	// FieldPod is the field name for the pod.
 	FieldPod           = "pod"
+	// FieldLabelSelector is the field name for the label selector.
 	FieldLabelSelector = "labelSelector"
 
+	// OptionsTimestamp is the key for the timestamp option.
 	OptionsTimestamp = "timestamp"
 )
 
-// K8sLogClientOptions defines configuration for the Kubernetes client.
-type K8sLogClientOptions struct {
+// LogClientOptions defines configuration for the Kubernetes client.
+type LogClientOptions struct {
 	KubeConfig string `json:"kubeConfig"`
 }
 
@@ -183,10 +188,10 @@ func (lc k8sLogClient) getLogsFromMultiplePods(
 	search *client.LogSearch,
 	namespace string,
 	labelSelector string,
-	previous bool,
-	timestamp bool,
-	follow bool,
-	tailLines *int64,
+	_ bool,
+	_ bool,
+	_ bool,
+	_ *int64,
 ) (client.LogSearchResult, error) {
 
 	// List pods matching the label selector
@@ -318,7 +323,7 @@ func ensureKubeconfig(kubeconfig string) error {
 }
 
 // GetLogClient returns a new Kubernetes log client.
-func GetLogClient(options K8sLogClientOptions) (client.LogClient, error) {
+func GetLogClient(options LogClientOptions) (client.LogClient, error) {
 	var kubeconfig string
 	if options.KubeConfig == "" {
 		kubeconfig = filepath.Join(homedir.HomeDir(), ".kube", "config")

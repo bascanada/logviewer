@@ -91,6 +91,7 @@ func TestLexer(t *testing.T) {
 	}
 }
 
+//nolint:gocyclo // Comprehensive test suite with many test cases
 func TestParseQueryExpression(t *testing.T) {
 	tests := []struct {
 		name        string

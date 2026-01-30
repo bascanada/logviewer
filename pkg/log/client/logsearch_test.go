@@ -29,7 +29,7 @@ func TestMerging(t *testing.T) {
 	_ = ty.FromJSONString(str, &restoreParent)
 
 	assert.Equal(t, searchParent.Refresh.Duration.Value, "15s", "should be the same")
-	//assert.Equal(t, searchParent)
+	// assert.Equal(t, searchParent)
 
 }
 

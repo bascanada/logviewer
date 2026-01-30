@@ -1,0 +1,77 @@
+name: Update Coverage Badge
+
+on:
+  push:
+    branches:
+      - main
+  workflow_run:
+    workflows: ["master pipeline , developpment build"]
+    types:
+      - completed
+
+jobs:
+  update-badge:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'push' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go 1.25.6
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.25.6
+          check-latest: true
+          cache-dependency-path: go.sum
+
+      - name: Run tests with coverage
+        run: |
+          export PATH=$PATH:$(go env GOPATH)/bin
+          go install github.com/boumenot/gocover-cobertura@latest
+          make test/coverage
+
+      - name: Extract coverage percentage
+        id: coverage
+        run: |
+          # Extract coverage from coverage.xml
+          COVERAGE=$(grep -oP 'line-rate="\K[0-9.]+' coverage.xml | head -1)
+          # Convert to percentage (multiply by 100)
+          COVERAGE_PCT=$(echo "$COVERAGE * 100" | bc -l | xargs printf "%.1f")
+          echo "coverage=$COVERAGE_PCT" >> $GITHUB_OUTPUT
+          echo "Coverage: $COVERAGE_PCT%"
+
+          # Determine color based on coverage
+          if (( $(echo "$COVERAGE_PCT >= 80" | bc -l) )); then
+            COLOR="brightgreen"
+          elif (( $(echo "$COVERAGE_PCT >= 60" | bc -l) )); then
+            COLOR="green"
+          elif (( $(echo "$COVERAGE_PCT >= 40" | bc -l) )); then
+            COLOR="yellow"
+          elif (( $(echo "$COVERAGE_PCT >= 20" | bc -l) )); then
+            COLOR="orange"
+          else
+            COLOR="red"
+          fi
+          echo "color=$COLOR" >> $GITHUB_OUTPUT
+          echo "Badge color: $COLOR"
+
+      - name: Create coverage badge JSON
+        run: |
+          cat > coverage-badge.json <<EOF
+          {
+            "schemaVersion": 1,
+            "label": "coverage",
+            "message": "${{ steps.coverage.outputs.coverage }}%",
+            "color": "${{ steps.coverage.outputs.color }}"
+          }
+          EOF
+          cat coverage-badge.json
+
+      - name: Upload badge to Gist
+        uses: exuanbo/actions-deploy-gist@v1
+        with:
+          token: ${{ secrets.GIST_TOKEN }}
+          gist_id: ${{ secrets.GIST_ID }}
+          file_path: coverage-badge.json
+          file_type: text

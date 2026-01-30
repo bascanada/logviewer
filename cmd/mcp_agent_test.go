@@ -669,9 +669,9 @@ func TestMCPAgent_ErrorInvestigation(t *testing.T) {
 		if call.ToolName == "query_logs" {
 			foundQueryLogs = true
 			// Check contextId
-			if ctxId, ok := call.Arguments["contextId"].(string); ok {
-				if ctxId != "payment-service" {
-					t.Errorf("expected contextId=payment-service, got: %s", ctxId)
+			if ctxID, ok := call.Arguments["contextId"].(string); ok {
+				if ctxID != "payment-service" {
+					t.Errorf("expected contextId=payment-service, got: %s", ctxID)
 				}
 			}
 			t.Logf("query_logs called with args: %+v", call.Arguments)

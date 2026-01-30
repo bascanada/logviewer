@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Package cmd implements the interactive configuration wizard and helpers
-// used by the `logviewer configure` command.
+
 package cmd
 
 import (
@@ -30,7 +29,7 @@ Kubernetes, Docker, SSH, or CloudWatch) and generate a ready-to-use config file.
 Example:
   logviewer configure
   logviewer configure -c /path/to/config.yaml`,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		if err := runConfigWizard(configPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -73,6 +72,7 @@ func resolveConfigPath(cfgPath string) (string, error) {
 	return filepath.Join(home, config.DefaultConfigDir, config.DefaultConfigFile), nil
 }
 
+//nolint:gocyclo // Interactive wizard with many user prompts and branching paths
 func runConfigWizard(cfgPath string) error {
 	var (
 		clientName string
@@ -553,12 +553,13 @@ func buildClientOptions(data *wizardData) ty.MI {
 		opts["url"] = data.endpoint
 		headers := ty.MS{}
 
-		if data.authType == "splunk" {
+		switch data.authType {
+		case "splunk":
 			headers["Authorization"] = "Splunk " + data.token
-		} else if data.authType == "bearer-hash" {
+		case "bearer-hash":
 			// Use pre-computed hash directly
 			headers["Authorization"] = "Bearer " + data.token
-		} else {
+		default:
 			// Security Warning: MD5 is cryptographically weak and vulnerable to collisions.
 			// This is used here because it's required by the legacy Splunk API.
 			// If the API supports SHA-256 or other secure algorithms, prefer those instead.

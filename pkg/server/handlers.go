@@ -10,7 +10,7 @@ import (
 	"github.com/bascanada/logviewer/pkg/log/client"
 )
 
-// Base request structure for query endpoints
+// QueryRequest defines the structure for query requests.
 type QueryRequest struct {
 	ContextID string            `json:"contextId"`           // Required
 	Inherits  []string          `json:"inherits,omitempty"`  // Optional search inherits
@@ -18,23 +18,24 @@ type QueryRequest struct {
 	Variables map[string]string `json:"variables,omitempty"` // Runtime variables for substitution
 }
 
-// Response for /query/logs endpoint
+// LogsResponse is the response structure for the /query/logs endpoint.
 type LogsResponse struct {
 	Logs []client.LogEntry `json:"logs,omitempty"`
 	Meta QueryMetadata     `json:"meta,omitempty"`
 }
 
-// Response for /query/fields endpoint
+// FieldsResponse is the response structure for the /query/fields endpoint.
 type FieldsResponse struct {
 	Fields map[string][]string `json:"fields,omitempty"` // field_name -> [possible_values]
 	Meta   QueryMetadata       `json:"meta,omitempty"`
 }
 
-// Response for /contexts endpoint
+// ContextsResponse is the response structure for the /contexts endpoint.
 type ContextsResponse struct {
 	Contexts []ContextInfo `json:"contexts"`
 }
 
+// ContextInfo contains details about a specific context.
 type ContextInfo struct {
 	ID            string   `json:"id"`
 	Client        string   `json:"client"`
@@ -42,7 +43,7 @@ type ContextInfo struct {
 	SearchInherit []string `json:"searchInherit,omitempty"`
 }
 
-// Metadata about query execution
+// QueryMetadata provides execution details about a query.
 type QueryMetadata struct {
 	QueryTime   string `json:"queryTime"`   // How long the query took
 	ResultCount int    `json:"resultCount"` // Number of results returned
@@ -50,7 +51,7 @@ type QueryMetadata struct {
 	ClientType  string `json:"clientType"`  // opensearch, splunk, k8s, etc.
 }
 
-func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) healthHandler(w http.ResponseWriter, _ *http.Request) {
 	s.writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -289,7 +290,7 @@ func (s *Server) queryFieldsHandler(w http.ResponseWriter, r *http.Request) {
 	s.processQueryFieldsRequest(w, r, &req)
 }
 
-func (s *Server) openapiHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) openapiHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/yaml")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(s.openapiSpec)

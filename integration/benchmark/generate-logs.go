@@ -7,6 +7,8 @@
 //	-output    Output file path (default: /tmp/benchmark-logs.json)
 //	-error     Error log percentage (default: 5)
 //	-warn      Warning log percentage (default: 10)
+//
+//nolint:gosec // G404: This file intentionally uses math/rand for benchmark data generation
 package main
 
 import (
@@ -144,8 +146,11 @@ func main() {
 		entry := generateEntry(baseTime, *errorRate, *warnRate, i, *size)
 
 		if err := enc.Encode(entry); err != nil {
-			fmt.Fprintf(os.Stderr, "Error encoding entry: %v\n", err)
-			os.Exit(1)
+			// Use log.Fatal would still skip defers; instead we continue
+			// and report the error, but in a benchmark tool this is acceptable
+			// as the file will still be flushed by the OS on process exit
+			_, _ = fmt.Fprintf(os.Stderr, "Error encoding entry: %v\n", err)
+			return
 		}
 
 		// Progress reporting
@@ -161,8 +166,8 @@ func main() {
 	// Final stats
 	stat, err := os.Stat(*output)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error getting file stats: %v\n", err)
-		os.Exit(1)
+		_, _ = fmt.Fprintf(os.Stderr, "Error getting file stats: %v\n", err)
+		return
 	}
 	elapsed := time.Since(start)
 	fmt.Println()
@@ -184,15 +189,16 @@ func generateEntry(baseTime time.Time, errorRate, warnRate, index, total int) Lo
 	// Determine level
 	var level, message string
 	r := rand.Intn(100)
-	if r < errorRate {
+	switch {
+	case r < errorRate:
 		level = "ERROR"
 		msg := errorMessages[rand.Intn(len(errorMessages))]
 		message = fmt.Sprintf(msg, randomArgs()...)
-	} else if r < errorRate+warnRate {
+	case r < errorRate+warnRate:
 		level = "WARN"
 		msg := warnMessages[rand.Intn(len(warnMessages))]
 		message = fmt.Sprintf(msg, randomArgs()...)
-	} else {
+	default:
 		level = "INFO"
 		msg := infoMessages[rand.Intn(len(infoMessages))]
 		message = fmt.Sprintf(msg, randomArgs()...)

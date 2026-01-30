@@ -10,7 +10,7 @@ const LB = "\n"
 
 // ReadJSONFile reads and unmarshals a JSON file into object.
 func ReadJSONFile(path string, object interface{}) error {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec
 	if err != nil {
 		return err
 	}

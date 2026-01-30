@@ -79,7 +79,7 @@ type mockElkLogClient struct {
 	returnError  error
 }
 
-func (m *mockElkLogClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
+func (m *mockElkLogClient) Get(_ context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
 	m.getCalls++
 	m.lastSearch = search
 	if m.returnError != nil {
@@ -93,7 +93,7 @@ func (m *mockElkLogClient) Get(ctx context.Context, search *client.LogSearch) (c
 	}, nil
 }
 
-func (m *mockElkLogClient) GetFieldValues(ctx context.Context, search *client.LogSearch, fields []string) (map[string][]string, error) {
+func (m *mockElkLogClient) GetFieldValues(_ context.Context, _ *client.LogSearch, _ []string) (map[string][]string, error) {
 	return nil, nil
 }
 

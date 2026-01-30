@@ -66,8 +66,9 @@ func (s *Server) Start() error {
 	handler := s.chainMiddleware(s.router, s.recoveryMiddleware, s.corsMiddleware, s.requestIDMiddleware, s.loggingMiddleware)
 
 	s.httpServer = &http.Server{
-		Addr:    fmt.Sprintf("%s:%s", s.host, s.port),
-		Handler: handler,
+		Addr:              fmt.Sprintf("%s:%s", s.host, s.port),
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	// Channel to listen for errors starting the server
