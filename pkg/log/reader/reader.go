@@ -234,7 +234,7 @@ func (lr *ReaderLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, c
 		if lr.search.Size.Set && lr.search.Size.Value > 0 {
 			captureLimit = lr.search.Size.Value
 		}
-		
+
 		timeout := time.NewTimer(500 * time.Millisecond)
 		capturing := true
 
@@ -268,7 +268,12 @@ func (lr *ReaderLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, c
 		lr.flushBlock(&pendingBlock, func(entry client.LogEntry) {
 			initialEntries = append(initialEntries, entry)
 		})
-		
+
+		// Truncate to size limit if we exceeded it during flush
+		if lr.search.Size.Set && lr.search.Size.Value > 0 && len(initialEntries) > lr.search.Size.Value {
+			initialEntries = initialEntries[:lr.search.Size.Value]
+		}
+
 		// If scanner finished, we are done
 		select {
 		case <-doneChan:
@@ -278,22 +283,44 @@ func (lr *ReaderLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, c
 		}
 
 		// Phase 2: Stream remaining logs
+		// Note: If we've reached the size limit, don't stream anything more
+		if lr.search.Size.Set && lr.search.Size.Value > 0 && len(initialEntries) >= lr.search.Size.Value {
+			// Size limit reached, don't stream any more logs
+			lr.closer.Close()
+			return initialEntries, nil, nil
+		}
+
 		c := make(chan []client.LogEntry)
 
 		go func() {
 			defer close(c)
 			defer lr.closer.Close()
 
-			// We might have a partial pending block from Phase 1? 
+			// We might have a partial pending block from Phase 1?
 			// No, we flushed it above. pendingBlock is empty now.
 			// But wait, if processLine accumulated a partial line but didn't trigger onEntry,
-			// flushBlock forced it out as an entry. 
+			// flushBlock forced it out as an entry.
 			// This effectively "breaks" a multiline log that straddles the capture boundary.
-			// However, given the timeout/limit, this is an acceptable tradeoff to ensure 
+			// However, given the timeout/limit, this is an acceptable tradeoff to ensure
 			// history is displayed. Multiline logs usually arrive in a burst anyway.
 
+			// Track how many entries we've streamed in phase 2
+			streamedCount := 0
+			maxStreamed := 0
+			if lr.search.Size.Set && lr.search.Size.Value > 0 {
+				maxStreamed = lr.search.Size.Value - len(initialEntries)
+				if maxStreamed < 0 {
+					maxStreamed = 0
+				}
+			}
+
 			onEntry := func(entry client.LogEntry) {
+				// Check if we've hit the size limit
+				if maxStreamed > 0 && streamedCount >= maxStreamed {
+					return
+				}
 				c <- []client.LogEntry{entry}
+				streamedCount++
 			}
 
 			// Reuse the flush-on-timeout logic for streaming
@@ -311,7 +338,18 @@ func (lr *ReaderLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, c
 						lr.flushBlock(&pendingBlock, onEntry)
 						return
 					}
+
+					// Stop reading if we've reached the limit
+					if maxStreamed > 0 && streamedCount >= maxStreamed {
+						return
+					}
+
 					lr.processLine(line, &pendingBlock, onEntry)
+
+					// Check again after processing (in case this line generated an entry)
+					if maxStreamed > 0 && streamedCount >= maxStreamed {
+						return
+					}
 
 					// Reset the flush timer
 					if !flushTimer.Stop() {
@@ -324,6 +362,10 @@ func (lr *ReaderLogResult) GetEntries(ctx context.Context) ([]client.LogEntry, c
 
 				case <-flushTimer.C:
 					lr.flushBlock(&pendingBlock, onEntry)
+					// Check if we hit the limit after flushing
+					if maxStreamed > 0 && streamedCount >= maxStreamed {
+						return
+					}
 				}
 			}
 		}()

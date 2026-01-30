@@ -521,42 +521,92 @@ go test ./cmd/... -run TestMCPAgent_MultiStepReasoning -v
 
 ```
 integration/
-├── config.yaml              # Main config
-├── config.extra.yaml        # Extra contexts
-├── config.hl.yaml           # HL configs
-├── docker-compose.yml       # Infrastructure
-├── docker-compose-log-generator.yml
+├── infra/                   # Infrastructure files (moved)
+│   ├── config.yaml          # Main config
+│   ├── config.extra.yaml    # Extra contexts
+│   ├── config.hl.yaml       # HL configs
+│   ├── docker-compose.yml   # Infrastructure
+│   ├── docker-compose-log-generator.yml
+│   ├── benchmark/           # Performance tests
+│   ├── k8s/                 # Kubernetes setup
+│   ├── log-generator/       # Transaction simulator
+│   ├── logs/                # Sample log files
+│   ├── opensearch/          # OpenSearch scripts
+│   ├── splunk/              # Splunk scripts
+│   ├── ssh/                 # SSH testing
+│   └── cloudwatch/          # CloudWatch/LocalStack
 │
-├── benchmark/               # Performance tests
-│   ├── run-benchmark.sh
-│   └── generate-logs.go
+├── tests/
+│   └── e2e/                 # Go-based integration tests (NEW)
+│       ├── main_test.go
+│       ├── helpers_test.go
+│       ├── assertions.go
+│       ├── query_log_test.go
+│       ├── query_field_test.go
+│       ├── query_values_test.go
+│       ├── native_queries_test.go
+│       ├── hl_queries_test.go
+│       ├── ssh_test.go
+│       └── README.md        # Detailed test documentation
 │
-├── k8s/                     # Kubernetes
-│   ├── app.yaml             # Simulator deployment
-│   ├── k3s.yaml             # Kubeconfig
-│   └── configure-kubeconfig.sh
-│
-├── log-generator/           # Transaction simulator
-│   ├── main.go
-│   └── Dockerfile
-│
-├── logs/                    # Sample log files
-│   └── app.log
-│
-├── opensearch/              # OpenSearch scripts
-│   └── send-logs.sh
-│
-├── splunk/                  # Splunk scripts
-│   ├── send-logs.sh
-│   └── .hec_token
-│
-├── ssh/                     # SSH testing
-│   ├── id_rsa / id_rsa.pub
-│   ├── generate-logs.sh
-│   └── upload-log.sh
-│
-└── test-*.sh                # Test scripts
+└── legacy/                  # Legacy shell-based tests
+    ├── test-all.sh
+    ├── test-common.sh
+    ├── test-query-log.sh
+    └── ...
 ```
+
+---
+
+## Testing Approaches
+
+### New: Go-Based Tests (Recommended)
+
+**Location**: `integration/tests/e2e/`
+
+The project now includes a comprehensive Go-based integration test framework with:
+- ✅ Strong typing and structured assertions
+- ✅ Fluent, readable test syntax
+- ✅ Parallel execution for faster feedback
+- ✅ Custom assertion library for domain-specific checks
+- ✅ Automatic JSON parsing (array and NDJSON formats)
+
+**Run Go tests**:
+```bash
+make integration/test                # All tests
+make integration/test/log            # Log query tests
+make integration/test/field          # Field discovery tests
+make integration/test/values         # Field values tests
+make integration/test/ssh            # SSH backend tests
+go test -v -tags=integration ./integration/tests/e2e/...
+```
+
+**Example test**:
+```go
+logs := tCtx.RunAndParse(t, "query", "log", "-i", "splunk-all", "--last", "1h")
+
+Expect(t, logs).
+    AtLeast(5).
+    All(
+        FieldEquals("level", "ERROR"),
+        DateAfter("timestamp", time.Now().Add(-1*time.Hour)),
+        HasTraceID(),
+    )
+```
+
+See [tests/e2e/README.md](tests/e2e/README.md) for complete documentation.
+
+### Legacy: Shell-Based Tests
+
+**Location**: `integration/legacy/`
+
+Original shell-based tests are still available:
+```bash
+make integration/tests              # All legacy tests
+bash integration/legacy/test-query-log.sh
+```
+
+These tests will be deprecated once full migration to Go tests is complete.
 
 ---
 
@@ -567,8 +617,8 @@ integration/
 make integration/stop
 
 # Full cleanup (remove volumes)
-docker-compose -f integration/docker-compose.yml down -v
+cd integration/infra && docker-compose down -v
 
 # Remove generated logs
-rm -f integration/logs/*.log
+rm -f integration/infra/logs/*.log
 ```

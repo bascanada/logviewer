@@ -221,9 +221,47 @@ func (l *Lexer) readCondition() error {
 	return nil
 }
 
-// readOperator reads an operator
+// readOperator reads an operator (symbol or keyword like CONTAINS)
 func (l *Lexer) readOperator() string {
-	// Order matters: check longer operators first
+	// Skip whitespace before operator
+	for l.pos < len(l.input) && unicode.IsSpace(rune(l.input[l.pos])) {
+		l.pos++
+	}
+
+	// Check for keyword operators (CONTAINS, LIKE, etc)
+	startPos := l.pos
+	keyword := ""
+	for l.pos < len(l.input) {
+		ch := rune(l.input[l.pos])
+		if unicode.IsLetter(ch) {
+			l.pos++
+		} else {
+			break
+		}
+	}
+
+	if l.pos > startPos {
+		keyword = l.input[startPos:l.pos]
+		upper := strings.ToUpper(keyword)
+		switch upper {
+		case "CONTAINS":
+			// Skip whitespace after keyword
+			for l.pos < len(l.input) && unicode.IsSpace(rune(l.input[l.pos])) {
+				l.pos++
+			}
+			return "~=" // Map to HL contains operator
+		case "LIKE":
+			for l.pos < len(l.input) && unicode.IsSpace(rune(l.input[l.pos])) {
+				l.pos++
+			}
+			return "like"
+		default:
+			// Not a keyword operator, rewind
+			l.pos = startPos
+		}
+	}
+
+	// Check for symbol operators (order matters: check longer operators first)
 	operators := []string{"!~=", "~=", "!=", ">=", "<=", ">", "<", "="}
 
 	for _, op := range operators {

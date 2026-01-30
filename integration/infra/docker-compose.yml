@@ -66,7 +66,7 @@ services:
 
   localstack:
     image: localstack/localstack:latest
-    container_name: localstack
+    container_name: localstack_lv
     ports:
       - "4566:4566"            # LocalStack Gateway
       - "4510-4559:4510-4559"  # External services

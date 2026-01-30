@@ -4,7 +4,7 @@ clients:
     options:
       addr: "localhost:2222"
       user: "testuser"
-      privateKey: "./integration/ssh/id_rsa"
+      privateKey: "/Users/william.quintal/Project/bascanada/logviewer-3/integration/infra/ssh/id_rsa"
       disablePTY: true
       paths:
         - /data/test-logs.json
@@ -14,7 +14,7 @@ clients:
     options:
       addr: "localhost:2222"
       user: "testuser"
-      privateKey: "./integration/ssh/id_rsa"
+      privateKey: "/Users/william.quintal/Project/bascanada/logviewer-3/integration/infra/ssh/id_rsa"
       disablePTY: true
       cmd: "cat /data/test-logs.json"
       preferNativeDriver: true
@@ -28,6 +28,20 @@ searches:
       jsonMessageKey: "message"
 
 contexts:
+  # Alias for backward compatibility with tests
+  ssh-logs:
+    client: ssh-hl
+    searchInherit: [json-extract]
+    search:
+      fields: {}
+
+  # Alias for HL query testing
+  hl-context:
+    client: ssh-hl
+    searchInherit: [json-extract]
+    search:
+      fields: {}
+
   ssh-hl-test:
     client: ssh-hl
     searchInherit: [json-extract]

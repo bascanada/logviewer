@@ -219,10 +219,16 @@ func (lc sshLogClient) buildHybridHLCommand(search *client.LogSearch, paths []st
 		fallbackCmd = "" // hl.BuildFollowSSHCommand will handle this
 	}
 
+	// Extract size limit
+	sizeLimit := 0
+	if search.Size.Set && search.Size.Value > 0 {
+		sizeLimit = search.Size.Value
+	}
+
 	// Use the SSH builder with marker for engine detection
 	var cmd string
 	if search.Follow {
-		cmd = hl.BuildSSHCommandWithMarker(hlArgs, paths, fallbackCmd)
+		cmd = hl.BuildSSHCommandWithMarker(hlArgs, paths, fallbackCmd, sizeLimit)
 	} else {
 		if fallbackCmd == "" {
 			// Default fallback: cat the files
@@ -233,7 +239,7 @@ func (lc sshLogClient) buildHybridHLCommand(search *client.LogSearch, paths []st
 			}
 			fallbackCmd = strings.Join(catParts, " ")
 		}
-		cmd = hl.BuildSSHCommandWithMarker(hlArgs, paths, fallbackCmd)
+		cmd = hl.BuildSSHCommandWithMarker(hlArgs, paths, fallbackCmd, sizeLimit)
 	}
 
 	return cmd, nil

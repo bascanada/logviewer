@@ -12,10 +12,12 @@ require (
 	github.com/charmbracelet/huh v0.8.0
 	github.com/docker/cli v29.1.2+incompatible
 	github.com/docker/docker v27.0.0+incompatible
+	github.com/fatih/color v1.15.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/google/uuid v1.6.0
 	github.com/h2non/gock v1.2.0
 	github.com/mark3labs/mcp-go v0.38.0
+	github.com/mattn/go-isatty v0.0.20
 	github.com/spf13/cobra v1.7.0
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/crypto v0.41.0
@@ -67,8 +69,6 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/emicklei/go-restful/v3 v3.9.0 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
-	github.com/evanphx/json-patch v4.12.0+incompatible // indirect
-	github.com/fatih/color v1.15.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -91,7 +91,6 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect

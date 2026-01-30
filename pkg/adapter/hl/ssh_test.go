@@ -10,7 +10,7 @@ func TestBuildSSHCommand_Basic(t *testing.T) {
 	args := []string{"-P", "--raw", "--since", "-15m", "-q", "level = error"}
 	paths := []string{"/var/log/app.log"}
 
-	cmd := BuildSSHCommand(args, paths, "")
+	cmd := BuildSSHCommand(args, paths, "", 0)
 
 	// Should contain the if-else structure
 	assert.Contains(t, cmd, "if command -v hl >/dev/null 2>&1; then")
@@ -28,7 +28,7 @@ func TestBuildSSHCommand_CustomFallback(t *testing.T) {
 	args := []string{"-P", "--raw"}
 	paths := []string{"/var/log/app.log"}
 
-	cmd := BuildSSHCommand(args, paths, "tail -n 1000 /var/log/app.log")
+	cmd := BuildSSHCommand(args, paths, "tail -n 1000 /var/log/app.log", 0)
 
 	assert.Contains(t, cmd, "tail -n 1000 /var/log/app.log")
 }
@@ -37,7 +37,7 @@ func TestBuildFollowSSHCommand(t *testing.T) {
 	args := []string{"-P", "--raw", "-F"}
 	paths := []string{"/var/log/app.log"}
 
-	cmd := BuildFollowSSHCommand(args, paths)
+	cmd := BuildFollowSSHCommand(args, paths, 0)
 
 	assert.Contains(t, cmd, "hl -P --raw -F /var/log/app.log")
 	assert.Contains(t, cmd, "tail -f /var/log/app.log")
@@ -47,7 +47,7 @@ func TestBuildSSHCommand_MultiplePaths(t *testing.T) {
 	args := []string{"-P", "--raw"}
 	paths := []string{"/var/log/app.log", "/var/log/error.log"}
 
-	cmd := BuildSSHCommand(args, paths, "")
+	cmd := BuildSSHCommand(args, paths, "", 0)
 
 	assert.Contains(t, cmd, "/var/log/app.log")
 	assert.Contains(t, cmd, "/var/log/error.log")
@@ -57,7 +57,7 @@ func TestBuildSSHCommandWithMarker(t *testing.T) {
 	args := []string{"-P", "--raw"}
 	paths := []string{"/var/log/app.log"}
 
-	cmd := BuildSSHCommandWithMarker(args, paths, "")
+	cmd := BuildSSHCommandWithMarker(args, paths, "", 0)
 
 	// Should contain engine markers
 	assert.Contains(t, cmd, `echo "HL_ENGINE=hl" >&2`)
@@ -135,7 +135,7 @@ func TestBuildSSHCommand_InjectionPrevention(t *testing.T) {
 	args := []string{"-P", "--raw", "-q", maliciousValue}
 	paths := []string{"/var/log/app.log"}
 
-	cmd := BuildSSHCommand(args, paths, "")
+	cmd := BuildSSHCommand(args, paths, "", 0)
 
 	// The malicious value should be escaped with single quotes
 	// The escaped form is: 'error'\'''; rm -rf / #'

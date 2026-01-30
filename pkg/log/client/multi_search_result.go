@@ -110,6 +110,20 @@ func (m *MultiLogSearchResult) GetEntries(ctx context.Context) ([]LogEntry, chan
 		return allEntries[i].Timestamp.Before(allEntries[j].Timestamp)
 	})
 
+	// Apply global size limit if specified in the search
+	globalSizeLimit := 0
+	if len(m.Results) > 0 {
+		firstSearch := m.Results[0].GetSearch()
+		if firstSearch.Size.Set && firstSearch.Size.Value > 0 {
+			globalSizeLimit = firstSearch.Size.Value
+		}
+	}
+
+	// Truncate to global size limit if needed
+	if globalSizeLimit > 0 && len(allEntries) > globalSizeLimit {
+		allEntries = allEntries[:globalSizeLimit]
+	}
+
 	var mergedChannel chan []LogEntry
 	if len(subChannels) > 0 {
 		mergedChannel = make(chan []LogEntry)

@@ -20,9 +20,10 @@ import (
 //   - hlArgs: Arguments for hl (excluding the "hl" command itself)
 //   - paths: File paths to read
 //   - fallbackCmd: The command to use if hl is not available (e.g., "cat" or "tail -f")
+//   - sizeLimit: Optional size limit to apply via head -n (0 means no limit)
 //
 // Returns a shell command string safe for SSH execution.
-func BuildSSHCommand(hlArgs []string, paths []string, fallbackCmd string) string {
+func BuildSSHCommand(hlArgs []string, paths []string, fallbackCmd string, sizeLimit int) string {
 	// Build the hl command with proper escaping
 	var hlCmdParts []string
 	hlCmdParts = append(hlCmdParts, "hl")
@@ -48,6 +49,12 @@ func BuildSSHCommand(hlArgs []string, paths []string, fallbackCmd string) string
 		fallback = strings.Join(fallbackParts, " ")
 	}
 
+	// Apply size limit if specified
+	if sizeLimit > 0 {
+		hlCmd = fmt.Sprintf("%s | head -n %d", hlCmd, sizeLimit)
+		fallback = fmt.Sprintf("%s | head -n %d", fallback, sizeLimit)
+	}
+
 	// Construct the hybrid command
 	// The command checks for hl availability and chooses the appropriate path
 	return fmt.Sprintf(`if command -v hl >/dev/null 2>&1; then %s; else %s; fi`, hlCmd, fallback)
@@ -58,7 +65,7 @@ func BuildSSHCommand(hlArgs []string, paths []string, fallbackCmd string) string
 // the output has been pre-filtered.
 //
 // The marker is printed to stderr so it doesn't interfere with log output.
-func BuildSSHCommandWithMarker(hlArgs []string, paths []string, fallbackCmd string) string {
+func BuildSSHCommandWithMarker(hlArgs []string, paths []string, fallbackCmd string, sizeLimit int) string {
 	// Build the hl command with proper escaping
 	var hlCmdParts []string
 	hlCmdParts = append(hlCmdParts, "hl")
@@ -87,12 +94,18 @@ func BuildSSHCommandWithMarker(hlArgs []string, paths []string, fallbackCmd stri
 	hlCmdWithMarker := fmt.Sprintf(`echo "HL_ENGINE=hl" >&2; %s`, hlCmd)
 	fallbackWithMarker := fmt.Sprintf(`echo "HL_ENGINE=native" >&2; %s`, fallback)
 
+	// Apply size limit if specified
+	if sizeLimit > 0 {
+		hlCmdWithMarker = fmt.Sprintf(`echo "HL_ENGINE=hl" >&2; %s | head -n %d`, hlCmd, sizeLimit)
+		fallbackWithMarker = fmt.Sprintf(`echo "HL_ENGINE=native" >&2; %s | head -n %d`, fallback, sizeLimit)
+	}
+
 	return fmt.Sprintf(`if command -v hl >/dev/null 2>&1; then %s; else %s; fi`, hlCmdWithMarker, fallbackWithMarker)
 }
 
 // BuildFollowSSHCommand constructs a command for following logs via SSH.
 // When in follow mode, we use tail -f as the fallback instead of cat.
-func BuildFollowSSHCommand(hlArgs []string, paths []string) string {
+func BuildFollowSSHCommand(hlArgs []string, paths []string, sizeLimit int) string {
 	// For follow mode, the fallback should use tail -f
 	var fallbackParts []string
 	fallbackParts = append(fallbackParts, "tail", "-f")
@@ -101,7 +114,7 @@ func BuildFollowSSHCommand(hlArgs []string, paths []string) string {
 	}
 	fallback := strings.Join(fallbackParts, " ")
 
-	return BuildSSHCommand(hlArgs, paths, fallback)
+	return BuildSSHCommand(hlArgs, paths, fallback, sizeLimit)
 }
 
 // shellEscape escapes a string for safe use in a shell command.

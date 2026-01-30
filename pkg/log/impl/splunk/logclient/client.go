@@ -68,12 +68,18 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 	}
 
 	if search.Follow {
+		// Determine size limit for follow mode
+		sizeLimit := 0
+		if search.Size.Set && search.Size.Value > 0 {
+			sizeLimit = search.Size.Value
+		}
 		return SplunkLogSearchResult{
 			logClient:          &s,
 			search:             search,
 			sid:                searchJobResponse.Sid,
 			isFollow:           true,
 			useResultsEndpoint: useResultsEndpoint,
+			sizeLimit:          sizeLimit,
 		}, nil
 	}
 
@@ -144,6 +150,12 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 		return nil, err
 	}
 
+	// Determine size limit for enforcing in GetEntries
+	sizeLimit := 0
+	if search.Size.Set && search.Size.Value > 0 {
+		sizeLimit = search.Size.Value
+	}
+
 	return SplunkLogSearchResult{
 		logClient:          &s,
 		search:             search,
@@ -151,6 +163,7 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 		results:            []restapi.SearchResultsResponse{firstResult},
 		CurrentOffset:      offset,
 		useResultsEndpoint: useResultsEndpoint,
+		sizeLimit:          sizeLimit,
 	}, nil
 }
 

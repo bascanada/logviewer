@@ -207,3 +207,68 @@ contexts:
         index: app-logs
       range:
         last: 1h
+
+  # === TEST-SPECIFIC CONTEXTS (for E2E tests with seeded data) ===
+
+  # Test context for error logs fixture (50 ERROR logs)
+  test-splunk-errors:
+    client: sim-splunk
+    description: "Test context for error logs (Splunk)"
+    searchInherit: ["json-structured"]
+    search:
+      fields: {}
+      options:
+        index: test-e2e-errors
+        search: 'sourcetype=json'
+
+  # Test context for payment logs fixture (100 mixed payment logs)
+  test-splunk-payments:
+    client: sim-splunk
+    description: "Test context for payment logs (Splunk)"
+    searchInherit: ["json-structured"]
+    search:
+      fields: {}
+      options:
+        index: test-e2e-payments
+        search: 'sourcetype=json'
+
+  # Test context for order logs fixture (75 order service logs)
+  test-opensearch-orders:
+    client: sim-opensearch
+    description: "Test context for order logs (OpenSearch)"
+    searchInherit: ["json-structured"]
+    search:
+      fields: {}
+      options:
+        index: test-e2e-orders
+
+  # Test context for mixed levels fixture (100 logs with mixed levels)
+  test-opensearch-mixed:
+    client: sim-opensearch
+    description: "Test context for mixed level logs (OpenSearch)"
+    searchInherit: ["json-structured"]
+    search:
+      fields: {}
+      options:
+        index: test-e2e-mixed
+
+  # Test context for trace logs fixture (30 logs with trace_ids)
+  test-splunk-traces:
+    client: sim-splunk
+    description: "Test context for trace logs (Splunk)"
+    searchInherit: ["json-structured"]
+    search:
+      fields: {}
+      options:
+        index: test-e2e-traces
+        search: 'sourcetype=json'
+
+  # Test context for slow requests fixture (25 logs with high latency)
+  test-opensearch-slow:
+    client: sim-opensearch
+    description: "Test context for slow request logs (OpenSearch)"
+    searchInherit: ["json-structured"]
+    search:
+      fields: {}
+      options:
+        index: test-e2e-slow

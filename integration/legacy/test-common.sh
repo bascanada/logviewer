@@ -6,9 +6,10 @@ set -e
 
 # Resolve paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[1]}")" && pwd)"
-ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+ROOT_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"  # Go up from legacy -> integration -> root
+INFRA_DIR="$(dirname "$SCRIPT_DIR")/infra"
 LOGVIEWER="$ROOT_DIR/build/logviewer"
-export LOGVIEWER_CONFIG="$SCRIPT_DIR/config.yaml:$SCRIPT_DIR/config.extra.yaml"
+export LOGVIEWER_CONFIG="$INFRA_DIR/config.yaml:$INFRA_DIR/config.extra.yaml"
 
 # Colors
 RED='\033[0;31m'

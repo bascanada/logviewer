@@ -544,17 +544,36 @@ var queryFieldCommand = &cobra.Command{
 			fmt.Fprintln(os.Stderr, "error:", err1)
 			os.Exit(1)
 		}
-		searchResult.GetEntries(context.Background())
-		fields, _, err := searchResult.GetFields(context.Background())
+		entries, _, err := searchResult.GetEntries(context.Background())
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
 		}
 
-		for k, b := range fields {
-			fmt.Printf("%s \n", k)
-			for _, r := range b {
-				fmt.Println("    " + r)
+		if jsonOutput {
+			// JSON output mode - output log entries with their fields
+			enc := json.NewEncoder(os.Stdout)
+			for i := range entries {
+				// Extract JSON fields if enabled
+				client.ExtractJSONFromEntry(&entries[i], searchResult.GetSearch())
+				if err := enc.Encode(entries[i]); err != nil {
+					fmt.Fprintf(os.Stderr, "Error writing JSON output: %v\n", err)
+					os.Exit(1)
+				}
+			}
+		} else {
+			// Text output mode - display field names and their values
+			fields, _, err := searchResult.GetFields(context.Background())
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "error:", err)
+				os.Exit(1)
+			}
+
+			for k, b := range fields {
+				fmt.Printf("%s \n", k)
+				for _, r := range b {
+					fmt.Println("    " + r)
+				}
 			}
 		}
 
