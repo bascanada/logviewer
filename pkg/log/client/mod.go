@@ -61,8 +61,8 @@ type PaginationInfo struct {
 	NextPageToken string
 }
 
-// LogClient is the interface for a log backend (e.g., Splunk, CloudWatch).
-type LogClient interface {
+// LogBackend is the interface for a log backend (e.g., Splunk, CloudWatch).
+type LogBackend interface {
 	Get(ctx context.Context, search *LogSearch) (LogSearchResult, error)
 	// GetFieldValues returns distinct values for the specified fields.
 	// If fields is empty, returns values for all fields.

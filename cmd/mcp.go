@@ -279,7 +279,7 @@ func NewConfigManager(path string) (*ConfigManager, error) {
 // NewConfigManagerForTest creates a ConfigManager from an in-memory config (for testing).
 // Does not set up file watching.
 func NewConfigManagerForTest(cfg *config.ContextConfig) (*ConfigManager, error) {
-	clientFactory, err := factory.GetLogClientFactory(cfg.Clients)
+	clientFactory, err := factory.GetLogBackendFactory(cfg.Clients)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build client factory: %w", err)
 	}
@@ -351,7 +351,7 @@ func (cm *ConfigManager) Reload() error {
 	}
 
 	// 2. Rebuild factories
-	clientFactory, err := factory.GetLogClientFactory(newCfg.Clients)
+	clientFactory, err := factory.GetLogBackendFactory(newCfg.Clients)
 	if err != nil {
 		return fmt.Errorf("failed to build client factory: %w", err)
 	}

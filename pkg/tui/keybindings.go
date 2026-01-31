@@ -14,15 +14,15 @@ type KeyMap struct {
 	End      key.Binding
 
 	// Tab navigation
-	NextTab key.Binding
-	PrevTab key.Binding
-	NewTab  key.Binding
+	NextTab  key.Binding
+	PrevTab  key.Binding
+	NewTab   key.Binding
 	CloseTab key.Binding
 
 	// Sidebar
-	ToggleSidebar   key.Binding
-	ExpandSidebar   key.Binding
-	ShrinkSidebar   key.Binding
+	ToggleSidebar key.Binding
+	ExpandSidebar key.Binding
+	ShrinkSidebar key.Binding
 
 	// Display
 	ToggleWrap key.Binding

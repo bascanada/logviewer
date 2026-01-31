@@ -174,6 +174,7 @@ func (s *LogSearch) MergeInto(logSeach *LogSearch) error {
 	s.FieldExtraction.JSONTimestampKey.Merge(&logSeach.FieldExtraction.JSONTimestampKey)
 	s.PrinterOptions.Template.Merge(&logSeach.PrinterOptions.Template)
 	s.PrinterOptions.MessageRegex.Merge(&logSeach.PrinterOptions.MessageRegex)
+	s.PrinterOptions.Color.Merge(&logSeach.PrinterOptions.Color)
 	s.Range.Gte.Merge(&logSeach.Range.Gte)
 
 	s.Range.Lte.Merge(&logSeach.Range.Lte)

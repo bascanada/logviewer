@@ -60,11 +60,11 @@ type SidebarMode int
 
 const (
 	// SidebarModeEntry shows selected entry details.
-	SidebarModeEntry  SidebarMode = iota // Show selected entry details
+	SidebarModeEntry SidebarMode = iota // Show selected entry details
 	// SidebarModeFields shows the list of available fields.
-	SidebarModeFields                    // Show global fields with values
+	SidebarModeFields // Show global fields with values
 	// SidebarModeJSON shows the log entry as formatted JSON.
-	SidebarModeJSON                      // Show formatted JSON from selected entry
+	SidebarModeJSON // Show formatted JSON from selected entry
 )
 
 // Tab represents an open context/query tab
@@ -185,7 +185,7 @@ type Model struct {
 
 	// Config
 	Config        *config.ContextConfig
-	ClientFactory factory.LogClientFactory
+	ClientFactory factory.LogBackendFactory
 	SearchFactory factory.SearchFactory
 
 	// Runtime
@@ -198,7 +198,7 @@ type Model struct {
 }
 
 // New creates a new TUI model
-func New(cfg *config.ContextConfig, clientFactory factory.LogClientFactory, searchFactory factory.SearchFactory) Model {
+func New(cfg *config.ContextConfig, clientFactory factory.LogBackendFactory, searchFactory factory.SearchFactory) Model {
 	vp := viewport.New(80, 20)
 	vp.SetContent("")
 
@@ -304,7 +304,7 @@ func (m *Model) addTabCmd(contextID string, search *client.LogSearch) tea.Cmd {
 	// Populate search bar state for this tab
 	tempSB := NewSearchBar()
 	tempSB.ClientType = clientType
-	
+
 	// 1. Add Context chip (informational)
 	if contextID != "" {
 		tempSB.State.Chips = append(tempSB.State.Chips, Chip{
@@ -371,7 +371,7 @@ func (m *Model) saveSearchBarToTab(tab *Tab) {
 	tab.AvailableVariables = m.SearchBar.AvailableVariables
 	tab.VariableMetadata = m.SearchBar.VariableMetadata
 	tab.FieldValues = m.SearchBar.FieldValues
-	// ClientType is static per tab, usually no need to save back, 
+	// ClientType is static per tab, usually no need to save back,
 	// but if we allowed changing client type dynamically, we would.
 }
 

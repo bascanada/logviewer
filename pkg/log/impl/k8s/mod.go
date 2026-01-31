@@ -29,13 +29,13 @@ import (
 
 const (
 	// FieldNamespace is the field name for Kubernetes namespace.
-	FieldNamespace     = "namespace"
+	FieldNamespace = "namespace"
 	// FieldContainer is the field name for Kubernetes container.
-	FieldContainer     = "container"
+	FieldContainer = "container"
 	// FieldPrevious is the field name for fetching previous pod logs.
-	FieldPrevious      = "previous"
+	FieldPrevious = "previous"
 	// FieldPod is the field name for the pod.
-	FieldPod           = "pod"
+	FieldPod = "pod"
 	// FieldLabelSelector is the field name for the label selector.
 	FieldLabelSelector = "labelSelector"
 
@@ -323,7 +323,7 @@ func ensureKubeconfig(kubeconfig string) error {
 }
 
 // GetLogClient returns a new Kubernetes log client.
-func GetLogClient(options LogClientOptions) (client.LogClient, error) {
+func GetLogClient(options LogClientOptions) (client.LogBackend, error) {
 	var kubeconfig string
 	if options.KubeConfig == "" {
 		kubeconfig = filepath.Join(homedir.HomeDir(), ".kube", "config")

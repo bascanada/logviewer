@@ -71,7 +71,7 @@ func TestSearchResult_GetPaginationInfo(t *testing.T) {
 	})
 }
 
-// mockElkLogClient implements client.LogClient for testing refresh functionality
+// mockElkLogClient implements client.LogBackend for testing refresh functionality
 type mockElkLogClient struct {
 	getCalls     int
 	lastSearch   *client.LogSearch

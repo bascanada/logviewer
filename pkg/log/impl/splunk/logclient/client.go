@@ -292,7 +292,7 @@ func (s SplunkLogSearchClient) getFieldValuesFromSearch(ctx context.Context, sea
 }
 
 // GetClient returns a LogClient configured to communicate with the given Splunk endpoint.
-func GetClient(options SplunkLogSearchClientOptions) (client.LogClient, error) {
+func GetClient(options SplunkLogSearchClientOptions) (client.LogBackend, error) {
 
 	if options.URL == "" {
 		return nil, fmt.Errorf("splunk client Url is empty; set the Url option in config or pass --splunk-endpoint")

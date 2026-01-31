@@ -253,15 +253,15 @@ func TestLogResult_GetEntries_Follow(t *testing.T) {
 		_ = pw.Close()
 
 		// Channel should eventually close
-			select {
-			case _, ok := <-ch:
-				if !ok {
-					// Channel closed as expected
-					return
-				}
-			case <-time.After(1 * time.Second):
-				t.Fatal("timed out waiting for channel to close")
+		select {
+		case _, ok := <-ch:
+			if !ok {
+				// Channel closed as expected
+				return
 			}
+		case <-time.After(1 * time.Second):
+			t.Fatal("timed out waiting for channel to close")
+		}
 	})
 }
 

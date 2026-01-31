@@ -20,7 +20,7 @@ import (
 
 type MockClientFactory struct{}
 
-func (m *MockClientFactory) Get(_ string) (*client.LogClient, error) {
+func (m *MockClientFactory) Get(_ string) (*client.LogBackend, error) {
 	return nil, nil
 }
 

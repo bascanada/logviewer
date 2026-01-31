@@ -23,7 +23,7 @@ import (
 const regexDockerTimestamp = "(([0-9]*)-([0-9]*)-([0-9]*)T([0-9]*):([0-9]*):([0-9]*).([0-9]*)Z)"
 const dockerPingTimeout = 10 * time.Second
 
-// LogClient implements the client.LogClient interface for Docker.
+// LogClient implements the client.LogBackend interface for Docker.
 type LogClient struct {
 	apiClient *client.Client
 	host      string
@@ -150,7 +150,7 @@ func (lc LogClient) GetFieldValues(ctx context.Context, search *logclient.LogSea
 }
 
 // GetLogClient returns a new Docker log client.
-func GetLogClient(host string) (logclient.LogClient, error) {
+func GetLogClient(host string) (logclient.LogBackend, error) {
 	// Prepare basic options
 	opts := []client.Opt{
 		client.FromEnv,

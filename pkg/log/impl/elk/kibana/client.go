@@ -266,7 +266,7 @@ func (kc kibanaClient) GetFieldValues(ctx context.Context, search *client.LogSea
 }
 
 // GetClient returns a LogClient configured to communicate with the given Kibana endpoint.
-func GetClient(target Target) (client.LogClient, error) {
+func GetClient(target Target) (client.LogBackend, error) {
 	client := new(kibanaClient)
 	client.target = target
 	client.client = http.GetClient(target.Endpoint)

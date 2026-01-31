@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"sort"
 	"strings"
 	"sync"
 
@@ -270,7 +269,7 @@ func isAdHocQuery() bool {
 }
 
 // getAdHocLogClient creates a LogClient from ad-hoc CLI flags
-func getAdHocLogClient(searchRequest *client.LogSearch) (client.LogClient, error) {
+func getAdHocLogClient(searchRequest *client.LogSearch) (client.LogBackend, error) {
 	var err error
 	var system string
 
@@ -306,7 +305,7 @@ func getAdHocLogClient(searchRequest *client.LogSearch) (client.LogClient, error
         `)
 	}
 
-	var logClient client.LogClient
+	var logClient client.LogBackend
 
 	switch system {
 	case "opensearch":
@@ -381,7 +380,7 @@ func resolveSearch() (client.LogSearchResult, error) {
 			return nil, err
 		}
 
-		clientFactory, err := factory.GetLogClientFactory(cfg.Clients)
+		clientFactory, err := factory.GetLogBackendFactory(cfg.Clients)
 		if err != nil {
 			return nil, err
 		}
@@ -466,117 +465,21 @@ func resolveSearch() (client.LogSearchResult, error) {
 	return searchResult, nil
 }
 
-// resolveFieldValues handles both config-based and ad-hoc queries for field values
-func resolveFieldValues(fieldNames []string) (map[string][]string, error) {
-	searchRequest := buildSearchRequest()
-	ctx := context.Background()
-
-	// Check if this is an ad-hoc query
-	if isAdHocQuery() {
-		logClient, err := getAdHocLogClient(&searchRequest)
-		if err != nil {
-			return nil, err
-		}
-		return logClient.GetFieldValues(ctx, &searchRequest, fieldNames)
-	}
-
-	// Config-based query
-	if configPath == "" && len(contextIDs) == 0 {
-		return nil, errors.New("no config or context specified; use -i to select a context or provide endpoint flags for ad-hoc query")
-	}
-
-	cfg, _, err := loadConfig(configPath)
-	if err != nil {
-		return nil, err
-	}
-
-	clientFactory, err := factory.GetLogClientFactory(cfg.Clients)
-	if err != nil {
-		return nil, err
-	}
-
-	searchFactory, err := factory.GetLogSearchFactory(clientFactory, *cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	runtimeVars := parseRuntimeVars()
-	resolvedContextIDs := resolveContextIDsFromConfig(cfg)
-
-	if len(resolvedContextIDs) == 0 {
-		return nil, errors.New("no context specified; use -i to select a context")
-	}
-
-	// For multiple contexts, aggregate results using sets for efficiency
-	allResultsSet := make(map[string]map[string]struct{})
-	var hasError bool
-
-	for _, contextID := range resolvedContextIDs {
-		if len(resolvedContextIDs) > 1 {
-			fmt.Fprintf(os.Stderr, "=== Context: %s ===\n", contextID)
-		}
-
-		fieldValues, err := searchFactory.GetFieldValues(ctx, contextID, inherits, searchRequest, fieldNames, runtimeVars)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error getting field values for %s: %v\n", contextID, err)
-			hasError = true
-			continue
-		}
-
-		// Merge results into a set for uniqueness
-		for field, values := range fieldValues {
-			if _, ok := allResultsSet[field]; !ok {
-				allResultsSet[field] = make(map[string]struct{})
-			}
-			for _, v := range values {
-				allResultsSet[field][v] = struct{}{}
-			}
-		}
-	}
-
-	if hasError && len(allResultsSet) == 0 {
-		return nil, errors.New("failed to get field values from all contexts")
-	}
-
-	// Convert sets to sorted slices for deterministic output
-	allResults := make(map[string][]string, len(allResultsSet))
-	for field, valuesSet := range allResultsSet {
-		values := make([]string, 0, len(valuesSet))
-		for v := range valuesSet {
-			values = append(values, v)
-		}
-		sort.Strings(values)
-		allResults[field] = values
-	}
-
-	return allResults, nil
-}
-
 var queryFieldCommand = &cobra.Command{
 	Use:    "field",
 	Short:  "Dispaly available field for filtering of logs",
 	PreRun: onCommandStart,
 	Run: func(_ *cobra.Command, _ []string) {
-		searchResult, err1 := resolveSearch()
-
-		if err1 != nil {
-			fmt.Fprintln(os.Stderr, "error:", err1)
-			os.Exit(1)
-		}
-		_, _, _ = searchResult.GetEntries(context.Background())
-		fields, _, err := searchResult.GetFields(context.Background())
+		logClient, search, err := resolveLogClient()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
 		}
 
-		for k, b := range fields {
-			fmt.Printf("%s \n", k)
-			for _, r := range b {
-				fmt.Println("    " + r)
-			}
+		if err := RunQueryField(os.Stdout, logClient, search); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
 		}
-
 	},
 }
 
@@ -684,32 +587,15 @@ Examples:
 	Run: func(_ *cobra.Command, args []string) {
 		fieldNames := args
 
-		fieldValues, err := resolveFieldValues(fieldNames)
+		logClient, search, err := resolveLogClient()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
 		}
 
-		if jsonOutput {
-			enc := json.NewEncoder(os.Stdout)
-			if err := enc.Encode(fieldValues); err != nil {
-				fmt.Fprintf(os.Stderr, "error encoding JSON: %v\n", err)
-				os.Exit(1)
-			}
-		} else {
-			// Output as formatted text (same format as query field)
-			for _, field := range fieldNames {
-				values, ok := fieldValues[field]
-				if !ok || len(values) == 0 {
-					fmt.Printf("%s \n", field)
-					fmt.Println("    (no values found)")
-					continue
-				}
-				fmt.Printf("%s \n", field)
-				for _, v := range values {
-					fmt.Println("    " + v)
-				}
-			}
+		if err := RunQueryValues(os.Stdout, logClient, search, fieldNames, jsonOutput); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
 		}
 	},
 }
