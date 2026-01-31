@@ -472,3 +472,160 @@ func TestMergeIntoWithFilter(t *testing.T) {
 		assert.Equal(t, "app", parent.Filter.Field)
 	})
 }
+
+func TestFilterClone(t *testing.T) {
+	t.Run("Clone nil filter returns nil", func(t *testing.T) {
+		var f *Filter
+		clone := f.Clone()
+		assert.Nil(t, clone)
+	})
+
+	t.Run("Clone simple leaf filter", func(t *testing.T) {
+		original := &Filter{
+			Field:  "level",
+			Op:     operator.Equals,
+			Value:  "ERROR",
+			Negate: false,
+		}
+
+		clone := original.Clone()
+
+		// Verify fields are copied
+		assert.Equal(t, original.Field, clone.Field)
+		assert.Equal(t, original.Op, clone.Op)
+		assert.Equal(t, original.Value, clone.Value)
+		assert.Equal(t, original.Negate, clone.Negate)
+
+		// Verify it's a deep copy by modifying clone
+		clone.Field = "status"
+		clone.Value = "500"
+		clone.Negate = true
+
+		// Original should be unchanged
+		assert.Equal(t, "level", original.Field)
+		assert.Equal(t, "ERROR", original.Value)
+		assert.Equal(t, false, original.Negate)
+	})
+
+	t.Run("Clone branch filter with single level nesting", func(t *testing.T) {
+		original := &Filter{
+			Logic: LogicAnd,
+			Filters: []Filter{
+				{Field: "level", Op: operator.Equals, Value: "ERROR"},
+				{Field: "app", Op: operator.Equals, Value: "myapp"},
+			},
+		}
+
+		clone := original.Clone()
+
+		// Verify structure is copied
+		assert.Equal(t, original.Logic, clone.Logic)
+		assert.Len(t, clone.Filters, 2)
+		assert.Equal(t, original.Filters[0].Field, clone.Filters[0].Field)
+		assert.Equal(t, original.Filters[1].Value, clone.Filters[1].Value)
+
+		// Verify deep copy by modifying clone's nested filters
+		clone.Filters[0].Field = "modified-field"
+		clone.Filters[0].Value = "modified-value"
+		clone.Filters[1].Field = "modified-app"
+
+		// Original should be unchanged
+		assert.Equal(t, "level", original.Filters[0].Field)
+		assert.Equal(t, "ERROR", original.Filters[0].Value)
+		assert.Equal(t, "app", original.Filters[1].Field)
+	})
+
+	t.Run("Clone deeply nested filters", func(t *testing.T) {
+		original := &Filter{
+			Logic: LogicAnd,
+			Filters: []Filter{
+				{Field: "level", Op: operator.Equals, Value: "ERROR"},
+				{
+					Logic: LogicOr,
+					Filters: []Filter{
+						{Field: "app", Op: operator.Equals, Value: "app1"},
+						{
+							Logic: LogicAnd,
+							Filters: []Filter{
+								{Field: "status", Op: operator.Equals, Value: "500"},
+								{Field: "user", Op: operator.Exists},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		clone := original.Clone()
+
+		// Verify structure is preserved
+		assert.Equal(t, LogicAnd, clone.Logic)
+		assert.Len(t, clone.Filters, 2)
+		assert.Equal(t, "level", clone.Filters[0].Field)
+		assert.Equal(t, LogicOr, clone.Filters[1].Logic)
+		assert.Len(t, clone.Filters[1].Filters, 2)
+		assert.Equal(t, "app", clone.Filters[1].Filters[0].Field)
+		assert.Equal(t, LogicAnd, clone.Filters[1].Filters[1].Logic)
+		assert.Len(t, clone.Filters[1].Filters[1].Filters, 2)
+
+		// Verify deep copy - modify deeply nested filter
+		clone.Filters[1].Filters[1].Filters[0].Value = "modified-status"
+		clone.Filters[1].Filters[1].Filters[1].Field = "modified-user"
+
+		// Original should be unchanged
+		assert.Equal(t, "500", original.Filters[1].Filters[1].Filters[0].Value)
+		assert.Equal(t, "user", original.Filters[1].Filters[1].Filters[1].Field)
+	})
+
+	t.Run("Clone filter with Negate flag", func(t *testing.T) {
+		original := &Filter{
+			Field:  "status",
+			Op:     operator.Equals,
+			Value:  "200",
+			Negate: true,
+		}
+
+		clone := original.Clone()
+
+		assert.Equal(t, true, clone.Negate)
+
+		// Modify clone
+		clone.Negate = false
+
+		// Original should be unchanged
+		assert.Equal(t, true, original.Negate)
+	})
+
+	t.Run("Clone empty branch filter", func(t *testing.T) {
+		original := &Filter{
+			Logic:   LogicAnd,
+			Filters: []Filter{},
+		}
+
+		clone := original.Clone()
+
+		assert.Equal(t, LogicAnd, clone.Logic)
+		assert.Len(t, clone.Filters, 0)
+	})
+
+	t.Run("Clone filter with NOT logic", func(t *testing.T) {
+		original := &Filter{
+			Logic: LogicNot,
+			Filters: []Filter{
+				{Field: "level", Op: operator.Equals, Value: "DEBUG"},
+			},
+		}
+
+		clone := original.Clone()
+
+		assert.Equal(t, LogicNot, clone.Logic)
+		assert.Len(t, clone.Filters, 1)
+		assert.Equal(t, "level", clone.Filters[0].Field)
+
+		// Modify clone
+		clone.Filters[0].Value = "INFO"
+
+		// Original should be unchanged
+		assert.Equal(t, "DEBUG", original.Filters[0].Value)
+	})
+}
