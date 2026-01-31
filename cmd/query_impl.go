@@ -50,7 +50,13 @@ func (c *ConfiguredLogClient) Query(ctx context.Context, search client.LogSearch
 			reqCopy.Options["__context_id__"] = cid
 			reqCopy.Fields = ty.MergeM(make(ty.MS, len(search.Fields)), search.Fields)
 			reqCopy.FieldsCondition = ty.MergeM(make(ty.MS, len(search.FieldsCondition)), search.FieldsCondition)
-			// (Variables copy omitted for brevity, assuming read-only for now)
+		
+			if search.Variables != nil {
+				reqCopy.Variables = make(map[string]client.VariableDefinition, len(search.Variables))
+				for k, v := range search.Variables {
+					reqCopy.Variables[k] = v
+				}
+			}
 
 			sr, err := c.Factory.GetSearchResult(ctx, cid, c.Inherits, reqCopy, c.RuntimeVars)
 			multiResult.Add(sr, err)
@@ -79,6 +85,7 @@ func (c *ConfiguredLogClient) GetFields(ctx context.Context, search client.LogSe
 	allFields := make(ty.UniSet[string])
 	var mu sync.Mutex
 	var wg sync.WaitGroup
+	var hasError bool
 
 	for _, contextID := range c.ContextIDs {
 		wg.Add(1)
@@ -89,17 +96,23 @@ func (c *ConfiguredLogClient) GetFields(ctx context.Context, search client.LogSe
 			reqCopy := search
 			reqCopy.Options = ty.MergeM(make(ty.MI), search.Options)
 			reqCopy.Options["__context_id__"] = cid
-
+			
 			sr, err := c.Factory.GetSearchResult(ctx, cid, c.Inherits, reqCopy, c.RuntimeVars)
 			if err != nil {
+				mu.Lock()
+				hasError = true
+				mu.Unlock()
 				return
 			}
-
+			
 			fields, ch, err := sr.GetFields(ctx)
 			if err != nil {
+				mu.Lock()
+				hasError = true
+				mu.Unlock()
 				return
 			}
-
+			
 			mu.Lock()
 			if fields != nil {
 				for k, v := range fields {
@@ -125,6 +138,10 @@ func (c *ConfiguredLogClient) GetFields(ctx context.Context, search client.LogSe
 	}
 	wg.Wait()
 
+	if hasError && len(allFields) == 0 {
+		return nil, errors.New("failed to get fields from all contexts")
+	}
+
 	return allFields, nil
 }
 
@@ -141,10 +158,12 @@ func (c *ConfiguredLogClient) GetValues(ctx context.Context, search client.LogSe
 			defer wg.Done()
 			valsMap, err := c.Factory.GetFieldValues(ctx, cid, c.Inherits, search, []string{field}, c.RuntimeVars)
 			if err != nil {
-				// Log error but continue?
+				mu.Lock()
+				hasError = true
+				mu.Unlock()
 				return
 			}
-
+			
 			if vals, ok := valsMap[field]; ok {
 				mu.Lock()
 				for _, v := range vals {
@@ -236,59 +255,40 @@ func RunQueryValues(out io.Writer, cli client.LogClient, search client.LogSearch
 	}
 
 	// Text output
-
 	for _, field := range fields {
-
 		values := results[field]
-
 		if len(values) == 0 {
-
 			fmt.Fprintf(out, "%s \n    (no values found)\n", field)
-
 			continue
-
 		}
-
 		fmt.Fprintf(out, "%s \n", field)
-
 		for _, v := range values {
-
 			fmt.Fprintf(out, "    %s\n", v)
-
 		}
-
 	}
-
 	return nil
-
 }
 
 // RunQueryField executes the 'query field' logic using a LogClient.
-
 func RunQueryField(out io.Writer, cli client.LogClient, search client.LogSearch) error {
-
 	ctx := context.Background()
-
 	fields, err := cli.GetFields(ctx, search)
-
 	if err != nil {
-
 		return err
-
 	}
 
-	for k, b := range fields {
+	keys := make([]string, 0, len(fields))
+	for k := range fields {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
 
+	for _, k := range keys {
+		b := fields[k]
 		fmt.Fprintf(out, "%s \n", k)
-
 		for _, r := range b {
-
 			fmt.Fprintf(out, "    %s\n", r)
-
 		}
-
 	}
-
 	return nil
-
 }

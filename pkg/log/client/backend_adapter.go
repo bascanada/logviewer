@@ -70,11 +70,7 @@ func (a *BackendAdapter) GetFields(ctx context.Context, search LogSearch) (map[s
 	finalSet := make(ty.UniSet[string])
 	if fieldsSet != nil {
 		for k, v := range fieldsSet {
-			finalSet[k] = v // Does this copy the slice or reference? Ty.UniSet is map[string][]string
-			// If v is []string, this references the slice.
-			// But finalSet is a map, so we're setting the key.
-			// However, Ty.UniSet.Add logic is special.
-			// Let's manually merge.
+			// Manually merge to handle uniqueness via UniSet.Add
 			for _, item := range v {
 				finalSet.Add(k, item)
 			}
