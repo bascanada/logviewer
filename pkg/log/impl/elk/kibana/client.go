@@ -13,6 +13,11 @@ import (
 	"github.com/bascanada/logviewer/pkg/ty"
 )
 
+// HTTPClient defines the subset of the HTTP client interface used by this package.
+type HTTPClient interface {
+	PostJSON(path string, headers ty.MS, body interface{}, responseData interface{}, auth http.Auth) error
+}
+
 // Target describes the connection target for a Kibana-backed client.
 type Target struct {
 	Endpoint string `json:"endpoint"`
@@ -20,7 +25,7 @@ type Target struct {
 
 type kibanaClient struct {
 	target Target
-	client http.Client
+	client HTTPClient
 }
 
 func (kc kibanaClient) Get(_ context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
