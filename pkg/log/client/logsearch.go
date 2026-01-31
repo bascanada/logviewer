@@ -82,6 +82,42 @@ type LogSearch struct {
 	Follow bool `json:"follow,omitempty" yaml:"follow,omitempty"`
 }
 
+// Clone creates a deep copy of the LogSearch object.
+// This is useful when the same search configuration needs to be used in concurrent operations
+// with slight modifications, preventing race conditions from shared state.
+func (s *LogSearch) Clone() *LogSearch {
+	if s == nil {
+		return nil
+	}
+
+	clone := *s
+
+	// Deep copy map fields
+	if s.Options != nil {
+		clone.Options = ty.MergeM(make(ty.MI), s.Options)
+	}
+	if s.Fields != nil {
+		clone.Fields = ty.MergeM(make(ty.MS), s.Fields)
+	}
+	if s.FieldsCondition != nil {
+		clone.FieldsCondition = ty.MergeM(make(ty.MS), s.FieldsCondition)
+	}
+	if s.Variables != nil {
+		clone.Variables = make(map[string]VariableDefinition, len(s.Variables))
+		for k, v := range s.Variables {
+			clone.Variables[k] = v
+		}
+	}
+
+	// Deep copy Filter if it exists
+	if s.Filter != nil {
+		filterCopy := *s.Filter
+		clone.Filter = &filterCopy
+	}
+
+	return &clone
+}
+
 // GetEffectiveFilter returns a unified filter tree that combines legacy Fields/FieldsCondition
 // with the new Filter field. This allows backward compatibility while supporting new AST filters.
 func (s *LogSearch) GetEffectiveFilter() *Filter {

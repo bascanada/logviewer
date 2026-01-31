@@ -19,7 +19,6 @@ import (
 
 	logclient "github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/reader"
-	"github.com/bascanada/logviewer/pkg/ty"
 )
 
 const regexDockerTimestamp = "(([0-9]*)-([0-9]*)-([0-9]*)T([0-9]*):([0-9]*):([0-9]*).([0-9]*)Z)"
@@ -73,17 +72,8 @@ func (lc DockerLogClient) Get(ctx context.Context, search *logclient.LogSearch) 
 				wg.Add(1)
 				go func(cID string) {
 					defer wg.Done()
-					// Deep copy the search object
-					containerSearch := *search
-					containerSearch.Options = ty.MergeM(make(ty.MI), search.Options)
-					containerSearch.Fields = ty.MergeM(make(ty.MS), search.Fields)
-					containerSearch.FieldsCondition = ty.MergeM(make(ty.MS), search.FieldsCondition)
-					if search.Variables != nil {
-						containerSearch.Variables = make(map[string]logclient.VariableDefinition)
-						for k, v := range search.Variables {
-							containerSearch.Variables[k] = v
-						}
-					}
+					// Clone the search object to prevent race conditions
+					containerSearch := search.Clone()
 
 					// Configure for specific container
 					containerSearch.Options["container"] = cID
@@ -91,11 +81,11 @@ func (lc DockerLogClient) Get(ctx context.Context, search *logclient.LogSearch) 
 					containerSearch.Options["__context_id__"] = cID[:12]
 
 					// Fetch logs
-					result, err := lc.Get(ctx, &containerSearch)
+					result, err := lc.Get(ctx, containerSearch)
 					if err != nil {
 						fmt.Fprintf(os.Stderr, "Error fetching logs for container %s: %v\n", cID[:12], err)
 					}
-					multiResult.Add(result, nil)
+					multiResult.Add(result, err)
 				}(container.ID)
 			}
 			wg.Wait()
