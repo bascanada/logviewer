@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/docker/cli/cli/connhelper"
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
@@ -23,9 +24,15 @@ import (
 const regexDockerTimestamp = "(([0-9]*)-([0-9]*)-([0-9]*)T([0-9]*):([0-9]*):([0-9]*).([0-9]*)Z)"
 const dockerPingTimeout = 10 * time.Second
 
+// DockerAPI defines the subset of the Docker client interface used by this package.
+type DockerAPI interface {
+	ContainerList(ctx context.Context, options container.ListOptions) ([]types.Container, error)
+	ContainerLogs(ctx context.Context, container string, options container.LogsOptions) (io.ReadCloser, error)
+}
+
 // LogClient implements the client.LogBackend interface for Docker.
 type LogClient struct {
-	apiClient *client.Client
+	apiClient DockerAPI
 	host      string
 }
 

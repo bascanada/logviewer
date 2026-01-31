@@ -173,11 +173,12 @@ func GetFieldValuesFromResult(ctx context.Context, result LogSearchResult, field
 		} else {
 			// Only collect values for requested fields
 			for _, field := range fields {
-				if v, ok := entry.Fields[field]; ok {
+				val := entry.Field(field)
+				if val != nil && val != "" {
 					if valueSet[field] == nil {
 						valueSet[field] = make(map[string]bool)
 					}
-					valueSet[field][fmt.Sprintf("%v", v)] = true
+					valueSet[field][fmt.Sprintf("%v", val)] = true
 				}
 			}
 		}
