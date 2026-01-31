@@ -130,16 +130,65 @@ func TestGetLogBackendFactory(t *testing.T) {
 		assert.NotNil(t, b)
 	})
 
-	t.Run("cloudwatch client initialization", func(t *testing.T) {
-		cwClients := config.Clients{
-			"cloudwatch": config.Client{
-				Type: "cloudwatch",
+	t.Run("docker client initialization without host", func(t *testing.T) {
+		dockerClients := config.Clients{
+			"docker": config.Client{
+				Type: "docker",
+				Options: ty.MI{},
+			},
+		}
+		f, err := factory.GetLogBackendFactory(dockerClients)
+		assert.NoError(t, err)
+		assert.NotNil(t, f)
+	})
+
+	t.Run("splunk client with auth", func(t *testing.T) {
+		splunkClients := config.Clients{
+			"splunk": config.Client{
+				Type: "splunk",
 				Options: ty.MI{
-					"region": "us-east-1",
+					"url": "http://splunk:8089",
+					"auth": ty.MS{"Authorization": "Bearer token"},
 				},
 			},
 		}
-		f, err := factory.GetLogBackendFactory(cwClients)
+		f, err := factory.GetLogBackendFactory(splunkClients)
+		assert.NoError(t, err)
+		assert.NotNil(t, f)
+	})
+
+	t.Run("kibana client", func(t *testing.T) {
+		kbClients := config.Clients{
+			"kibana": config.Client{
+				Type: "kibana",
+				Options: ty.MI{"endpoint": "http://kibana:5601"},
+			},
+		}
+		f, err := factory.GetLogBackendFactory(kbClients)
+		assert.NoError(t, err)
+		assert.NotNil(t, f)
+	})
+
+	t.Run("opensearch client", func(t *testing.T) {
+		osClients := config.Clients{
+			"opensearch": config.Client{
+				Type: "opensearch",
+				Options: ty.MI{"endpoint": "http://os:9200"},
+			},
+		}
+		f, err := factory.GetLogBackendFactory(osClients)
+		assert.NoError(t, err)
+		assert.NotNil(t, f)
+	})
+
+	t.Run("k8s client", func(t *testing.T) {
+		k8sClients := config.Clients{
+			"k8s": config.Client{
+				Type: "k8s",
+				Options: ty.MI{"kubeConfig": "/path/to/cfg"},
+			},
+		}
+		f, err := factory.GetLogBackendFactory(k8sClients)
 		assert.NoError(t, err)
 		assert.NotNil(t, f)
 	})

@@ -254,6 +254,25 @@ func TestFilterMatch(t *testing.T) {
 		assert.True(t, f.Match(entry))
 	})
 
+	t.Run("numeric comparisons", func(t *testing.T) {
+		entry := client.LogEntry{Fields: ty.MI{"status": 200, "duration": "500"}}
+		
+		assert.True(t, (&client.Filter{Field: "status", Op: operator.Gte, Value: "200"}).Match(entry))
+		assert.True(t, (&client.Filter{Field: "status", Op: operator.Gt, Value: "199"}).Match(entry))
+		assert.True(t, (&client.Filter{Field: "status", Op: operator.Lt, Value: "300"}).Match(entry))
+		assert.True(t, (&client.Filter{Field: "status", Op: operator.Lte, Value: "200"}).Match(entry))
+		
+		assert.True(t, (&client.Filter{Field: "duration", Op: operator.Gt, Value: "400"}).Match(entry))
+		assert.False(t, (&client.Filter{Field: "duration", Op: operator.Lt, Value: "400"}).Match(entry))
+	})
+
+	t.Run("string comparisons", func(t *testing.T) {
+		entry := client.LogEntry{Fields: ty.MI{"version": "v2.0"}}
+		
+		assert.True(t, (&client.Filter{Field: "version", Op: operator.Gt, Value: "v1.0"}).Match(entry))
+		assert.False(t, (&client.Filter{Field: "version", Op: operator.Lt, Value: "v1.0"}).Match(entry))
+	})
+
 	t.Run("AND - all match", func(t *testing.T) {
 		f := &client.Filter{
 			Logic: client.LogicAnd,
