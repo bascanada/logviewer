@@ -472,3 +472,110 @@ func TestMergeIntoWithFilter(t *testing.T) {
 		assert.Equal(t, "app", parent.Filter.Field)
 	})
 }
+
+func TestFilterClone(t *testing.T) {
+	t.Run("Clone creates deep copy of simple leaf filter", func(t *testing.T) {
+		original := &Filter{
+			Field:  "level",
+			Op:     operator.Equals,
+			Value:  "ERROR",
+			Negate: false,
+		}
+
+		clone := original.Clone()
+
+		// Verify all fields are copied
+		assert.Equal(t, original.Field, clone.Field)
+		assert.Equal(t, original.Op, clone.Op)
+		assert.Equal(t, original.Value, clone.Value)
+		assert.Equal(t, original.Negate, clone.Negate)
+
+		// Verify deep copy by modifying clone and checking original is unchanged
+		clone.Field = "modified"
+		clone.Value = "modified"
+		assert.Equal(t, "level", original.Field, "Original should be unchanged")
+		assert.Equal(t, "ERROR", original.Value, "Original should be unchanged")
+	})
+
+	t.Run("Clone handles nil Filter", func(t *testing.T) {
+		var original *Filter
+		clone := original.Clone()
+		assert.Nil(t, clone)
+	})
+
+	t.Run("Clone creates deep copy of branch filter with nested filters", func(t *testing.T) {
+		original := &Filter{
+			Logic: LogicAnd,
+			Filters: []Filter{
+				{Field: "level", Op: operator.Equals, Value: "ERROR"},
+				{Field: "app", Op: operator.Equals, Value: "myapp"},
+			},
+		}
+
+		clone := original.Clone()
+
+		// Verify structure is copied
+		assert.Equal(t, original.Logic, clone.Logic)
+		assert.Len(t, clone.Filters, 2)
+		assert.Equal(t, original.Filters[0].Field, clone.Filters[0].Field)
+		assert.Equal(t, original.Filters[1].Field, clone.Filters[1].Field)
+
+		// Verify deep copy - modifying clone doesn't affect original
+		clone.Filters[0].Field = "modified"
+		clone.Filters[0].Value = "modified"
+		assert.Equal(t, "level", original.Filters[0].Field, "Original nested filter should be unchanged")
+		assert.Equal(t, "ERROR", original.Filters[0].Value, "Original nested filter should be unchanged")
+	})
+
+	t.Run("Clone handles deeply nested filters", func(t *testing.T) {
+		original := &Filter{
+			Logic: LogicAnd,
+			Filters: []Filter{
+				{Field: "level", Op: operator.Equals, Value: "ERROR"},
+				{
+					Logic: LogicOr,
+					Filters: []Filter{
+						{Field: "app", Op: operator.Equals, Value: "app1"},
+						{Field: "app", Op: operator.Equals, Value: "app2"},
+					},
+				},
+			},
+		}
+
+		clone := original.Clone()
+
+		// Verify structure is copied
+		assert.Equal(t, original.Logic, clone.Logic)
+		assert.Len(t, clone.Filters, 2)
+		assert.Equal(t, LogicOr, clone.Filters[1].Logic)
+		assert.Len(t, clone.Filters[1].Filters, 2)
+
+		// Verify deep copy at multiple levels
+		clone.Filters[1].Filters[0].Value = "modified"
+		assert.Equal(t, "app1", original.Filters[1].Filters[0].Value, "Original deeply nested filter should be unchanged")
+	})
+
+	t.Run("Clone handles empty Filters slice", func(t *testing.T) {
+		original := &Filter{
+			Logic:   LogicAnd,
+			Filters: []Filter{},
+		}
+
+		clone := original.Clone()
+		assert.NotNil(t, clone)
+		assert.Equal(t, original.Logic, clone.Logic)
+	})
+
+	t.Run("Clone handles nil Filters slice", func(t *testing.T) {
+		original := &Filter{
+			Logic:   LogicAnd,
+			Filters: nil,
+		}
+
+		clone := original.Clone()
+		assert.NotNil(t, clone)
+		assert.Equal(t, original.Logic, clone.Logic)
+		assert.Nil(t, clone.Filters)
+	})
+}
+

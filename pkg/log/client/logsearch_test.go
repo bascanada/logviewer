@@ -125,4 +125,25 @@ func TestClone(t *testing.T) {
 		clone.Filter.Field = "modifiedField"
 		assert.Equal(t, "testField", original.Filter.Field, "Original Filter should be unchanged")
 	})
+
+	t.Run("Clone handles nested Filter with sub-filters", func(t *testing.T) {
+		original := &LogSearch{
+			Filter: &Filter{
+				Logic: LogicAnd,
+				Filters: []Filter{
+					{Field: "level", Op: "equals", Value: "ERROR"},
+					{Field: "app", Op: "equals", Value: "myapp"},
+				},
+			},
+		}
+
+		clone := original.Clone()
+		assert.NotNil(t, clone.Filter)
+		assert.Equal(t, original.Filter.Logic, clone.Filter.Logic)
+		assert.Len(t, clone.Filter.Filters, 2)
+
+		// Verify deep copy of nested filters
+		clone.Filter.Filters[0].Value = "modified"
+		assert.Equal(t, "ERROR", original.Filter.Filters[0].Value, "Original nested Filter should be unchanged")
+	})
 }

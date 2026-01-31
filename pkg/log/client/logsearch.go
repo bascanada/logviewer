@@ -111,8 +111,7 @@ func (s *LogSearch) Clone() *LogSearch {
 
 	// Deep copy Filter if it exists
 	if s.Filter != nil {
-		filterCopy := *s.Filter
-		clone.Filter = &filterCopy
+		clone.Filter = s.Filter.Clone()
 	}
 
 	return &clone
