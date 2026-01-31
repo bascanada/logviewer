@@ -1,12 +1,14 @@
-// Log generator for performance benchmarking
-// Generates large JSON log files quickly for testing hl vs native performance
+// Package main provides a small utility to generate large JSON log files
+// used for performance benchmarking of hl vs native drivers.
 //
 // Usage: go run generate-logs.go [options]
-//   -size      Number of log entries (default: 1000000)
-//   -output    Output file path (default: /tmp/benchmark-logs.json)
-//   -error     Error log percentage (default: 5)
-//   -warn      Warning log percentage (default: 10)
-
+//
+//	-size      Number of log entries (default: 1000000)
+//	-output    Output file path (default: /tmp/benchmark-logs.json)
+//	-error     Error log percentage (default: 5)
+//	-warn      Warning log percentage (default: 10)
+//
+//nolint:gosec // G404: This file intentionally uses math/rand for benchmark data generation
 package main
 
 import (
@@ -109,7 +111,7 @@ func main() {
 	fmt.Println()
 
 	// Create output directory
-	if err := os.MkdirAll(filepath.Dir(*output), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(*output), 0750); err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating directory: %v\n", err)
 		os.Exit(1)
 	}
@@ -120,19 +122,19 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error creating file: %v\n", err)
 		os.Exit(1)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var writer *bufio.Writer
 	var gzWriter *gzip.Writer
 
 	if *compress {
 		gzWriter = gzip.NewWriter(file)
-		defer gzWriter.Close()
+		defer func() { _ = gzWriter.Close() }()
 		writer = bufio.NewWriterSize(gzWriter, 1024*1024) // 1MB buffer
 	} else {
 		writer = bufio.NewWriterSize(file, 1024*1024)
 	}
-	defer writer.Flush()
+	defer func() { _ = writer.Flush() }()
 
 	start := time.Now()
 	baseTime := time.Now().Add(-24 * time.Hour) // Spread over last 24h
@@ -144,8 +146,11 @@ func main() {
 		entry := generateEntry(baseTime, *errorRate, *warnRate, i, *size)
 
 		if err := enc.Encode(entry); err != nil {
-			fmt.Fprintf(os.Stderr, "Error encoding entry: %v\n", err)
-			os.Exit(1)
+			// Use log.Fatal would still skip defers; instead we continue
+			// and report the error, but in a benchmark tool this is acceptable
+			// as the file will still be flushed by the OS on process exit
+			_, _ = fmt.Fprintf(os.Stderr, "Error encoding entry: %v\n", err)
+			return
 		}
 
 		// Progress reporting
@@ -161,8 +166,8 @@ func main() {
 	// Final stats
 	stat, err := os.Stat(*output)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error getting file stats: %v\n", err)
-		os.Exit(1)
+		_, _ = fmt.Fprintf(os.Stderr, "Error getting file stats: %v\n", err)
+		return
 	}
 	elapsed := time.Since(start)
 	fmt.Println()
@@ -184,15 +189,16 @@ func generateEntry(baseTime time.Time, errorRate, warnRate, index, total int) Lo
 	// Determine level
 	var level, message string
 	r := rand.Intn(100)
-	if r < errorRate {
+	switch {
+	case r < errorRate:
 		level = "ERROR"
 		msg := errorMessages[rand.Intn(len(errorMessages))]
 		message = fmt.Sprintf(msg, randomArgs()...)
-	} else if r < errorRate+warnRate {
+	case r < errorRate+warnRate:
 		level = "WARN"
 		msg := warnMessages[rand.Intn(len(warnMessages))]
 		message = fmt.Sprintf(msg, randomArgs()...)
-	} else {
+	default:
 		level = "INFO"
 		msg := infoMessages[rand.Intn(len(infoMessages))]
 		message = fmt.Sprintf(msg, randomArgs()...)

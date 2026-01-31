@@ -444,7 +444,7 @@ func TestMergeIntoWithFilter(t *testing.T) {
 		child := &LogSearch{
 			Filter: &Filter{Field: "level", Value: "ERROR"},
 		}
-		parent.MergeInto(child)
+		_ = parent.MergeInto(child)
 		assert.NotNil(t, parent.Filter)
 		assert.Equal(t, "level", parent.Filter.Field)
 	})
@@ -456,7 +456,7 @@ func TestMergeIntoWithFilter(t *testing.T) {
 		child := &LogSearch{
 			Filter: &Filter{Field: "level", Value: "ERROR"},
 		}
-		parent.MergeInto(child)
+		_ = parent.MergeInto(child)
 		assert.NotNil(t, parent.Filter)
 		assert.Equal(t, LogicAnd, parent.Filter.Logic)
 		assert.Len(t, parent.Filter.Filters, 2)
@@ -467,7 +467,7 @@ func TestMergeIntoWithFilter(t *testing.T) {
 			Filter: &Filter{Field: "app", Value: "myapp"},
 		}
 		child := &LogSearch{}
-		parent.MergeInto(child)
+		_ = parent.MergeInto(child)
 		assert.NotNil(t, parent.Filter)
 		assert.Equal(t, "app", parent.Filter.Field)
 	})

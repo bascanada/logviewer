@@ -1,3 +1,4 @@
+// Package log provides a simple logging configuration wrapper.
 package log
 
 import (
@@ -19,6 +20,7 @@ const (
 // currentLevel holds the configured log level
 var currentLevel = LevelInfo
 
+// MyLoggerOptions configures the logging behavior.
 type MyLoggerOptions struct {
 	// if we output to  stdout
 	Stdout bool
@@ -28,11 +30,13 @@ type MyLoggerOptions struct {
 	Level string
 }
 
+// ConfigureMyLogger sets up the global logger based on the provided options.
 func ConfigureMyLogger(options *MyLoggerOptions) {
 	var writer io.Writer
 
-	if options.Path != "" {
-		logfile, err := os.OpenFile(options.Path, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
+	switch {
+	case options.Path != "":
+		logfile, err := os.OpenFile(options.Path, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0600)
 		if err != nil {
 			panic(err)
 		}
@@ -41,10 +45,10 @@ func ConfigureMyLogger(options *MyLoggerOptions) {
 		} else {
 			writer = logfile
 		}
-	} else if options.Stdout {
+	case options.Stdout:
 		writer = os.Stdout
-	} else {
-		writer, _ = os.OpenFile(os.DevNull, os.O_APPEND, 0666)
+	default:
+		writer, _ = os.OpenFile(os.DevNull, os.O_APPEND, 0600)
 	}
 
 	log.SetOutput(writer)

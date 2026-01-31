@@ -14,18 +14,19 @@ import (
 	"github.com/bascanada/logviewer/pkg/ty"
 )
 
+// Auth provides an interface for authenticating HTTP requests.
 type Auth interface {
 	Login(req *http.Request) error
 }
 
+// CookieAuth implements Auth using a simple cookie string.
 type CookieAuth struct {
 	Cookie string
 }
 
+// Login sets the Cookie header on the request.
 func (c CookieAuth) Login(req *http.Request) error {
-
 	req.Header.Set("Cookie", c.Cookie)
-
 	return nil
 }
 
@@ -34,6 +35,7 @@ type HeaderAuth struct {
 	Headers ty.MS
 }
 
+// Login sets the configured headers on the request.
 func (h HeaderAuth) Login(req *http.Request) error {
 	for k, v := range h.Headers {
 		req.Header.Set(k, v)
@@ -41,7 +43,8 @@ func (h HeaderAuth) Login(req *http.Request) error {
 	return nil
 }
 
-type HttpClient struct {
+// Client is a wrapper around http.Client with convenience methods for JSON/Data requests.
+type Client struct {
 	client http.Client
 	url    string
 }
@@ -60,7 +63,7 @@ func DebugEnabled() bool {
 	return Debug
 }
 
-func (c HttpClient) post(path string, headers ty.MS, buf *bytes.Buffer, responseData interface{}, auth Auth) error {
+func (c Client) post(path string, headers ty.MS, buf *bytes.Buffer, responseData interface{}, auth Auth) error {
 	path = c.url + path
 
 	if Debug {
@@ -94,7 +97,7 @@ func (c HttpClient) post(path string, headers ty.MS, buf *bytes.Buffer, response
 	}
 
 	if res.Body != nil {
-		defer res.Body.Close()
+		defer func() { _ = res.Body.Close() }()
 	}
 
 	resBody, err := io.ReadAll(res.Body)
@@ -110,7 +113,8 @@ func (c HttpClient) post(path string, headers ty.MS, buf *bytes.Buffer, response
 	return json.Unmarshal(resBody, &responseData)
 }
 
-func (c HttpClient) PostData(path string, headers ty.MS, body ty.MS, responseData interface{}, auth Auth) error {
+// PostData performs a POST request with URL-encoded form data.
+func (c Client) PostData(path string, headers ty.MS, body ty.MS, responseData interface{}, auth Auth) error {
 
 	headers["Content-Type"] = "application/x-www-form-urlencoded"
 
@@ -127,7 +131,8 @@ func (c HttpClient) PostData(path string, headers ty.MS, body ty.MS, responseDat
 
 }
 
-func (c HttpClient) PostJson(path string, headers ty.MS, body interface{}, responseData interface{}, auth Auth) error {
+// PostJSON performs a POST request with a JSON body.
+func (c Client) PostJSON(path string, headers ty.MS, body interface{}, responseData interface{}, auth Auth) error {
 
 	headers["Content-Type"] = "application/json"
 
@@ -141,7 +146,8 @@ func (c HttpClient) PostJson(path string, headers ty.MS, body interface{}, respo
 
 }
 
-func (c HttpClient) Get(path string, queryParams ty.MS, headers ty.MS, body interface{}, responseData interface{}, auth Auth) error {
+// Get performs a GET request.
+func (c Client) Get(path string, queryParams ty.MS, headers ty.MS, body interface{}, responseData interface{}, auth Auth) error {
 
 	var buf bytes.Buffer
 
@@ -194,7 +200,7 @@ func (c HttpClient) Get(path string, queryParams ty.MS, headers ty.MS, body inte
 	}
 
 	if res.Body != nil {
-		defer res.Body.Close()
+		defer func() { _ = res.Body.Close() }()
 	}
 
 	resBody, readErr := io.ReadAll(res.Body)
@@ -224,7 +230,8 @@ func (c HttpClient) Get(path string, queryParams ty.MS, headers ty.MS, body inte
 	return nil
 }
 
-func (c HttpClient) Delete(path string, headers ty.MS, auth Auth) error {
+// Delete performs a DELETE request.
+func (c Client) Delete(path string, headers ty.MS, auth Auth) error {
 	path = c.url + path
 
 	if Debug {
@@ -258,7 +265,7 @@ func (c HttpClient) Delete(path string, headers ty.MS, auth Auth) error {
 	}
 
 	if res.Body != nil {
-		defer res.Body.Close()
+		defer func() { _ = res.Body.Close() }()
 	}
 
 	resBody, err := io.ReadAll(res.Body)
@@ -274,7 +281,8 @@ func (c HttpClient) Delete(path string, headers ty.MS, auth Auth) error {
 	return nil
 }
 
-func GetClient(url string) HttpClient {
+// GetClient returns a new Client for the given URL.
+func GetClient(url string) Client {
 	// Normalize URL: if scheme is missing, default to https. Also remove
 	// any trailing slash to avoid double slashes when appending paths.
 	if url != "" {
@@ -287,7 +295,7 @@ func GetClient(url string) HttpClient {
 
 	spaceClient := getSpaceClient()
 
-	return HttpClient{
+	return Client{
 		client: spaceClient,
 		url:    url,
 	}
@@ -297,7 +305,7 @@ func getSpaceClient() http.Client {
 	switch v := http.DefaultTransport.(type) {
 	case (*http.Transport):
 		customTransport := v.Clone()
-		customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // G402: intentionally skip TLS verification for development/internal use
 		return http.Client{Transport: customTransport}
 	default:
 		return http.Client{}
@@ -310,7 +318,7 @@ func getSpaceClient() http.Client {
 // values redacted (keeps first 4 chars for debugging). This avoids leaking
 // secrets into logs while letting us verify headers are present.
 func maskHeaderMap(h http.Header) string {
-	redacted := []string{}
+	redacted := make([]string, 0, len(h))
 	for k, vals := range h {
 		v := ""
 		if len(vals) > 0 {

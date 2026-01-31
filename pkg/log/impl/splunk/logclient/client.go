@@ -1,3 +1,4 @@
+// Package logclient provides the Splunk implementation of the log client interface.
 package logclient
 
 import (
@@ -19,12 +20,14 @@ import (
 // to dispatch on a fresh dev instance.
 const maxRetryDoneJob = 30
 
+// SplunkAuthOptions defines authentication headers.
 type SplunkAuthOptions struct {
 	Header ty.MS `json:"header" yaml:"header"`
 }
 
+// SplunkLogSearchClientOptions defines configuration for the Splunk client.
 type SplunkLogSearchClientOptions struct {
-	Url string `json:"url" yaml:"url"`
+	URL string `json:"url" yaml:"url"`
 
 	Auth       SplunkAuthOptions `json:"auth" yaml:"auth"`
 	Headers    ty.MS             `json:"headers" yaml:"headers"`
@@ -35,12 +38,14 @@ type SplunkLogSearchClientOptions struct {
 	MaxRetries                int `json:"maxRetries" yaml:"maxRetries"`
 }
 
+// SplunkLogSearchClient implements LogClient for Splunk.
 type SplunkLogSearchClient struct {
 	client restapi.SplunkRestClient
 
 	options SplunkLogSearchClientOptions
 }
 
+// Get executes a search against Splunk.
 func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
 	// initiate the things and wait for query to be done
 
@@ -100,14 +105,14 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 	for {
 		if tryCount >= maxRetries {
 			// When the job is done, we should cancel it
-			defer s.client.CancelSearchJob(searchJobResponse.Sid)
+			defer func() { _ = s.client.CancelSearchJob(searchJobResponse.Sid) }()
 			return nil, errors.New("number of retry for splunk job failed")
 		}
 
 		select {
 		case <-ctx.Done():
 			// When the job is done, we should cancel it
-			defer s.client.CancelSearchJob(searchJobResponse.Sid)
+			defer func() { _ = s.client.CancelSearchJob(searchJobResponse.Sid) }()
 			return nil, ctx.Err()
 		case <-time.After(pollInterval):
 		}
@@ -128,11 +133,11 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 
 		if isDone {
 			// When the job is done, we should cancel it
-			defer s.client.CancelSearchJob(searchJobResponse.Sid)
+			defer func() { _ = s.client.CancelSearchJob(searchJobResponse.Sid) }()
 			break
 		}
 
-		tryCount += 1
+		tryCount++
 	}
 
 	offset := 0
@@ -167,6 +172,7 @@ func (s SplunkLogSearchClient) Get(ctx context.Context, search *client.LogSearch
 	}, nil
 }
 
+// GetFieldValues retrieves distinct values for the specified fields.
 func (s SplunkLogSearchClient) GetFieldValues(ctx context.Context, search *client.LogSearch, fields []string) (map[string][]string, error) {
 	if s.options.Headers == nil {
 		s.options.Headers = ty.MS{}
@@ -224,14 +230,14 @@ func (s SplunkLogSearchClient) GetFieldValues(ctx context.Context, search *clien
 	for tryCount := 0; tryCount < maxRetries; tryCount++ {
 		select {
 		case <-ctx.Done():
-			s.client.CancelSearchJob(searchJobResponse.Sid)
+			_ = s.client.CancelSearchJob(searchJobResponse.Sid)
 			return nil, ctx.Err()
 		case <-time.After(pollInterval):
 		}
 
 		status, err := s.client.GetSearchStatus(searchJobResponse.Sid)
 		if err != nil {
-			s.client.CancelSearchJob(searchJobResponse.Sid)
+			_ = s.client.CancelSearchJob(searchJobResponse.Sid)
 			return nil, err
 		}
 
@@ -244,13 +250,13 @@ func (s SplunkLogSearchClient) GetFieldValues(ctx context.Context, search *clien
 	}
 
 	if !isDone {
-		s.client.CancelSearchJob(searchJobResponse.Sid)
+		_ = s.client.CancelSearchJob(searchJobResponse.Sid)
 		return nil, fmt.Errorf("timeout waiting for splunk job")
 	}
 
 	// Get results from /results endpoint since we're using stats
 	results, err := s.client.GetSearchResult(searchJobResponse.Sid, 0, 1, true)
-	s.client.CancelSearchJob(searchJobResponse.Sid)
+	_ = s.client.CancelSearchJob(searchJobResponse.Sid)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get results: %w", err)
 	}
@@ -298,23 +304,24 @@ func (s SplunkLogSearchClient) getFieldValuesFromSearch(ctx context.Context, sea
 	return client.GetFieldValuesFromResult(ctx, searchResult, nil)
 }
 
+// GetClient returns a LogClient configured to communicate with the given Splunk endpoint.
 func GetClient(options SplunkLogSearchClientOptions) (client.LogClient, error) {
 
-	if options.Url == "" {
+	if options.URL == "" {
 		return nil, fmt.Errorf("splunk client Url is empty; set the Url option in config or pass --splunk-endpoint")
 	}
 
 	target := restapi.SplunkTarget{
-		Endpoint: options.Url,
+		Endpoint: options.URL,
 		Headers:  options.Headers,
 	}
 
 	// If headers include Authorization or other fixed headers, pass them as
 	// an Auth implementation so GET requests also include those headers.
-	if options.Auth.Header != nil && len(options.Auth.Header) > 0 {
+	if len(options.Auth.Header) > 0 {
 		// set the Auth on the target so Get requests include the same headers
 		target.Auth = httpPkg.HeaderAuth{Headers: options.Auth.Header}
-	} else if options.Headers != nil && len(options.Headers) > 0 {
+	} else if len(options.Headers) > 0 {
 		// Also check options.Headers for ad-hoc queries that pass headers directly
 		target.Auth = httpPkg.HeaderAuth{Headers: options.Headers}
 	}

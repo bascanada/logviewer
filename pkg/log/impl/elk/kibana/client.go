@@ -1,3 +1,5 @@
+// Package kibana contains a client implementation for Kibana/Elasticsearch
+// based backends used to retrieve logs via Kibana's internal search API.
 package kibana
 
 import (
@@ -11,16 +13,17 @@ import (
 	"github.com/bascanada/logviewer/pkg/ty"
 )
 
-type KibanaTarget struct {
+// Target describes the connection target for a Kibana-backed client.
+type Target struct {
 	Endpoint string `json:"endpoint"`
 }
 
 type kibanaClient struct {
-	target KibanaTarget
-	client http.HttpClient
+	target Target
+	client http.Client
 }
 
-func (kc kibanaClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
+func (kc kibanaClient) Get(_ context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
 	var searchResponse SearchResponse
 
 	request, err := getSearchRequest(search)
@@ -28,14 +31,14 @@ func (kc kibanaClient) Get(ctx context.Context, search *client.LogSearch) (clien
 		return nil, err
 	}
 
-	err = kc.client.PostJson("/internal/search/es", ty.MS{
+	err = kc.client.PostJSON("/internal/search/es", ty.MS{
 		"kbn-version": search.Options.GetOr("version", "7.10.2").(string),
 	}, &request, &searchResponse, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	return elk.GetSearchResult(&kc, search, searchResponse.RawResponse.Hits), nil
+	return elk.NewSearchResult(&kc, search, searchResponse.RawResponse.Hits), nil
 }
 
 // buildKibanaCondition builds a single Kibana query condition from a filter leaf.
@@ -262,7 +265,8 @@ func (kc kibanaClient) GetFieldValues(ctx context.Context, search *client.LogSea
 	return client.GetFieldValuesFromResult(ctx, result, fields)
 }
 
-func GetClient(target KibanaTarget) (client.LogClient, error) {
+// GetClient returns a LogClient configured to communicate with the given Kibana endpoint.
+func GetClient(target Target) (client.LogClient, error) {
 	client := new(kibanaClient)
 	client.target = target
 	client.client = http.GetClient(target.Endpoint)

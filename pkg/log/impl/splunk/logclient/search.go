@@ -14,6 +14,7 @@ import (
 	"github.com/bascanada/logviewer/pkg/ty"
 )
 
+// SplunkLogSearchResult implements LogSearchResult for Splunk.
 type SplunkLogSearchResult struct {
 	logClient *SplunkLogSearchClient
 	sid       string
@@ -22,7 +23,6 @@ type SplunkLogSearchResult struct {
 
 	results []restapi.SearchResultsResponse
 
-	entriesChan chan ty.UniSet[string]
 	// parsed offset from the incoming page token (set by client.Get)
 	CurrentOffset int
 	// useResultsEndpoint indicates if the query has transforming commands
@@ -32,10 +32,12 @@ type SplunkLogSearchResult struct {
 	sizeLimit int
 }
 
+// GetSearch returns the search configuration.
 func (s SplunkLogSearchResult) GetSearch() *client.LogSearch {
 	return s.search
 }
 
+// Close cancels the running Splunk search job.
 func (s *SplunkLogSearchResult) Close() error {
 	if s.isFollow {
 		log.Printf("closing splunk search job %s", s.sid)
@@ -44,6 +46,7 @@ func (s *SplunkLogSearchResult) Close() error {
 	return nil
 }
 
+// GetEntries returns log entries and a channel for streaming updates.
 func (s SplunkLogSearchResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
 	if !s.isFollow {
 		entries := s.parseResults(&s.results[0])
@@ -99,7 +102,8 @@ func (s SplunkLogSearchResult) GetEntries(ctx context.Context) ([]client.LogEntr
 	return nil, entryChan, nil
 }
 
-func (s SplunkLogSearchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
+// GetFields extracts the set of unique field names from the search results.
+func (s SplunkLogSearchResult) GetFields(_ context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 	fields := ty.UniSet[string]{}
 
 	for _, resultEntry := range s.results {
@@ -117,6 +121,7 @@ func (s SplunkLogSearchResult) GetFields(ctx context.Context) (ty.UniSet[string]
 	return fields, nil, nil
 }
 
+// GetPaginationInfo returns information for fetching the next page.
 func (s SplunkLogSearchResult) GetPaginationInfo() *client.PaginationInfo {
 	if s.isFollow || !s.search.Size.Set {
 		return nil
@@ -207,13 +212,14 @@ func (s SplunkLogSearchResult) formatAggregatedResult(result ty.MI) string {
 	}
 	sort.Strings(keys)
 
-	var parts []string
+	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
 		parts = append(parts, fmt.Sprintf("%s=%v", k, result[k]))
 	}
 	return strings.Join(parts, "  ")
 }
 
+// Err returns an error channel (unused for Splunk).
 func (s SplunkLogSearchResult) Err() <-chan error {
 	return nil
 }

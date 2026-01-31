@@ -13,7 +13,7 @@ var (
 var versionCommand = &cobra.Command{
 	Use:   "version",
 	Short: "Display application version",
-	Run: func(cnd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		fmt.Println(sha1ver)
 	},
 }

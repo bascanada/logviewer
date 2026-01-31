@@ -58,7 +58,7 @@ func TestSplunkLogClient(t *testing.T) {
 		})
 
 	logClient, err := GetClient(SplunkLogSearchClientOptions{
-		Url: "http://splunk.com:8080",
+		URL: "http://splunk.com:8080",
 	})
 
 	if err != nil {
@@ -178,7 +178,7 @@ func TestSplunkLogSearchClient_Get_Follow(t *testing.T) {
 		JSON(ty.MI{"sid": "my-follow-sid"})
 
 	logClient, err := GetClient(SplunkLogSearchClientOptions{
-		Url: "http://splunk.com:8080",
+		URL: "http://splunk.com:8080",
 	})
 	assert.NoError(t, err)
 

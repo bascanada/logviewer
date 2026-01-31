@@ -1,3 +1,6 @@
+// Package ssh implements a LogClient backed by remote SSH access. It contains
+// utilities to build remote commands, establish SSH connections and stream
+// logs back to the caller.
 package ssh
 
 import (
@@ -6,8 +9,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -21,6 +24,7 @@ import (
 )
 
 const (
+	// OptionsCmd is the key for the command to execute.
 	OptionsCmd = "cmd"
 	// OptionsPaths specifies file paths to read logs from on the remote host.
 	// When paths are provided, a hybrid command will be used that checks for hl on the remote host.
@@ -29,7 +33,8 @@ const (
 	OptionsPreferNativeDriver = "preferNativeDriver"
 )
 
-type SSHLogClientOptions struct {
+// LogClientOptions defines configuration for the SSH client.
+type LogClientOptions struct {
 	User string `json:"user"`
 	Addr string `json:"addr"`
 
@@ -39,7 +44,7 @@ type SSHLogClientOptions struct {
 
 type sshLogClient struct {
 	conn    *sshc.Client
-	options SSHLogClientOptions
+	options LogClientOptions
 }
 
 func getCommand(search *client.LogSearch) (string, error) {
@@ -61,7 +66,7 @@ func getCommand(search *client.LogSearch) (string, error) {
 	return buf.String(), nil
 }
 
-func (lc sshLogClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
+func (lc sshLogClient) Get(_ context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
 	// Check if we should use hl with paths
 	paths, hasPaths := search.Options.GetListOfStringsOk(OptionsPaths)
 	preferNative := search.Options.GetBool(OptionsPreferNativeDriver)
@@ -254,7 +259,8 @@ func (lc sshLogClient) GetFieldValues(ctx context.Context, search *client.LogSea
 	return client.GetFieldValuesFromResult(ctx, result, fields)
 }
 
-func GetLogClient(options SSHLogClientOptions) (client.LogClient, error) {
+// GetLogClient returns a new SSH log client.
+func GetLogClient(options LogClientOptions) (client.LogClient, error) {
 
 	if options.Addr == "" {
 		return nil, errors.New("ssh address (addr) is empty")
@@ -270,7 +276,7 @@ func GetLogClient(options SSHLogClientOptions) (client.LogClient, error) {
 		privateKeyFile = filepath.Join(homedir.HomeDir(), ".ssh", "id_rsa")
 	}
 
-	key, err := ioutil.ReadFile(privateKeyFile)
+	key, err := os.ReadFile(privateKeyFile) //nolint:gosec
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +291,7 @@ func GetLogClient(options SSHLogClientOptions) (client.LogClient, error) {
 			sshc.PublicKeys(signer),
 		},
 		HostKeyCallback: sshc.HostKeyCallback(
-			func(hostname string, remote net.Addr, key sshc.PublicKey) error {
+			func(_ string, _ net.Addr, _ sshc.PublicKey) error {
 				return nil
 			}),
 	}

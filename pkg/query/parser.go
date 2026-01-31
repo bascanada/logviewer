@@ -17,14 +17,14 @@ type operatorMapping struct {
 
 // operatorMappings defines the order of operator detection (longer operators first)
 var operatorMappings = []operatorMapping{
-	{"!~=", operator.Regex, true},   // not regex
-	{"~=", operator.Regex, false},   // regex
-	{"!=", operator.Equals, true},   // not equals
-	{">=", operator.Gte, false},     // greater than or equal
-	{"<=", operator.Lte, false},     // less than or equal
-	{">", operator.Gt, false},       // greater than
-	{"<", operator.Lt, false},       // less than
-	{"=", operator.Equals, false},   // equals (must be last among = variants)
+	{"!~=", operator.Regex, true}, // not regex
+	{"~=", operator.Regex, false}, // regex
+	{"!=", operator.Equals, true}, // not equals
+	{">=", operator.Gte, false},   // greater than or equal
+	{"<=", operator.Lte, false},   // less than or equal
+	{">", operator.Gt, false},     // greater than
+	{"<", operator.Lt, false},     // less than
+	{"=", operator.Equals, false}, // equals (must be last among = variants)
 }
 
 // IsHLSyntax detects if an expression uses hl syntax (has special operators)

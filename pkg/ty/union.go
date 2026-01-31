@@ -4,8 +4,10 @@ import (
 	"log"
 )
 
+// UniSet is a map where values are a slice of unique items of type V.
 type UniSet[V string | int] map[string][]V
 
+// Add adds a value to the set key. Returns true if added, false if it already existed.
 func (us UniSet[V]) Add(key string, v V) bool {
 	if us[key] == nil {
 		us[key] = make([]V, 1)
@@ -21,6 +23,7 @@ func (us UniSet[V]) Add(key string, v V) bool {
 	return true
 }
 
+// AddField recursively adds fields from a map to a UniSet.
 func AddField(k string, v interface{}, fields *UniSet[string]) {
 	switch value := v.(type) {
 	case string:

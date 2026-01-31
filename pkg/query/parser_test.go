@@ -203,11 +203,11 @@ func TestParseFilterFlag(t *testing.T) {
 
 func TestParseFilterFlags(t *testing.T) {
 	tests := []struct {
-		name           string
-		exprs          []string
-		expectedCount  int
-		expectedLogic  client.LogicOperator
-		expectError    bool
+		name          string
+		exprs         []string
+		expectedCount int
+		expectedLogic client.LogicOperator
+		expectError   bool
 	}{
 		{
 			name:          "empty",

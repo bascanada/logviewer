@@ -78,7 +78,10 @@ contexts:
     description: "API Gateway logs from OpenSearch"
     searchInherit: ["json-structured", "transaction-view"]
     search:
-      fields: {}
+      fields:
+        level: ERROR
+      range:
+        last: 24h
       options:
         index: app-logs
         query: 'app:"api-gateway"'

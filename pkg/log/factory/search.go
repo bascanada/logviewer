@@ -1,17 +1,22 @@
+// Package factory provides helpers to construct search and client factories
+// used across the application.
 package factory
 
 import (
 	"context"
+
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/client/config"
 )
 
+// SearchFactory exposes methods to construct or retrieve search contexts
+// and results for a given search request.
 type SearchFactory interface {
-	GetSearchResult(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (client.LogSearchResult, error)
-	GetSearchContext(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (*config.SearchContext, error)
+	GetSearchResult(ctx context.Context, contextID string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (client.LogSearchResult, error)
+	GetSearchContext(ctx context.Context, contextID string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (*config.SearchContext, error)
 	// GetFieldValues returns distinct values for the specified fields.
 	// If fields is empty, returns values for all fields found in the logs.
-	GetFieldValues(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, fields []string, runtimeVars map[string]string) (map[string][]string, error)
+	GetFieldValues(ctx context.Context, contextID string, inherits []string, logSearch client.LogSearch, fields []string, runtimeVars map[string]string) (map[string][]string, error)
 }
 
 type logSearchFactory struct {
@@ -21,17 +26,17 @@ type logSearchFactory struct {
 	config config.ContextConfig
 }
 
-func (sf *logSearchFactory) GetSearchContext(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (*config.SearchContext, error) {
-	searchContext, err := sf.config.GetSearchContext(contextId, inherits, logSearch, runtimeVars)
+func (sf *logSearchFactory) GetSearchContext(_ context.Context, contextID string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (*config.SearchContext, error) {
+	searchContext, err := sf.config.GetSearchContext(contextID, inherits, logSearch, runtimeVars)
 	if err != nil {
 		return nil, err
 	}
 	return &searchContext, nil
 }
 
-func (sf *logSearchFactory) GetSearchResult(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (client.LogSearchResult, error) {
+func (sf *logSearchFactory) GetSearchResult(ctx context.Context, contextID string, inherits []string, logSearch client.LogSearch, runtimeVars map[string]string) (client.LogSearchResult, error) {
 
-	searchContext, err := sf.config.GetSearchContext(contextId, inherits, logSearch, runtimeVars)
+	searchContext, err := sf.config.GetSearchContext(contextID, inherits, logSearch, runtimeVars)
 	if err != nil {
 		return nil, err
 	}
@@ -50,8 +55,8 @@ func (sf *logSearchFactory) GetSearchResult(ctx context.Context, contextId strin
 	return sr, err
 }
 
-func (sf *logSearchFactory) GetFieldValues(ctx context.Context, contextId string, inherits []string, logSearch client.LogSearch, fields []string, runtimeVars map[string]string) (map[string][]string, error) {
-	searchContext, err := sf.config.GetSearchContext(contextId, inherits, logSearch, runtimeVars)
+func (sf *logSearchFactory) GetFieldValues(ctx context.Context, contextID string, inherits []string, logSearch client.LogSearch, fields []string, runtimeVars map[string]string) (map[string][]string, error) {
+	searchContext, err := sf.config.GetSearchContext(contextID, inherits, logSearch, runtimeVars)
 	if err != nil {
 		return nil, err
 	}
@@ -89,6 +94,7 @@ func (sf *logSearchFactory) mergeClientOptions(search *client.LogSearch, clientN
 	}
 }
 
+// GetLogSearchFactory creates a new search factory from the given client factory and config.
 func GetLogSearchFactory(
 	f LogClientFactory,
 	c config.ContextConfig,

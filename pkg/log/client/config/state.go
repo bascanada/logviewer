@@ -8,6 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// State holds persistent application state.
 type State struct {
 	CurrentContext string `yaml:"current-context"`
 }
@@ -20,13 +21,14 @@ func getStatePath() (string, error) {
 	return filepath.Join(home, DefaultConfigDir, "state.yaml"), nil
 }
 
+// LoadState reads the state from the configuration file.
 func LoadState() (*State, error) {
 	path, err := getStatePath()
 	if err != nil {
 		return &State{}, err
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &State{}, nil
@@ -40,6 +42,7 @@ func LoadState() (*State, error) {
 	return &state, nil
 }
 
+// SaveState writes the state to the configuration file.
 func SaveState(state *State) error {
 	path, err := getStatePath()
 	if err != nil {
@@ -47,7 +50,7 @@ func SaveState(state *State) error {
 	}
 
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return err
 	}
 
@@ -56,6 +59,6 @@ func SaveState(state *State) error {
 		return err
 	}
 	// Use 0600 permissions for state file as it might contain sensitive context choice?
-	// Standard 0644 is probably fine as it's just a selection name.
-	return os.WriteFile(path, data, 0644)
+	// Standard 0600 is probably fine as it's just a selection name.
+	return os.WriteFile(path, data, 0600)
 }

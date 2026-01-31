@@ -47,9 +47,9 @@ func TestGetLogClient(t *testing.T) {
 	})
 }
 
-func TestCloudWatchLogClient_Get(t *testing.T) {
+func TestLogClient_Get(t *testing.T) {
 	mockClient := &mockCWClient{
-		StartQueryFunc: func(ctx context.Context, params *cloudwatchlogs.StartQueryInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.StartQueryOutput, error) {
+		StartQueryFunc: func(_ context.Context, params *cloudwatchlogs.StartQueryInput, _ ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.StartQueryOutput, error) {
 			assert.Equal(t, "test-group", *params.LogGroupName)
 			expectedQuery := "fields @timestamp, @message | filter level = 'error' | sort @timestamp desc | limit 100"
 			assert.Equal(t, expectedQuery, *params.QueryString)
@@ -61,7 +61,7 @@ func TestCloudWatchLogClient_Get(t *testing.T) {
 		},
 	}
 
-	logClient := &CloudWatchLogClient{client: mockClient}
+	logClient := &LogClient{client: mockClient}
 
 	search := &client.LogSearch{
 		Fields: ty.MS{"level": "error"},
@@ -75,14 +75,14 @@ func TestCloudWatchLogClient_Get(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 
-	cwResult, ok := result.(*CloudWatchLogSearchResult)
+	cwResult, ok := result.(*LogSearchResult)
 	assert.True(t, ok)
-	assert.Equal(t, "test-query-id", cwResult.queryId)
+	assert.Equal(t, "test-query-id", cwResult.queryID)
 }
 
-func TestCloudWatchLogSearchResult_GetEntries(t *testing.T) {
+func TestLogSearchResult_GetEntries(t *testing.T) {
 	mockClient := &mockCWClient{
-		GetQueryResultsFunc: func(ctx context.Context, params *cloudwatchlogs.GetQueryResultsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error) {
+		GetQueryResultsFunc: func(_ context.Context, _ *cloudwatchlogs.GetQueryResultsInput, _ ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error) {
 			return &cloudwatchlogs.GetQueryResultsOutput{
 				Status: types.QueryStatusComplete,
 				Results: [][]types.ResultField{
@@ -101,9 +101,9 @@ func TestCloudWatchLogSearchResult_GetEntries(t *testing.T) {
 		},
 	}
 
-	searchResult := &CloudWatchLogSearchResult{
+	searchResult := &LogSearchResult{
 		client:  mockClient,
-		queryId: "test-query-id",
+		queryID: "test-query-id",
 		search:  &client.LogSearch{},
 	}
 
@@ -122,14 +122,14 @@ func TestCloudWatchLogSearchResult_GetEntries(t *testing.T) {
 
 func TestCloudWatch_TimeRange_Last(t *testing.T) {
 	mockClient := &mockCWClient{
-		StartQueryFunc: func(ctx context.Context, params *cloudwatchlogs.StartQueryInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.StartQueryOutput, error) {
+		StartQueryFunc: func(_ context.Context, params *cloudwatchlogs.StartQueryInput, _ ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.StartQueryOutput, error) {
 			// Expect approximately a 10m window
 			windowMs := *params.EndTime - *params.StartTime
 			assert.InDelta(t, 10*60*1000, windowMs, 5*1000) // allow 5s jitter
 			return &cloudwatchlogs.StartQueryOutput{QueryId: aws.String("qid-last")}, nil
 		},
 	}
-	c := &CloudWatchLogClient{client: mockClient}
+	c := &LogClient{client: mockClient}
 	s := &client.LogSearch{Options: ty.MI{"logGroupName": "lg"}}
 	s.Range.Last.S("10m")
 	_, err := c.Get(context.Background(), s)
@@ -138,7 +138,7 @@ func TestCloudWatch_TimeRange_Last(t *testing.T) {
 
 func TestCloudWatch_TimeRange_GteLte(t *testing.T) {
 	mockClient := &mockCWClient{
-		StartQueryFunc: func(ctx context.Context, params *cloudwatchlogs.StartQueryInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.StartQueryOutput, error) {
+		StartQueryFunc: func(_ context.Context, params *cloudwatchlogs.StartQueryInput, _ ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.StartQueryOutput, error) {
 			// We set explicit times; ensure they are respected
 			expectedStart := time.Date(2025, 8, 23, 12, 0, 0, 0, time.UTC).UnixMilli()
 			expectedEnd := time.Date(2025, 8, 23, 13, 0, 0, 0, time.UTC).UnixMilli()
@@ -147,7 +147,7 @@ func TestCloudWatch_TimeRange_GteLte(t *testing.T) {
 			return &cloudwatchlogs.StartQueryOutput{QueryId: aws.String("qid-abs")}, nil
 		},
 	}
-	c := &CloudWatchLogClient{client: mockClient}
+	c := &LogClient{client: mockClient}
 	s := &client.LogSearch{Options: ty.MI{"logGroupName": "lg"}}
 	s.Range.Gte.S("2025-08-23T12:00:00Z")
 	s.Range.Lte.S("2025-08-23T13:00:00Z")
@@ -157,7 +157,7 @@ func TestCloudWatch_TimeRange_GteLte(t *testing.T) {
 
 func TestCloudWatch_GetFields(t *testing.T) {
 	mockClient := &mockCWClient{
-		GetQueryResultsFunc: func(ctx context.Context, params *cloudwatchlogs.GetQueryResultsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error) {
+		GetQueryResultsFunc: func(_ context.Context, _ *cloudwatchlogs.GetQueryResultsInput, _ ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error) {
 			return &cloudwatchlogs.GetQueryResultsOutput{
 				Status: types.QueryStatusComplete,
 				Results: [][]types.ResultField{{
@@ -174,7 +174,7 @@ func TestCloudWatch_GetFields(t *testing.T) {
 			}, nil
 		},
 	}
-	sr := &CloudWatchLogSearchResult{client: mockClient, queryId: "qid-fields", search: &client.LogSearch{}}
+	sr := &LogSearchResult{client: mockClient, queryID: "qid-fields", search: &client.LogSearch{}}
 	// Ensure entries loaded
 	_, _, err := sr.GetEntries(context.Background())
 	assert.NoError(t, err)
@@ -186,10 +186,10 @@ func TestCloudWatch_GetFields(t *testing.T) {
 	assert.Contains(t, fields["service"], "auth")
 }
 
-func TestCloudWatchLogClient_Get_WithPageToken(t *testing.T) {
+func TestLogClient_Get_WithPageToken(t *testing.T) {
 	tokenTimestamp := time.Now().Format(time.RFC3339Nano)
 	mockClient := &mockCWClient{
-		StartQueryFunc: func(ctx context.Context, params *cloudwatchlogs.StartQueryInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.StartQueryOutput, error) {
+		StartQueryFunc: func(_ context.Context, params *cloudwatchlogs.StartQueryInput, _ ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.StartQueryOutput, error) {
 			assert.Equal(t, "test-group", *params.LogGroupName)
 			// Check that the query string contains the filter for the page token
 			expectedFilter := fmt.Sprintf(" | filter @timestamp < timestamp('%s')", tokenTimestamp)
@@ -200,7 +200,7 @@ func TestCloudWatchLogClient_Get_WithPageToken(t *testing.T) {
 		},
 	}
 
-	logClient := &CloudWatchLogClient{client: mockClient}
+	logClient := &LogClient{client: mockClient}
 
 	search := &client.LogSearch{
 		PageToken: ty.Opt[string]{Set: true, Value: tokenTimestamp},
@@ -214,21 +214,21 @@ func TestCloudWatchLogClient_Get_WithPageToken(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 
-	cwResult, ok := result.(*CloudWatchLogSearchResult)
+	cwResult, ok := result.(*LogSearchResult)
 	assert.True(t, ok)
-	assert.Equal(t, "test-query-id-with-token", cwResult.queryId)
+	assert.Equal(t, "test-query-id-with-token", cwResult.queryID)
 }
 
-func TestCloudWatchLogSearchResult_GetPaginationInfo(t *testing.T) {
+func TestLogSearchResult_GetPaginationInfo(t *testing.T) {
 	t.Run("no size set", func(t *testing.T) {
 		search := &client.LogSearch{}
-		result := &CloudWatchLogSearchResult{search: search}
+		result := &LogSearchResult{search: search}
 		assert.Nil(t, result.GetPaginationInfo())
 	})
 
 	t.Run("results less than size", func(t *testing.T) {
 		search := &client.LogSearch{Size: ty.Opt[int]{Set: true, Value: 10}}
-		result := &CloudWatchLogSearchResult{
+		result := &LogSearchResult{
 			search:  search,
 			entries: make([]client.LogEntry, 5),
 		}
@@ -242,7 +242,7 @@ func TestCloudWatchLogSearchResult_GetPaginationInfo(t *testing.T) {
 		lastTimestamp := time.Now().Add(-1 * time.Minute)
 		entries[9] = client.LogEntry{Timestamp: lastTimestamp}
 
-		result := &CloudWatchLogSearchResult{
+		result := &LogSearchResult{
 			search:  search,
 			entries: entries,
 		}
@@ -254,13 +254,13 @@ func TestCloudWatchLogSearchResult_GetPaginationInfo(t *testing.T) {
 	})
 }
 
-// TestCloudWatchLogSearchResult_NoStreamingSupport documents that CloudWatch
+// TestLogSearchResult_NoStreamingSupport documents that CloudWatch
 // does not support streaming/Follow mode - it always returns nil for the channel.
 // This is expected behavior since CloudWatch Logs Insights is query-based.
-func TestCloudWatchLogSearchResult_NoStreamingSupport(t *testing.T) {
+func TestLogSearchResult_NoStreamingSupport(t *testing.T) {
 	t.Run("GetEntries returns nil channel - no streaming support", func(t *testing.T) {
 		mockClient := &mockCWClient{
-			GetQueryResultsFunc: func(ctx context.Context, params *cloudwatchlogs.GetQueryResultsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error) {
+			GetQueryResultsFunc: func(_ context.Context, _ *cloudwatchlogs.GetQueryResultsInput, _ ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error) {
 				return &cloudwatchlogs.GetQueryResultsOutput{
 					Status:  types.QueryStatusComplete,
 					Results: [][]types.ResultField{},
@@ -276,9 +276,9 @@ func TestCloudWatchLogSearchResult_NoStreamingSupport(t *testing.T) {
 			},
 		}
 
-		result := &CloudWatchLogSearchResult{
+		result := &LogSearchResult{
 			client:  mockClient,
-			queryId: "test-query-id",
+			queryID: "test-query-id",
 			search:  search,
 		}
 
@@ -290,18 +290,18 @@ func TestCloudWatchLogSearchResult_NoStreamingSupport(t *testing.T) {
 	})
 
 	t.Run("Err returns nil - no async error channel", func(t *testing.T) {
-		result := &CloudWatchLogSearchResult{
+		result := &LogSearchResult{
 			search: &client.LogSearch{},
 		}
 		assert.Nil(t, result.Err(), "CloudWatch should return nil error channel")
 	})
 }
 
-func TestCloudWatchLogSearchResult_PollingMechanism(t *testing.T) {
+func TestLogSearchResult_PollingMechanism(t *testing.T) {
 	t.Run("Polls until Complete status", func(t *testing.T) {
 		pollCount := 0
 		mockClient := &mockCWClient{
-			GetQueryResultsFunc: func(ctx context.Context, params *cloudwatchlogs.GetQueryResultsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error) {
+			GetQueryResultsFunc: func(_ context.Context, _ *cloudwatchlogs.GetQueryResultsInput, _ ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error) {
 				pollCount++
 				// Return Running for first 2 calls, then Complete
 				if pollCount < 3 {
@@ -328,9 +328,9 @@ func TestCloudWatchLogSearchResult_PollingMechanism(t *testing.T) {
 			},
 		}
 
-		result := &CloudWatchLogSearchResult{
+		result := &LogSearchResult{
 			client:  mockClient,
-			queryId: "test-query-id",
+			queryID: "test-query-id",
 			search:  search,
 		}
 
@@ -343,7 +343,7 @@ func TestCloudWatchLogSearchResult_PollingMechanism(t *testing.T) {
 	t.Run("Context cancellation stops polling", func(t *testing.T) {
 		pollCount := 0
 		mockClient := &mockCWClient{
-			GetQueryResultsFunc: func(ctx context.Context, params *cloudwatchlogs.GetQueryResultsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error) {
+			GetQueryResultsFunc: func(_ context.Context, _ *cloudwatchlogs.GetQueryResultsInput, _ ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error) {
 				pollCount++
 				// Always return Running to force continuous polling
 				return &cloudwatchlogs.GetQueryResultsOutput{
@@ -359,9 +359,9 @@ func TestCloudWatchLogSearchResult_PollingMechanism(t *testing.T) {
 			},
 		}
 
-		result := &CloudWatchLogSearchResult{
+		result := &LogSearchResult{
 			client:  mockClient,
-			queryId: "test-query-id",
+			queryID: "test-query-id",
 			search:  search,
 		}
 
@@ -375,16 +375,16 @@ func TestCloudWatchLogSearchResult_PollingMechanism(t *testing.T) {
 
 	t.Run("Handles Failed status", func(t *testing.T) {
 		mockClient := &mockCWClient{
-			GetQueryResultsFunc: func(ctx context.Context, params *cloudwatchlogs.GetQueryResultsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error) {
+			GetQueryResultsFunc: func(_ context.Context, _ *cloudwatchlogs.GetQueryResultsInput, _ ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error) {
 				return &cloudwatchlogs.GetQueryResultsOutput{
 					Status: types.QueryStatusFailed,
 				}, nil
 			},
 		}
 
-		result := &CloudWatchLogSearchResult{
+		result := &LogSearchResult{
 			client:  mockClient,
-			queryId: "test-query-id",
+			queryID: "test-query-id",
 			search:  &client.LogSearch{Options: ty.MI{}},
 		}
 
@@ -395,16 +395,16 @@ func TestCloudWatchLogSearchResult_PollingMechanism(t *testing.T) {
 
 	t.Run("Handles Cancelled status", func(t *testing.T) {
 		mockClient := &mockCWClient{
-			GetQueryResultsFunc: func(ctx context.Context, params *cloudwatchlogs.GetQueryResultsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error) {
+			GetQueryResultsFunc: func(_ context.Context, _ *cloudwatchlogs.GetQueryResultsInput, _ ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetQueryResultsOutput, error) {
 				return &cloudwatchlogs.GetQueryResultsOutput{
 					Status: types.QueryStatusCancelled,
 				}, nil
 			},
 		}
 
-		result := &CloudWatchLogSearchResult{
+		result := &LogSearchResult{
 			client:  mockClient,
-			queryId: "test-query-id",
+			queryID: "test-query-id",
 			search:  &client.LogSearch{Options: ty.MI{}},
 		}
 
@@ -414,9 +414,9 @@ func TestCloudWatchLogSearchResult_PollingMechanism(t *testing.T) {
 	})
 }
 
-func TestCloudWatchLogSearchResult_GetSearch(t *testing.T) {
+func TestLogSearchResult_GetSearch(t *testing.T) {
 	search := &client.LogSearch{Follow: true}
-	result := &CloudWatchLogSearchResult{search: search}
+	result := &LogSearchResult{search: search}
 
 	assert.Equal(t, search, result.GetSearch())
 }

@@ -1,4 +1,4 @@
-.PHONY: build build/all release release/all test test/coverage integration/start integration/stop integration/tests integration/test integration/test/query integration/test/log integration/test/field integration/test/values integration/test/ssh integration/test/native integration/test/hl integration/test/short integration/test/all integration/logs integration/start/logs integration/stop/logs integration/deploy-simulation integration/mcp/setup integration/mcp/test install uninstall
+.PHONY: build build/all release release/all test test/coverage lint audit quality integration/start integration/stop integration/tests integration/test integration/test/query integration/test/log integration/test/field integration/test/values integration/test/ssh integration/test/native integration/test/hl integration/test/short integration/test/all integration/logs integration/start/logs integration/stop/logs integration/deploy-simulation integration/mcp/setup integration/mcp/test install uninstall
 
 SHA=$(shell git rev-parse --short HEAD)
 # Determine latest tag (fallback to '0.0.0' when repository has no tags or git fails)
@@ -79,8 +79,27 @@ test:
 
 test/coverage:
 	@command -v gocover-cobertura >/dev/null 2>&1 || { echo "Installing gocover-cobertura"; go install github.com/boumenot/gocover-cobertura@latest; }
-	@go test -coverprofile=coverage.txt -covermode count ./...
+	# Added -race and changed covermode to atomic (required for race)
+	@go test -race -coverprofile=coverage.txt -covermode atomic ./...
 	@cat coverage.txt | gocover-cobertura > coverage.xml
+
+# Quality Checks
+lint:
+	@command -v golangci-lint >/dev/null 2>&1 || { \
+		echo "Installing golangci-lint"; \
+		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin; \
+	}
+	@echo "Running golangci-lint..."
+	@golangci-lint run
+
+audit:
+	@command -v govulncheck >/dev/null 2>&1 || { echo "Installing govulncheck"; go install golang.org/x/vuln/cmd/govulncheck@latest; }
+	@echo "Running govulncheck..."
+	@govulncheck ./...
+
+quality: lint audit test/coverage
+	@echo "All quality checks passed!"
+
 
 
 
