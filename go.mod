@@ -15,7 +15,7 @@ require (
 	github.com/charmbracelet/x/exp/teatest v0.0.0-20260122224438-b01af16209d9
 	github.com/docker/cli v29.1.2+incompatible
 	github.com/docker/docker v28.0.0+incompatible
-	github.com/fatih/color v1.15.0
+	github.com/fatih/color v1.18.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/google/uuid v1.6.0
 	github.com/h2non/gock v1.2.0
