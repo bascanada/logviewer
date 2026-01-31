@@ -40,7 +40,6 @@ func BuildArgs(search *client.LogSearch, paths []string) ([]string, error) {
 
 	// Handle size/limit
 
-
 	// Build filter expression from the effective filter
 	effectiveFilter := search.GetEffectiveFilter()
 	if effectiveFilter != nil {

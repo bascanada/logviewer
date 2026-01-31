@@ -14,11 +14,11 @@ const (
 	Regex = "regex"
 
 	// Gt is the greater than operator (>).
-	Gt  = "gt"
+	Gt = "gt"
 	// Gte is the greater than or equal operator (>=).
 	Gte = "gte"
 	// Lt is the less than operator (<).
-	Lt  = "lt"
+	Lt = "lt"
 	// Lte is the less than or equal operator (<=).
 	Lte = "lte"
 )

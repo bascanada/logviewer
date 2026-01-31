@@ -33,12 +33,12 @@ var LogLevelColors = map[string]lipgloss.Color{
 // Styles contains all UI styles
 type Styles struct {
 	// Base styles
-	App        lipgloss.Style
-	Header     lipgloss.Style
-	Footer     lipgloss.Style
-	MainView   lipgloss.Style
-	StatusBar  lipgloss.Style
-	HelpBar    lipgloss.Style
+	App       lipgloss.Style
+	Header    lipgloss.Style
+	Footer    lipgloss.Style
+	MainView  lipgloss.Style
+	StatusBar lipgloss.Style
+	HelpBar   lipgloss.Style
 
 	// Tab styles
 	TabActive   lipgloss.Style

@@ -191,7 +191,7 @@ func (kc openSearchClient) getFieldValuesFromSearch(ctx context.Context, search 
 }
 
 // GetClient returns a LogClient configured to communicate with the given OpenSearch endpoint.
-func GetClient(target Target) (client.LogClient, error) {
+func GetClient(target Target) (client.LogBackend, error) {
 	client := new(openSearchClient)
 	client.target = target
 	client.client = http.GetClient(target.Endpoint)

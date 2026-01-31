@@ -1,4 +1,4 @@
-// Package cloudwatch provides an implementation of logclient.LogClient backed
+// Package cloudwatch provides an implementation of logclient.LogBackend backed
 // by AWS CloudWatch Logs and helper functions for building queries and parsing
 // results.
 package cloudwatch
@@ -27,7 +27,7 @@ type CWClient interface {
 	FilterLogEvents(ctx context.Context, params *cloudwatchlogs.FilterLogEventsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.FilterLogEventsOutput, error)
 }
 
-// LogClient implements the client.LogClient interface for AWS CloudWatch.
+// LogClient implements the client.LogBackend interface for AWS CloudWatch.
 type LogClient struct {
 	client CWClient
 	logger *slog.Logger
@@ -251,7 +251,7 @@ func (c *LogClient) GetFieldValues(ctx context.Context, search *client.LogSearch
 
 // GetLogClient creates a new CloudWatch Logs client.
 // It uses the 'region' and 'profile' from the options if provided.
-func GetLogClient(options ty.MI) (client.LogClient, error) {
+func GetLogClient(options ty.MI) (client.LogBackend, error) {
 	var cfgOptions []func(*config.LoadOptions) error
 
 	// Region support (required for AWS SDK)

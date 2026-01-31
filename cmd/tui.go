@@ -55,7 +55,7 @@ func runTUI(_ *cobra.Command, _ []string) {
 	}
 
 	// Create factories
-	clientFactory, err := factory.GetLogClientFactory(cfg.Clients)
+	clientFactory, err := factory.GetLogBackendFactory(cfg.Clients)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating client factory: %v\n", err)
 		os.Exit(1)
