@@ -22,7 +22,7 @@ require (
 	github.com/mark3labs/mcp-go v0.38.0
 	github.com/mattn/go-isatty v0.0.20
 	github.com/spf13/cobra v1.7.0
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.45.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.25.10
