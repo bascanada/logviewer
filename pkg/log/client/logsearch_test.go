@@ -125,4 +125,74 @@ func TestClone(t *testing.T) {
 		clone.Filter.Field = "modifiedField"
 		assert.Equal(t, "testField", original.Filter.Field, "Original Filter should be unchanged")
 	})
+
+	t.Run("Clone deeply nested filters", func(t *testing.T) {
+		original := &LogSearch{
+			Follow: true,
+			Filter: &Filter{
+				Logic: LogicAnd,
+				Filters: []Filter{
+					{Field: "level", Op: "equals", Value: "ERROR"},
+					{
+						Logic: LogicOr,
+						Filters: []Filter{
+							{Field: "app", Op: "equals", Value: "app1"},
+							{Field: "app", Op: "equals", Value: "app2"},
+						},
+					},
+				},
+			},
+		}
+
+		clone := original.Clone()
+
+		// Verify structure is preserved
+		assert.NotNil(t, clone.Filter)
+		assert.Equal(t, LogicAnd, clone.Filter.Logic)
+		assert.Len(t, clone.Filter.Filters, 2)
+		assert.Equal(t, "level", clone.Filter.Filters[0].Field)
+		assert.Equal(t, LogicOr, clone.Filter.Filters[1].Logic)
+
+		// Verify deep copy by modifying nested filter
+		clone.Filter.Filters[1].Filters[0].Value = "modified-app"
+
+		// Original should be unchanged
+		assert.Equal(t, "app1", original.Filter.Filters[1].Filters[0].Value, "Original nested filter should be unchanged")
+	})
+
+	t.Run("Clone with complex nested structure", func(t *testing.T) {
+		original := &LogSearch{
+			Options: ty.MI{"container": "test"},
+			Filter: &Filter{
+				Logic: LogicAnd,
+				Filters: []Filter{
+					{
+						Logic: LogicOr,
+						Filters: []Filter{
+							{Field: "level", Op: "equals", Value: "ERROR"},
+							{Field: "level", Op: "equals", Value: "WARN"},
+						},
+					},
+					{
+						Logic: LogicNot,
+						Filters: []Filter{
+							{Field: "app", Op: "equals", Value: "excluded-app"},
+						},
+					},
+				},
+			},
+		}
+
+		clone := original.Clone()
+
+		// Modify clone at multiple levels
+		clone.Options["container"] = "modified"
+		clone.Filter.Filters[0].Filters[0].Value = "FATAL"
+		clone.Filter.Filters[1].Filters[0].Field = "service"
+
+		// Verify original is completely unchanged
+		assert.Equal(t, "test", original.Options["container"])
+		assert.Equal(t, "ERROR", original.Filter.Filters[0].Filters[0].Value)
+		assert.Equal(t, "app", original.Filter.Filters[1].Filters[0].Field)
+	})
 }
