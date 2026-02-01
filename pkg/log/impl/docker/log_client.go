@@ -17,6 +17,8 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 
+	"sync"
+
 	logclient "github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/reader"
 )
@@ -68,9 +70,36 @@ func (lc LogClient) Get(ctx context.Context, search *logclient.LogSearch) (logcl
 			return nil, fmt.Errorf("no running containers found for service %s", service)
 		}
 
-		// TODO: Use MultiLogSearchResult to merge logs from all containers when multiple replicas exist
+		// Use MultiLogSearchResult to merge logs from all containers when multiple replicas exist
 		if len(containers) > 1 {
-			fmt.Fprintf(os.Stderr, "WARN: Found %d containers for service '%s'. Showing logs for the first one (%s).\n", len(containers), service, containers[0].ID[:12])
+			multiResult, err := logclient.NewMultiLogSearchResult(search)
+			if err != nil {
+				return nil, err
+			}
+
+			var wg sync.WaitGroup
+			for _, container := range containers {
+				wg.Add(1)
+				go func(cID string) {
+					defer wg.Done()
+					// Clone the search object to prevent race conditions
+					containerSearch := search.Clone()
+
+					// Configure for specific container
+					containerSearch.Options["container"] = cID
+					delete(containerSearch.Options, "service")
+					containerSearch.Options["__context_id__"] = cID[:12]
+
+					// Fetch logs
+					result, err := lc.Get(ctx, containerSearch)
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "Error fetching logs for container %s: %v\n", cID[:12], err)
+					}
+					multiResult.Add(result, err)
+				}(container.ID)
+			}
+			wg.Wait()
+			return multiResult, nil
 		}
 
 		// Use the first matching container

@@ -37,6 +37,30 @@ type Filter struct {
 	Filters []Filter      `json:"filters,omitempty" yaml:"filters,omitempty"`
 }
 
+// Clone creates a deep copy of the Filter object.
+// This is essential for preventing race conditions when the same filter
+// is used in concurrent operations with modifications.
+func (f *Filter) Clone() *Filter {
+	if f == nil {
+		return nil
+	}
+
+	// Start with a shallow copy
+	clone := *f
+
+	// Deep copy nested Filters slice
+	if len(f.Filters) > 0 {
+		clone.Filters = make([]Filter, len(f.Filters))
+		for i, child := range f.Filters {
+			if childClone := child.Clone(); childClone != nil {
+				clone.Filters[i] = *childClone
+			}
+		}
+	}
+
+	return &clone
+}
+
 // Validate checks if the filter is structurally valid.
 func (f *Filter) Validate() error {
 	if f == nil {
