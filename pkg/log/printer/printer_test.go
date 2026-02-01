@@ -20,11 +20,11 @@ func (m *MockLogSearchResult) GetSearch() *client.LogSearch {
 	return m.search
 }
 
-func (m *MockLogSearchResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
+func (m *MockLogSearchResult) GetEntries(_ context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
 	return m.entries, nil, nil
 }
 
-func (m *MockLogSearchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
+func (m *MockLogSearchResult) GetFields(_ context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 	return nil, nil, nil
 }
 
@@ -79,7 +79,7 @@ func TestMessageRegex(t *testing.T) {
 			}
 
 			var buf bytes.Buffer
-			_, err := WrapIoWritter(context.Background(), result, &buf, func() {}, func(err error) {})
+			_, err := WrapIoWritter(context.Background(), result, &buf, func() {}, func(_ error) {})
 
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expectedOutput, buf.String())

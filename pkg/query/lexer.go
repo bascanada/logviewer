@@ -1,3 +1,5 @@
+// Package query provides a lexer and parser for the HL query expression
+// language used by the CLI and search backends.
 package query
 
 import (
@@ -10,15 +12,25 @@ import (
 type TokenType int
 
 const (
+	// TokenEOF represents the end of the input
 	TokenEOF TokenType = iota
+	// TokenField represents a field name
 	TokenField
+	// TokenOperator represents an operator (=, !=, etc.)
 	TokenOperator
+	// TokenValue represents a literal value
 	TokenValue
+	// TokenAnd represents the AND operator
 	TokenAnd
+	// TokenOr represents the OR operator
 	TokenOr
+	// TokenNot represents the NOT operator
 	TokenNot
+	// TokenLParen represents a left parenthesis
 	TokenLParen
+	// TokenRParen represents a right parenthesis
 	TokenRParen
+	// TokenExists represents the exists function
 	TokenExists
 )
 
@@ -281,7 +293,7 @@ func (l *Lexer) readQuotedString() (string, error) {
 
 	startPos := l.pos
 	for l.pos < len(l.input) {
-		if l.input[l.pos] == byte(quote) {
+		if l.input[l.pos] == quote {
 			value := l.input[startPos:l.pos]
 			l.pos++ // Skip closing quote
 			return value, nil

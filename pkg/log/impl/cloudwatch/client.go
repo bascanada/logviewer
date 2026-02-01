@@ -1,3 +1,6 @@
+// Package cloudwatch provides an implementation of logclient.LogBackend backed
+// by AWS CloudWatch Logs and helper functions for building queries and parsing
+// results.
 package cloudwatch
 
 import (
@@ -24,8 +27,8 @@ type CWClient interface {
 	FilterLogEvents(ctx context.Context, params *cloudwatchlogs.FilterLogEventsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.FilterLogEventsOutput, error)
 }
 
-// CloudWatchLogClient implements the client.LogClient interface for AWS CloudWatch.
-type CloudWatchLogClient struct {
+// LogClient implements the client.LogBackend interface for AWS CloudWatch.
+type LogClient struct {
 	client CWClient
 	logger *slog.Logger
 }
@@ -53,8 +56,10 @@ func isSafeFieldName(name string) bool {
 	return true
 }
 
-// Get will be implemented in Phase 2.
-func (c *CloudWatchLogClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
+// Get executes a CloudWatch Logs query and returns the results.
+//
+//nolint:gocyclo // Complex search parameter handling and API orchestration
+func (c *LogClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
 	logGroupName, ok := search.Options.GetStringOk("logGroupName")
 	if !ok {
 		return nil, errors.New("logGroupName is required in options for CloudWatch Logs")
@@ -113,11 +118,12 @@ func (c *CloudWatchLogClient) Get(ctx context.Context, search *client.LogSearch)
 		layouts := []string{time.RFC3339Nano, time.RFC3339, "2006-01-02 15:04:05.000"}
 		var lastErr error
 		for _, l := range layouts {
-			if ts, err := time.Parse(l, v); err == nil {
+			var ts time.Time
+			var err error
+			if ts, err = time.Parse(l, v); err == nil {
 				return ts, nil
-			} else {
-				lastErr = err
 			}
+			lastErr = err
 		}
 		return time.Time{}, lastErr
 	}
@@ -158,7 +164,7 @@ func (c *CloudWatchLogClient) Get(ctx context.Context, search *client.LogSearch)
 		if startQueryOutput.QueryId == nil {
 			return nil, errors.New("StartQuery did not return a QueryId")
 		}
-		return &CloudWatchLogSearchResult{client: c.client, queryId: *startQueryOutput.QueryId, search: search, logger: c.logger}, nil
+		return &LogSearchResult{client: c.client, queryID: *startQueryOutput.QueryId, search: search, logger: c.logger}, nil
 	}
 
 	// FilterLogEvents fallback
@@ -224,16 +230,17 @@ type staticCloudWatchResult struct {
 }
 
 func (r *staticCloudWatchResult) GetSearch() *client.LogSearch { return r.search }
-func (r *staticCloudWatchResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
+func (r *staticCloudWatchResult) GetEntries(_ context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
 	return r.entries, nil, nil
 }
-func (r *staticCloudWatchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
+func (r *staticCloudWatchResult) GetFields(_ context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
 	return ty.UniSet[string]{}, nil, nil
 }
 func (r *staticCloudWatchResult) GetPaginationInfo() *client.PaginationInfo { return nil }
 func (r *staticCloudWatchResult) Err() <-chan error                         { return nil }
 
-func (c *CloudWatchLogClient) GetFieldValues(ctx context.Context, search *client.LogSearch, fields []string) (map[string][]string, error) {
+// GetFieldValues retrieves distinct values for the specified fields.
+func (c *LogClient) GetFieldValues(ctx context.Context, search *client.LogSearch, fields []string) (map[string][]string, error) {
 	// For CloudWatch, we need to run a search and extract field values from the results
 	result, err := c.Get(ctx, search)
 	if err != nil {
@@ -244,7 +251,7 @@ func (c *CloudWatchLogClient) GetFieldValues(ctx context.Context, search *client
 
 // GetLogClient creates a new CloudWatch Logs client.
 // It uses the 'region' and 'profile' from the options if provided.
-func GetLogClient(options ty.MI) (client.LogClient, error) {
+func GetLogClient(options ty.MI) (client.LogBackend, error) {
 	var cfgOptions []func(*config.LoadOptions) error
 
 	// Region support (required for AWS SDK)
@@ -260,13 +267,13 @@ func GetLogClient(options ty.MI) (client.LogClient, error) {
 	// Optional custom endpoint (e.g. LocalStack) for integration tests
 	// Key name: "endpoint" (lowercase) to be consistent with region/profile
 	if endpoint, ok := options.GetStringOk("endpoint"); ok && endpoint != "" {
-		resolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, _ ...interface{}) (aws.Endpoint, error) {
+		resolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, _ ...interface{}) (aws.Endpoint, error) { //nolint:staticcheck
 			if strings.Contains(strings.ToLower(service), "logs") {
-				return aws.Endpoint{URL: endpoint, PartitionID: "aws", SigningRegion: region}, nil
+				return aws.Endpoint{URL: endpoint, PartitionID: "aws", SigningRegion: region}, nil //nolint:staticcheck
 			}
-			return aws.Endpoint{}, &aws.EndpointNotFoundError{}
+			return aws.Endpoint{}, &aws.EndpointNotFoundError{} //nolint:staticcheck
 		})
-		cfgOptions = append(cfgOptions, config.WithEndpointResolverWithOptions(resolver))
+		cfgOptions = append(cfgOptions, config.WithEndpointResolverWithOptions(resolver)) //nolint:staticcheck
 	}
 
 	cfg, err := config.LoadDefaultConfig(context.TODO(), cfgOptions...)
@@ -274,5 +281,5 @@ func GetLogClient(options ty.MI) (client.LogClient, error) {
 		return nil, err
 	}
 
-	return &CloudWatchLogClient{client: cloudwatchlogs.NewFromConfig(cfg), logger: slog.Default()}, nil
+	return &LogClient{client: cloudwatchlogs.NewFromConfig(cfg), logger: slog.Default()}, nil
 }

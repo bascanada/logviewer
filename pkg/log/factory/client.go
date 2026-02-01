@@ -1,3 +1,6 @@
+// Package factory provides helpers to construct log client factories used by
+// the application. It exposes `GetLogBackendFactory` which builds lazily
+// initialized clients based on configuration.
 package factory
 
 import (
@@ -22,22 +25,25 @@ const (
 	defaultDockerHostUnix    = "unix:///var/run/docker.sock"
 )
 
-type LogClientFactory interface {
-	Get(name string) (*client.LogClient, error)
+// LogBackendFactory provides an abstraction for obtaining a configured
+// client.LogBackend by name.
+type LogBackendFactory interface {
+	Get(name string) (*client.LogBackend, error)
 }
 
-type logClientFactory struct {
-	clients ty.LazyMap[string, client.LogClient]
+type logBackendFactory struct {
+	clients ty.LazyMap[string, client.LogBackend]
 }
 
-func (lcf *logClientFactory) Get(name string) (*client.LogClient, error) {
+func (lcf *logBackendFactory) Get(name string) (*client.LogBackend, error) {
 	return lcf.clients.Get(name)
 }
 
-func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
+// GetLogBackendFactory returns a factory for creating log clients from configuration.
+func GetLogBackendFactory(clients config.Clients) (LogBackendFactory, error) {
 
-	logClientFactory := new(logClientFactory)
-	logClientFactory.clients = make(ty.LazyMap[string, client.LogClient])
+	logBackendFactory := new(logBackendFactory)
+	logBackendFactory.clients = make(ty.LazyMap[string, client.LogBackend])
 
 	for k, v := range clients {
 		// IMPORTANT: shadow loop variable so each closure below captures its own copy.
@@ -47,8 +53,8 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 		switch v.Type {
 		case "opensearch":
 			options := v.Options
-			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
-				vv, err := opensearch.GetClient(opensearch.OpenSearchTarget{
+			logBackendFactory.clients[k] = ty.GetLazy(func() (*client.LogBackend, error) {
+				vv, err := opensearch.GetClient(opensearch.Target{
 					Endpoint: options.GetString("endpoint"),
 				})
 				if err != nil {
@@ -59,8 +65,8 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 			})
 		case "kibana":
 			options := v.Options
-			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
-				vv, err := kibana.GetClient(kibana.KibanaTarget{Endpoint: options.GetString("endpoint")})
+			logBackendFactory.clients[k] = ty.GetLazy(func() (*client.LogBackend, error) {
+				vv, err := kibana.GetClient(kibana.Target{Endpoint: options.GetString("endpoint")})
 				if err != nil {
 					return nil, err
 				}
@@ -68,7 +74,7 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 				return &vv, nil
 			})
 		case "local":
-			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
+			logBackendFactory.clients[k] = ty.GetLazy(func() (*client.LogBackend, error) {
 				vv, err := local.GetLogClient()
 				if err != nil {
 					return nil, err
@@ -77,8 +83,8 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 				return &vv, nil
 			})
 		case "k8s":
-			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
-				vv, err := k8s.GetLogClient(k8s.K8sLogClientOptions{
+			logBackendFactory.clients[k] = ty.GetLazy(func() (*client.LogBackend, error) {
+				vv, err := k8s.GetLogClient(k8s.LogClientOptions{
 					KubeConfig: v.Options.GetString("kubeConfig"),
 				})
 				if err != nil {
@@ -88,11 +94,11 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 				return &vv, nil
 			})
 		case "ssh":
-			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
+			logBackendFactory.clients[k] = ty.GetLazy(func() (*client.LogBackend, error) {
 				user := v.Options.GetString("user")
 				addr := v.Options.GetString("addr")
 				pk := v.Options.GetString("privateKey")
-				vv, err := ssh.GetLogClient(ssh.SSHLogClientOptions{
+				vv, err := ssh.GetLogClient(ssh.LogClientOptions{
 					User:       user,
 					Addr:       addr,
 					PrivateKey: pk,
@@ -104,13 +110,13 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 				return &vv, nil
 			})
 		case "splunk":
-			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
+			logBackendFactory.clients[k] = ty.GetLazy(func() (*client.LogBackend, error) {
 				authOptions := splunk.SplunkAuthOptions{}
 				if authMap, ok := v.Options["auth"].(ty.MI); ok {
-					authOptions.Header = ty.MI(authMap).GetMS("header")
+					authOptions.Header = authMap.GetMS("header")
 				}
 				vv, err := splunk.GetClient(splunk.SplunkLogSearchClientOptions{
-					Url:        v.Options.GetString("url"),
+					URL:        v.Options.GetString("url"),
 					Auth:       authOptions,
 					Headers:    v.Options.GetMS("headers").ResolveVariables(),
 					SearchBody: v.Options.GetMS("searchBody").ResolveVariables(),
@@ -122,7 +128,7 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 				return &vv, nil
 			})
 		case "docker":
-			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
+			logBackendFactory.clients[k] = ty.GetLazy(func() (*client.LogBackend, error) {
 				host := v.Options.GetString("host")
 				if host == "" {
 					if runtime.GOOS == "windows" {
@@ -135,7 +141,7 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 				return &vv, err
 			})
 		case "cloudwatch":
-			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
+			logBackendFactory.clients[k] = ty.GetLazy(func() (*client.LogBackend, error) {
 				// Pass the client-specific options to our new factory function
 				vv, err := cloudwatch.GetLogClient(v.Options)
 				if err != nil {
@@ -148,5 +154,8 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 		}
 	}
 
-	return logClientFactory, nil
+	return logBackendFactory, nil
 }
+
+// GetLogBackendFactory builds a LogBackendFactory from the provided
+// configuration, lazily constructing clients on demand.

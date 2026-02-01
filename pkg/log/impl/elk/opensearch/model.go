@@ -9,16 +9,21 @@ import (
 	"github.com/bascanada/logviewer/pkg/log/impl/elk"
 )
 
+// SearchResult represents the result of an OpenSearch query.
 type SearchResult struct {
 	Took int `json:"took"`
-	//timeout_out
-	//_shards
+	// timeout_out
+	// _shards
 	Hits elk.Hits `json:"hits"`
 }
 
+// SortItem represents a sort criteria.
 type SortItem map[string]map[string]string
+
+// Map is a shorthand for map[string]interface{}.
 type Map map[string]interface{}
 
+// SearchRequest represents an OpenSearch query request body.
 type SearchRequest struct {
 	Query Map        `json:"query"`
 	Size  int        `json:"size"`
@@ -182,6 +187,7 @@ func buildOpenSearchQuery(f *client.Filter) Map {
 	return nil
 }
 
+// GetSearchRequest builds an OpenSearch query request from the given LogSearch parameters.
 func GetSearchRequest(logSearch *client.LogSearch) (SearchRequest, error) {
 	gte, lte, err := elk.GetDateRange(logSearch)
 	if err != nil {

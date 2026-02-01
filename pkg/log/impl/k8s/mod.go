@@ -1,3 +1,4 @@
+// Package k8s provides a Kubernetes implementation of the LogClient interface.
 package k8s
 
 import (
@@ -27,16 +28,23 @@ import (
 )
 
 const (
-	FieldNamespace     = "namespace"
-	FieldContainer     = "container"
-	FieldPrevious      = "previous"
-	FieldPod           = "pod"
+	// FieldNamespace is the field name for Kubernetes namespace.
+	FieldNamespace = "namespace"
+	// FieldContainer is the field name for Kubernetes container.
+	FieldContainer = "container"
+	// FieldPrevious is the field name for fetching previous pod logs.
+	FieldPrevious = "previous"
+	// FieldPod is the field name for the pod.
+	FieldPod = "pod"
+	// FieldLabelSelector is the field name for the label selector.
 	FieldLabelSelector = "labelSelector"
 
+	// OptionsTimestamp is the key for the timestamp option.
 	OptionsTimestamp = "timestamp"
 )
 
-type K8sLogClientOptions struct {
+// LogClientOptions defines configuration for the Kubernetes client.
+type LogClientOptions struct {
 	KubeConfig string `json:"kubeConfig"`
 }
 
@@ -70,7 +78,7 @@ func (lc k8sLogClient) Get(ctx context.Context, search *client.LogSearch) (clien
 
 	// If labelSelector is provided, query multiple pods
 	if labelSelector != "" {
-		return lc.getLogsFromMultiplePods(ctx, search, namespace, labelSelector, container, previous, timestamp, follow, tailLines)
+		return lc.getLogsFromMultiplePods(ctx, search, namespace, labelSelector, previous, timestamp, follow, tailLines)
 	}
 
 	// Single pod query (original behavior)
@@ -180,11 +188,10 @@ func (lc k8sLogClient) getLogsFromMultiplePods(
 	search *client.LogSearch,
 	namespace string,
 	labelSelector string,
-	container string,
-	previous bool,
-	timestamp bool,
-	follow bool,
-	tailLines *int64,
+	_ bool,
+	_ bool,
+	_ bool,
+	_ *int64,
 ) (client.LogSearchResult, error) {
 
 	// List pods matching the label selector
@@ -293,7 +300,7 @@ func ensureKubeconfig(kubeconfig string) error {
 	}
 
 	// docker cp k3s-server:/etc/rancher/k3s/k3s.yaml <kubeconfig>
-	if err := os.MkdirAll(filepath.Dir(kubeconfig), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(kubeconfig), 0o750); err != nil {
 		return err
 	}
 	cmd := exec.Command("docker", "cp", "k3s-server:/etc/rancher/k3s/k3s.yaml", kubeconfig)
@@ -301,21 +308,22 @@ func ensureKubeconfig(kubeconfig string) error {
 		return errors.New("failed to copy kubeconfig from k3s-server: " + string(out))
 	}
 	// Replace 127.0.0.1 with localhost to match compose port mapping semantics
-	b, err := os.ReadFile(kubeconfig)
+	b, err := os.ReadFile(kubeconfig) //nolint:gosec
 	if err == nil {
-		updated := []byte{}
+		updated := make([]byte, 0, len(b))
 		updated = append(updated, b...)
 		// simple replacement (avoid bringing in strings dep already imported indirectly)
 		content := string(updated)
 		content = strings.ReplaceAll(content, "127.0.0.1", "localhost")
-		if err = os.WriteFile(kubeconfig, []byte(content), 0o644); err != nil {
+		if err = os.WriteFile(kubeconfig, []byte(content), 0o600); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func GetLogClient(options K8sLogClientOptions) (client.LogClient, error) {
+// GetLogClient returns a new Kubernetes log client.
+func GetLogClient(options LogClientOptions) (client.LogBackend, error) {
 	var kubeconfig string
 	if options.KubeConfig == "" {
 		kubeconfig = filepath.Join(homedir.HomeDir(), ".kube", "config")

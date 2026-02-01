@@ -9,11 +9,15 @@ import (
 	"github.com/bascanada/logviewer/pkg/log/client/operator"
 )
 
+// LogicOperator defines logical operators for combining filters (AND, OR, NOT).
 type LogicOperator string
 
 const (
+	// LogicAnd combines filters with AND logic.
 	LogicAnd LogicOperator = "AND"
-	LogicOr  LogicOperator = "OR"
+	// LogicOr combines filters with OR logic.
+	LogicOr LogicOperator = "OR"
+	// LogicNot inverts the result of the filter.
 	LogicNot LogicOperator = "NOT"
 )
 

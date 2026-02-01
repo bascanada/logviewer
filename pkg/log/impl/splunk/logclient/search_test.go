@@ -26,7 +26,7 @@ func TestSplunkLogSearchResult_GetEntries_Follow(t *testing.T) {
 		})
 
 	logClient, err := GetClient(SplunkLogSearchClientOptions{
-		Url:                       "http://splunk.com:8080",
+		URL:                       "http://splunk.com:8080",
 		FollowPollIntervalSeconds: 1,
 	})
 	assert.NoError(t, err)
@@ -67,7 +67,7 @@ func TestSplunkLogSearchResult_Close(t *testing.T) {
 		Reply(200)
 
 	logClient, err := GetClient(SplunkLogSearchClientOptions{
-		Url: "http://splunk.com:8080",
+		URL: "http://splunk.com:8080",
 	})
 	assert.NoError(t, err)
 

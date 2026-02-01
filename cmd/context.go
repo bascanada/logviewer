@@ -19,7 +19,7 @@ var useContextCmd = &cobra.Command{
 	Use:   "use [context-id]",
 	Short: "Set the current active context",
 	// Autocomplete for context IDs
-	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	ValidArgsFunction: func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		// We use configPath if set, otherwise default loading mechanism
 		cfg, _ := config.LoadContextConfig(configPath)
 		var suggestions []string
@@ -32,7 +32,7 @@ var useContextCmd = &cobra.Command{
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) != 1 {
-			cmd.Help()
+			_ = cmd.Help()
 			return
 		}
 		contextID := args[0]
@@ -61,7 +61,7 @@ var useContextCmd = &cobra.Command{
 var listContextsCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all available contexts",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		cfg, err := config.LoadContextConfig(configPath)
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
@@ -69,7 +69,7 @@ var listContextsCmd = &cobra.Command{
 		}
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-		fmt.Fprintln(w, "CURRENT\tNAME\tCLIENT\tDESCRIPTION")
+		_, _ = fmt.Fprintln(w, "CURRENT\tNAME\tCLIENT\tDESCRIPTION")
 
 		// Sort keys for consistent output
 		keys := make([]string, 0, len(cfg.Contexts))
@@ -84,9 +84,9 @@ var listContextsCmd = &cobra.Command{
 			if name == cfg.CurrentContext {
 				prefix = "*"
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", prefix, name, ctx.Client, ctx.Description)
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", prefix, name, ctx.Client, ctx.Description)
 		}
-		w.Flush()
+		_ = w.Flush()
 	},
 }
 

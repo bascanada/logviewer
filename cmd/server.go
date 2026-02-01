@@ -22,7 +22,7 @@ var serverCmd = &cobra.Command{
 	Short:  "Start the logviewer server",
 	Long:   `Starts an HTTP server to query logs, providing a programmatic API.`,
 	PreRun: onCommandStart,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		// NOTE: This implementation assumes a logger is configured and available via `onCommandStart`.
 		// A basic logger is created here as an example. You should integrate this with your application's logging strategy.
 		logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))

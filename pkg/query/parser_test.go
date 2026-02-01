@@ -1,10 +1,11 @@
-package query
+package query_test
 
 import (
 	"testing"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/client/operator"
+	"github.com/bascanada/logviewer/pkg/query"
 )
 
 func TestIsHLSyntax(t *testing.T) {
@@ -27,7 +28,7 @@ func TestIsHLSyntax(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := IsHLSyntax(tt.expr)
+			result := query.IsHLSyntax(tt.expr)
 			if result != tt.expected {
 				t.Errorf("IsHLSyntax(%q) = %v, want %v", tt.expr, result, tt.expected)
 			}
@@ -171,7 +172,7 @@ func TestParseFilterFlag(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := ParseFilterFlag(tt.expr)
+			result, err := query.ParseFilterFlag(tt.expr)
 
 			if tt.expectError {
 				if err == nil {
@@ -203,11 +204,11 @@ func TestParseFilterFlag(t *testing.T) {
 
 func TestParseFilterFlags(t *testing.T) {
 	tests := []struct {
-		name           string
-		exprs          []string
-		expectedCount  int
-		expectedLogic  client.LogicOperator
-		expectError    bool
+		name          string
+		exprs         []string
+		expectedCount int
+		expectedLogic client.LogicOperator
+		expectError   bool
 	}{
 		{
 			name:          "empty",
@@ -235,7 +236,7 @@ func TestParseFilterFlags(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := ParseFilterFlags(tt.exprs)
+			result, err := query.ParseFilterFlags(tt.exprs)
 
 			if tt.expectError {
 				if err == nil {
@@ -338,7 +339,7 @@ func TestParseLegacyFilter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := ParseLegacyFilter(tt.fieldExpr, tt.opExpr)
+			result, err := query.ParseLegacyFilter(tt.fieldExpr, tt.opExpr)
 
 			if tt.expectError {
 				if err == nil {

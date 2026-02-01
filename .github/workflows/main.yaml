@@ -10,18 +10,46 @@ permissions:
   packages: write
 
 jobs:
-  build:
+  quality:
+    name: Quality & Security
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      
+      - name: Set up Go 1.25.6
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        with:
+          go-version: 1.25.6
+          check-latest: true
+
+      # 1. Linter (Code Style & Bugs)
+      #- name: golangci-lint
+      #  uses: golangci/golangci-lint-action@v6
+      #  with:
+      #    version: v1.60
+
+      # 2. Vulnerability Scan (Security)
+      - name: Security Scan
+        uses: golang/govulncheck-action@b625fbe08f3bccbe446d94fbf87fcc875a4f50ee # v1.0.4
+        with:
+          go-version-input: 1.25.6
+          repo-checkout: false
+
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Login docker
         run: docker login https://ghcr.io -u wquintal -p $GITHUB_ACCESS_TOKEN
         env:
           GITHUB_ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
-      - name: Set up Go 1.23
-        uses: actions/setup-go@v5
+      - name: Set up Go 1.25.6
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
-          go-version: 1.23
+          go-version: 1.25.6
           check-latest: true
           cache-dependency-path: |
             go.sum
@@ -38,7 +66,7 @@ jobs:
         run: docker build -t ghcr.io/bascanada/logviewer:latest .
       - name: Docker push
         run: docker push ghcr.io/bascanada/logviewer:latest
-      - uses: "marvinpinto/action-automatic-releases@latest"
+      - uses: marvinpinto/action-automatic-releases@919008cf3f741b179569b7a6fb4d8860689ab7f0 # v1.2.1
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           automatic_release_tag: "latest"
@@ -47,7 +75,7 @@ jobs:
           files: |
             ./build/*
       - name: Code Coverage Report
-        uses: irongut/CodeCoverageSummary@v1.3.0
+        uses: irongut/CodeCoverageSummary@51cc3a756ddcd398d447c044c02cb6aa83fdae95 # v1.3.0
         with:
           filename: coverage.xml
           badge: true
@@ -58,3 +86,13 @@ jobs:
           indicators: true
           output: both
           thresholds: '20 80'
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

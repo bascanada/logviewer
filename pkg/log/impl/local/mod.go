@@ -17,7 +17,9 @@ import (
 )
 
 const (
-	OptionsCmd   = "cmd"
+	// OptionsCmd is the key for the command to execute.
+	OptionsCmd = "cmd"
+	// OptionsShell is the key for the shell to use.
 	OptionsShell = "shell"
 	// OptionsPaths specifies file paths to read logs from.
 	// When paths are provided and hl is available, hl will be used for high-performance filtering.
@@ -79,7 +81,7 @@ func (lc localLogClient) getWithHL(ctx context.Context, search *client.LogSearch
 	hlPath := hl.GetPath()
 	mylog.Debug("executing hl command: %s %v", hlPath, args)
 
-	ecmd := exec.CommandContext(ctx, hlPath, args...)
+	ecmd := exec.CommandContext(ctx, hlPath, args...) //nolint:gosec
 
 	stdout, err := ecmd.StdoutPipe()
 	if err != nil {
@@ -212,9 +214,9 @@ func (lc localLogClient) getWithNativeCmd(ctx context.Context, search *client.Lo
 		}
 	}
 
-	finalArgs := append(shellArgs, cmdContent)
+	shellArgs = append(shellArgs, cmdContent)
 
-	ecmd := exec.CommandContext(ctx, shellName, finalArgs...)
+	ecmd := exec.CommandContext(ctx, shellName, shellArgs...) //nolint:gosec
 
 	stdout, err := ecmd.StdoutPipe()
 	if err != nil {
@@ -238,6 +240,7 @@ func (lc localLogClient) GetFieldValues(ctx context.Context, search *client.LogS
 	return client.GetFieldValuesFromResult(ctx, result, fields)
 }
 
-func GetLogClient() (client.LogClient, error) {
+// GetLogClient returns a new local log client.
+func GetLogClient() (client.LogBackend, error) {
 	return localLogClient{}, nil
 }

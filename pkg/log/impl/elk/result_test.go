@@ -11,16 +11,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestElkSearchResult_GetPaginationInfo(t *testing.T) {
+func TestSearchResult_GetPaginationInfo(t *testing.T) {
 	t.Run("no size set, no pagination", func(t *testing.T) {
 		search := &client.LogSearch{}
-		result := ElkSearchResult{search: search}
+		result := SearchResult{search: search}
 		assert.Nil(t, result.GetPaginationInfo())
 	})
 
 	t.Run("results less than size, no more pages", func(t *testing.T) {
 		search := &client.LogSearch{Size: ty.Opt[int]{Value: 10, Set: true}}
-		result := ElkSearchResult{
+		result := SearchResult{
 			search: search,
 			result: Hits{Hits: make([]Hit, 5)},
 		}
@@ -29,7 +29,7 @@ func TestElkSearchResult_GetPaginationInfo(t *testing.T) {
 
 	t.Run("results equal size, more pages", func(t *testing.T) {
 		search := &client.LogSearch{Size: ty.Opt[int]{Value: 10, Set: true}}
-		result := ElkSearchResult{
+		result := SearchResult{
 			search: search,
 			result: Hits{Hits: make([]Hit, 10)},
 		}
@@ -44,7 +44,7 @@ func TestElkSearchResult_GetPaginationInfo(t *testing.T) {
 			Size:      ty.Opt[int]{Value: 10, Set: true},
 			PageToken: ty.Opt[string]{Value: "10", Set: true},
 		}
-		result := ElkSearchResult{
+		result := SearchResult{
 			search:        search,
 			result:        Hits{Hits: make([]Hit, 10)},
 			CurrentOffset: 10,
@@ -60,7 +60,7 @@ func TestElkSearchResult_GetPaginationInfo(t *testing.T) {
 			Size:      ty.Opt[int]{Value: 10, Set: true},
 			PageToken: ty.Opt[string]{Value: "invalid", Set: true},
 		}
-		result := ElkSearchResult{
+		result := SearchResult{
 			search: search,
 			result: Hits{Hits: make([]Hit, 10)},
 		}
@@ -71,7 +71,7 @@ func TestElkSearchResult_GetPaginationInfo(t *testing.T) {
 	})
 }
 
-// mockElkLogClient implements client.LogClient for testing refresh functionality
+// mockElkLogClient implements client.LogBackend for testing refresh functionality
 type mockElkLogClient struct {
 	getCalls     int
 	lastSearch   *client.LogSearch
@@ -79,13 +79,13 @@ type mockElkLogClient struct {
 	returnError  error
 }
 
-func (m *mockElkLogClient) Get(ctx context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
+func (m *mockElkLogClient) Get(_ context.Context, search *client.LogSearch) (client.LogSearchResult, error) {
 	m.getCalls++
 	m.lastSearch = search
 	if m.returnError != nil {
 		return nil, m.returnError
 	}
-	return ElkSearchResult{
+	return SearchResult{
 		client:  m,
 		search:  search,
 		result:  m.returnResult,
@@ -93,14 +93,14 @@ func (m *mockElkLogClient) Get(ctx context.Context, search *client.LogSearch) (c
 	}, nil
 }
 
-func (m *mockElkLogClient) GetFieldValues(ctx context.Context, search *client.LogSearch, fields []string) (map[string][]string, error) {
+func (m *mockElkLogClient) GetFieldValues(_ context.Context, _ *client.LogSearch, _ []string) (map[string][]string, error) {
 	return nil, nil
 }
 
-func TestElkSearchResult_onChange(t *testing.T) {
+func TestSearchResult_onChange(t *testing.T) {
 	t.Run("Returns nil when refresh duration is empty", func(t *testing.T) {
 		search := &client.LogSearch{}
-		result := ElkSearchResult{
+		result := SearchResult{
 			search:  search,
 			ErrChan: make(chan error, 1),
 		}
@@ -116,7 +116,7 @@ func TestElkSearchResult_onChange(t *testing.T) {
 				Duration: ty.Opt[string]{Value: "invalid", Set: true},
 			},
 		}
-		result := ElkSearchResult{
+		result := SearchResult{
 			search:  search,
 			ErrChan: make(chan error, 1),
 		}
@@ -146,7 +146,7 @@ func TestElkSearchResult_onChange(t *testing.T) {
 			},
 			// Note: Range.Lte is NOT set (empty) - this was the bug
 		}
-		result := ElkSearchResult{
+		result := SearchResult{
 			client:  mockClient,
 			search:  search,
 			ErrChan: make(chan error, 1),
@@ -194,7 +194,7 @@ func TestElkSearchResult_onChange(t *testing.T) {
 		}
 		search.Range.Lte.S(lteTime.Format(time.RFC3339))
 
-		result := ElkSearchResult{
+		result := SearchResult{
 			client:  mockClient,
 			search:  search,
 			ErrChan: make(chan error, 1),
@@ -239,7 +239,7 @@ func TestElkSearchResult_onChange(t *testing.T) {
 		// Use RFC3339Nano format
 		search.Range.Lte.S(lteTime.Format(time.RFC3339Nano))
 
-		result := ElkSearchResult{
+		result := SearchResult{
 			client:  mockClient,
 			search:  search,
 			ErrChan: make(chan error, 1),
@@ -282,7 +282,7 @@ func TestElkSearchResult_onChange(t *testing.T) {
 		}
 		search.Range.Lte.S(lteTime.Format(customFormat))
 
-		result := ElkSearchResult{
+		result := SearchResult{
 			client:  mockClient,
 			search:  search,
 			ErrChan: make(chan error, 1),
@@ -307,10 +307,10 @@ func TestElkSearchResult_onChange(t *testing.T) {
 	})
 }
 
-func TestElkSearchResult_parseResults(t *testing.T) {
+func TestSearchResult_parseResults(t *testing.T) {
 	t.Run("Parses hits correctly", func(t *testing.T) {
 		timestamp := time.Now().Format(time.RFC3339Nano)
-		result := ElkSearchResult{
+		result := SearchResult{
 			search: &client.LogSearch{Options: ty.MI{"index": "test"}},
 			result: Hits{
 				Hits: []Hit{
@@ -342,7 +342,7 @@ func TestElkSearchResult_parseResults(t *testing.T) {
 
 	t.Run("Handles missing message", func(t *testing.T) {
 		timestamp := time.Now().Format(time.RFC3339Nano)
-		result := ElkSearchResult{
+		result := SearchResult{
 			search: &client.LogSearch{Options: ty.MI{"index": "test"}},
 			result: Hits{
 				Hits: []Hit{
@@ -363,7 +363,7 @@ func TestElkSearchResult_parseResults(t *testing.T) {
 
 	t.Run("Handles message as non-string", func(t *testing.T) {
 		timestamp := time.Now().Format(time.RFC3339Nano)
-		result := ElkSearchResult{
+		result := SearchResult{
 			search: &client.LogSearch{Options: ty.MI{"index": "test"}},
 			result: Hits{
 				Hits: []Hit{
@@ -384,7 +384,7 @@ func TestElkSearchResult_parseResults(t *testing.T) {
 
 	t.Run("Parses level field", func(t *testing.T) {
 		timestamp := time.Now().Format(time.RFC3339Nano)
-		result := ElkSearchResult{
+		result := SearchResult{
 			search: &client.LogSearch{Options: ty.MI{"index": "test"}},
 			result: Hits{
 				Hits: []Hit{
@@ -405,16 +405,16 @@ func TestElkSearchResult_parseResults(t *testing.T) {
 	})
 }
 
-func TestElkSearchResult_GetSearch(t *testing.T) {
+func TestSearchResult_GetSearch(t *testing.T) {
 	search := &client.LogSearch{Follow: true}
-	result := ElkSearchResult{search: search}
+	result := SearchResult{search: search}
 
 	assert.Equal(t, search, result.GetSearch())
 }
 
-func TestElkSearchResult_Err(t *testing.T) {
+func TestSearchResult_Err(t *testing.T) {
 	errChan := make(chan error, 1)
-	result := ElkSearchResult{ErrChan: errChan}
+	result := SearchResult{ErrChan: errChan}
 
 	assert.Equal(t, (<-chan error)(errChan), result.Err())
 }

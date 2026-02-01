@@ -10,39 +10,40 @@ import (
 	"github.com/bascanada/logviewer/pkg/log/client"
 )
 
-// Base request structure for query endpoints
+// QueryRequest defines the structure for query requests.
 type QueryRequest struct {
-	ContextId string            `json:"contextId"`           // Required
+	ContextID string            `json:"contextId"`           // Required
 	Inherits  []string          `json:"inherits,omitempty"`  // Optional search inherits
 	Search    client.LogSearch  `json:"search"`              // Search overrides
 	Variables map[string]string `json:"variables,omitempty"` // Runtime variables for substitution
 }
 
-// Response for /query/logs endpoint
+// LogsResponse is the response structure for the /query/logs endpoint.
 type LogsResponse struct {
 	Logs []client.LogEntry `json:"logs,omitempty"`
 	Meta QueryMetadata     `json:"meta,omitempty"`
 }
 
-// Response for /query/fields endpoint
+// FieldsResponse is the response structure for the /query/fields endpoint.
 type FieldsResponse struct {
 	Fields map[string][]string `json:"fields,omitempty"` // field_name -> [possible_values]
 	Meta   QueryMetadata       `json:"meta,omitempty"`
 }
 
-// Response for /contexts endpoint
+// ContextsResponse is the response structure for the /contexts endpoint.
 type ContextsResponse struct {
 	Contexts []ContextInfo `json:"contexts"`
 }
 
+// ContextInfo contains details about a specific context.
 type ContextInfo struct {
-	Id            string   `json:"id"`
+	ID            string   `json:"id"`
 	Client        string   `json:"client"`
 	Description   string   `json:"description,omitempty"`
 	SearchInherit []string `json:"searchInherit,omitempty"`
 }
 
-// Metadata about query execution
+// QueryMetadata provides execution details about a query.
 type QueryMetadata struct {
 	QueryTime   string `json:"queryTime"`   // How long the query took
 	ResultCount int    `json:"resultCount"` // Number of results returned
@@ -50,14 +51,14 @@ type QueryMetadata struct {
 	ClientType  string `json:"clientType"`  // opensearch, splunk, k8s, etc.
 }
 
-func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) healthHandler(w http.ResponseWriter, _ *http.Request) {
 	s.writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (s *Server) queryLogsGETHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse required contextId
-	contextId := r.URL.Query().Get("contextId")
-	if contextId == "" {
+	contextID := r.URL.Query().Get("contextId")
+	if contextID == "" {
 		s.writeError(w, http.StatusBadRequest, ErrCodeContextNotFound, "contextId query parameter is required")
 		return
 	}
@@ -116,7 +117,7 @@ func (s *Server) queryLogsGETHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Create QueryRequest and reuse existing logic
 	req := QueryRequest{
-		ContextId: contextId,
+		ContextID: contextID,
 		Inherits:  inherits,
 		Search:    search,
 		Variables: vars,
@@ -124,7 +125,7 @@ func (s *Server) queryLogsGETHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Log the GET request
 	s.logger.Info("GET query logs request",
-		"contextId", contextId,
+		"contextId", contextID,
 		"remote_addr", r.RemoteAddr)
 
 	// Process using existing POST handler logic
@@ -134,8 +135,8 @@ func (s *Server) queryLogsGETHandler(w http.ResponseWriter, r *http.Request) {
 // GET version of /query/fields
 func (s *Server) queryFieldsGETHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse required contextId
-	contextId := r.URL.Query().Get("contextId")
-	if contextId == "" {
+	contextID := r.URL.Query().Get("contextId")
+	if contextID == "" {
 		s.writeError(w, http.StatusBadRequest, ErrCodeContextNotFound, "contextId query parameter is required")
 		return
 	}
@@ -156,12 +157,12 @@ func (s *Server) queryFieldsGETHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Create QueryRequest
 	req := QueryRequest{
-		ContextId: contextId,
+		ContextID: contextID,
 		Inherits:  inherits,
 		Search:    search,
 	}
 
-	s.logger.Info("GET query fields request", "contextId", contextId)
+	s.logger.Info("GET query fields request", "contextId", contextID)
 
 	// Process using existing POST handler logic
 	s.processQueryFieldsRequest(w, r, &req)
@@ -175,9 +176,9 @@ func (s *Server) processQueryLogsRequest(w http.ResponseWriter, r *http.Request,
 
 	startTime := time.Now()
 
-	searchResult, err := s.searchFactory.GetSearchResult(r.Context(), req.ContextId, req.Inherits, req.Search, req.Variables)
+	searchResult, err := s.searchFactory.GetSearchResult(r.Context(), req.ContextID, req.Inherits, req.Search, req.Variables)
 	if err != nil {
-		s.logger.Error("failed to get search result", "err", err, "contextId", req.ContextId)
+		s.logger.Error("failed to get search result", "err", err, "contextId", req.ContextID)
 		s.writeError(w, http.StatusBadRequest, ErrCodeInvalidSearch, err.Error())
 		return
 	}
@@ -189,7 +190,7 @@ func (s *Server) processQueryLogsRequest(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	sc, err := s.config.GetSearchContext(req.ContextId, req.Inherits, req.Search, nil)
+	sc, err := s.config.GetSearchContext(req.ContextID, req.Inherits, req.Search, nil)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, ErrCodeContextNotFound, "Could not get search context")
 		return
@@ -200,7 +201,7 @@ func (s *Server) processQueryLogsRequest(w http.ResponseWriter, r *http.Request,
 		Meta: QueryMetadata{
 			QueryTime:   time.Since(startTime).String(),
 			ResultCount: len(entries),
-			ContextUsed: req.ContextId,
+			ContextUsed: req.ContextID,
 			ClientType:  s.config.Clients[sc.Client].Type,
 		},
 	}
@@ -247,9 +248,9 @@ func (s *Server) processQueryFieldsRequest(w http.ResponseWriter, r *http.Reques
 
 	startTime := time.Now()
 
-	searchResult, err := s.searchFactory.GetSearchResult(r.Context(), req.ContextId, req.Inherits, req.Search, req.Variables)
+	searchResult, err := s.searchFactory.GetSearchResult(r.Context(), req.ContextID, req.Inherits, req.Search, req.Variables)
 	if err != nil {
-		s.logger.Error("failed to get search result", "err", err, "contextId", req.ContextId)
+		s.logger.Error("failed to get search result", "err", err, "contextId", req.ContextID)
 		s.writeError(w, http.StatusBadRequest, ErrCodeInvalidSearch, err.Error())
 		return
 	}
@@ -261,7 +262,7 @@ func (s *Server) processQueryFieldsRequest(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	sc, err := s.config.GetSearchContext(req.ContextId, req.Inherits, req.Search, nil)
+	sc, err := s.config.GetSearchContext(req.ContextID, req.Inherits, req.Search, nil)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, ErrCodeContextNotFound, "Could not get search context")
 		return
@@ -272,7 +273,7 @@ func (s *Server) processQueryFieldsRequest(w http.ResponseWriter, r *http.Reques
 		Meta: QueryMetadata{
 			QueryTime:   time.Since(startTime).String(),
 			ResultCount: len(fields),
-			ContextUsed: req.ContextId,
+			ContextUsed: req.ContextID,
 			ClientType:  s.config.Clients[sc.Client].Type,
 		},
 	}
@@ -289,10 +290,10 @@ func (s *Server) queryFieldsHandler(w http.ResponseWriter, r *http.Request) {
 	s.processQueryFieldsRequest(w, r, &req)
 }
 
-func (s *Server) openapiHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) openapiHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/yaml")
 	w.WriteHeader(http.StatusOK)
-	w.Write(s.openapiSpec)
+	_, _ = w.Write(s.openapiSpec)
 }
 
 func (s *Server) contextsHandler(w http.ResponseWriter, r *http.Request) {
@@ -309,7 +310,7 @@ func (s *Server) contextsHandler(w http.ResponseWriter, r *http.Request) {
 		var contexts []ContextInfo
 		for id, context := range s.config.Contexts {
 			contexts = append(contexts, ContextInfo{
-				Id:            id,
+				ID:            id,
 				Client:        context.Client,
 				SearchInherit: context.SearchInherit,
 			})
@@ -320,15 +321,15 @@ func (s *Server) contextsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get a specific context
-	contextId := path
-	context, ok := s.config.Contexts[contextId]
+	contextID := path
+	context, ok := s.config.Contexts[contextID]
 	if !ok {
 		s.writeError(w, http.StatusNotFound, ErrCodeContextNotFound, "Context not found")
 		return
 	}
 
 	info := ContextInfo{
-		Id:            contextId,
+		ID:            contextID,
 		Client:        context.Client,
 		SearchInherit: context.SearchInherit,
 	}

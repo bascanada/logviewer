@@ -43,7 +43,7 @@ func makeLogFrame(msg string) []byte {
 
 func TestServiceLogs(t *testing.T) {
 	mockClient := new(MockDockerClient)
-	lc := DockerLogClient{
+	lc := LogClient{
 		apiClient: mockClient,
 		host:      "local",
 	}
@@ -104,7 +104,7 @@ func TestServiceLogs(t *testing.T) {
 
 func TestServiceLogs_SingleContainer(t *testing.T) {
 	mockClient := new(MockDockerClient)
-	lc := DockerLogClient{
+	lc := LogClient{
 		apiClient: mockClient,
 		host:      "local",
 	}
@@ -137,6 +137,122 @@ func TestServiceLogs_SingleContainer(t *testing.T) {
 
 	assert.Len(t, entries, 1)
 	assert.Equal(t, " single log", entries[0].Message)
+
+	mockClient.AssertExpectations(t)
+}
+
+func TestServiceLogs_ProjectFilter(t *testing.T) {
+	mockClient := new(MockDockerClient)
+	lc := LogClient{
+		apiClient: mockClient,
+		host:      "local",
+	}
+
+	ctx := context.Background()
+	search := &logclient.LogSearch{
+		Options: ty.MI{
+			"service": "web-app",
+			"project": "my-project",
+		},
+	}
+
+	mockClient.On("ContainerList", ctx, mock.MatchedBy(func(opts container.ListOptions) bool {
+		return opts.Filters.ExactMatch("label", "com.docker.compose.service=web-app") &&
+			opts.Filters.ExactMatch("label", "com.docker.compose.project=my-project")
+	})).Return([]types.Container{
+		{ID: "c1", Names: []string{"/web-app-1"}},
+	}, nil)
+
+	logContent := makeLogFrame("log\n")
+	mockClient.On("ContainerLogs", ctx, "c1", mock.Anything).Return(io.NopCloser(bytes.NewReader(logContent)), nil)
+
+	_, err := lc.Get(ctx, search)
+	assert.NoError(t, err)
+	mockClient.AssertExpectations(t)
+}
+
+func TestServiceLogs_ListError(t *testing.T) {
+	mockClient := new(MockDockerClient)
+	lc := LogClient{
+		apiClient: mockClient,
+		host:      "local",
+	}
+
+	ctx := context.Background()
+	search := &logclient.LogSearch{
+		Options: ty.MI{
+			"service": "web-app",
+		},
+	}
+
+	mockClient.On("ContainerList", ctx, mock.Anything).Return([]types.Container{}, assert.AnError)
+
+	_, err := lc.Get(ctx, search)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to list containers")
+	mockClient.AssertExpectations(t)
+}
+
+func TestServiceLogs_NoContainers(t *testing.T) {
+	mockClient := new(MockDockerClient)
+	lc := LogClient{
+		apiClient: mockClient,
+		host:      "local",
+	}
+
+	ctx := context.Background()
+	search := &logclient.LogSearch{
+		Options: ty.MI{
+			"service": "web-app",
+		},
+	}
+
+	mockClient.On("ContainerList", ctx, mock.Anything).Return([]types.Container{}, nil)
+
+	_, err := lc.Get(ctx, search)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no running containers found")
+	mockClient.AssertExpectations(t)
+}
+
+func TestServiceLogs_PartialFailure(t *testing.T) {
+	mockClient := new(MockDockerClient)
+	lc := LogClient{
+		apiClient: mockClient,
+		host:      "local",
+	}
+
+	ctx := context.Background()
+	search := &logclient.LogSearch{
+		Options: ty.MI{
+			"service": "web-app",
+		},
+		FieldExtraction: logclient.FieldExtraction{
+			TimestampRegex: ty.Opt[string]{},
+		},
+	}
+
+	mockClient.On("ContainerList", ctx, mock.Anything).Return([]types.Container{
+		{ID: "container_id_1", Names: []string{"/web-app-1"}},
+		{ID: "container_id_2", Names: []string{"/web-app-2"}},
+	}, nil)
+
+	// c1 succeeds
+	logContent1 := makeLogFrame("2024-01-01T00:00:01.000000000Z log from c1\n")
+	mockClient.On("ContainerLogs", ctx, "container_id_1", mock.Anything).Return(io.NopCloser(bytes.NewReader(logContent1)), nil)
+	
+	// c2 fails
+	mockClient.On("ContainerLogs", ctx, "container_id_2", mock.Anything).Return(io.NopCloser(bytes.NewReader(nil)), assert.AnError)
+
+	result, err := lc.Get(ctx, search)
+	assert.NoError(t, err) // Should still succeed partially
+
+	entries, _, err := result.GetEntries(ctx)
+	assert.NoError(t, err)
+
+	// Should have logs from c1
+	assert.Len(t, entries, 1)
+	assert.Equal(t, " log from c1", entries[0].Message)
 
 	mockClient.AssertExpectations(t)
 }

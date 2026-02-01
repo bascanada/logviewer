@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"sort"
 	"strings"
 	"sync"
 
@@ -29,18 +28,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// mergeFilterWithAnd merges a new filter into an existing filter using AND logic.
-// If existing is nil, it will be set to the new filter.
-func mergeFilterWithAnd(existing **client.Filter, new *client.Filter) {
-	if new == nil {
+// mergeFilterWithAnd merges a filter into an existing filter using AND logic.
+// If existing is nil, it will be set to the added filter.
+func mergeFilterWithAnd(existing **client.Filter, added *client.Filter) {
+	if added == nil {
 		return
 	}
 	if *existing == nil {
-		*existing = new
+		*existing = added
 	} else {
 		*existing = &client.Filter{
 			Logic:   client.LogicAnd,
-			Filters: []client.Filter{**existing, *new},
+			Filters: []client.Filter{**existing, *added},
 		}
 	}
 }
@@ -84,32 +83,55 @@ func buildSearchRequest() client.LogSearch {
 		Options:         ty.MI{},
 	}
 
+	parseBasicFlags(&searchRequest)
+	parseTimeFlags(&searchRequest)
+	parseFieldExtractionFlags(&searchRequest)
+	parseFieldFlags(&searchRequest)
+	parseClientOptions(&searchRequest)
+
+	return searchRequest
+}
+
+func parseBasicFlags(req *client.LogSearch) {
 	if size > 0 {
-		searchRequest.Size.S(size)
+		req.Size.S(size)
 	}
 	if pageToken != "" {
-		searchRequest.PageToken.S(pageToken)
+		req.PageToken.S(pageToken)
 	}
 	if duration != "" {
-		searchRequest.Refresh.Duration.S(duration)
+		req.Refresh.Duration.S(duration)
 	}
-	if groupRegex != "" {
-		searchRequest.FieldExtraction.GroupRegex.S(groupRegex)
+	if nativeQuery != "" {
+		req.NativeQuery.S(nativeQuery)
 	}
-	if kvRegex != "" {
-		searchRequest.FieldExtraction.KvRegex.S(kvRegex)
-	}
+	req.Follow = refresh
+}
+
+func parseTimeFlags(req *client.LogSearch) {
 	if to != "" {
 		normalizedTo, _ := ty.NormalizeTimeValue(to)
-		searchRequest.Range.Lte.S(normalizedTo)
+		req.Range.Lte.S(normalizedTo)
 	}
 	if from != "" {
 		normalizedFrom, _ := ty.NormalizeTimeValue(from)
-		searchRequest.Range.Gte.S(normalizedFrom)
+		req.Range.Gte.S(normalizedFrom)
 	}
 	if last != "" {
-		searchRequest.Range.Last.S(last)
+		req.Range.Last.S(last)
 	}
+}
+
+func parseFieldExtractionFlags(req *client.LogSearch) {
+	if groupRegex != "" {
+		req.FieldExtraction.GroupRegex.S(groupRegex)
+	}
+	if kvRegex != "" {
+		req.FieldExtraction.KvRegex.S(kvRegex)
+	}
+}
+
+func parseFieldFlags(req *client.LogSearch) {
 	// Parse fields: auto-detect hl syntax vs legacy syntax
 	if len(fields) > 0 {
 		var hlFields []string
@@ -125,7 +147,7 @@ func buildSearchRequest() client.LogSearch {
 
 		// Process legacy fields (field=value)
 		if len(legacyFields) > 0 {
-			stringArrayEnvVariable(legacyFields, &searchRequest.Fields)
+			_ = stringArrayEnvVariable(legacyFields, &req.Fields)
 		}
 
 		// Process hl-syntax fields into Filter
@@ -134,12 +156,12 @@ func buildSearchRequest() client.LogSearch {
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "warning: failed to parse filter: %v\n", err)
 			} else {
-				mergeFilterWithAnd(&searchRequest.Filter, hlFilter)
+				mergeFilterWithAnd(&req.Filter, hlFilter)
 			}
 		}
 	}
 	if len(fieldsOps) > 0 {
-		stringArrayEnvVariable(fieldsOps, &searchRequest.FieldsCondition)
+		_ = stringArrayEnvVariable(fieldsOps, &req.FieldsCondition)
 	}
 
 	// Parse -q/--query expression
@@ -148,48 +170,50 @@ func buildSearchRequest() client.LogSearch {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: failed to parse query expression: %v\n", err)
 		} else {
-			mergeFilterWithAnd(&searchRequest.Filter, queryFilter)
+			mergeFilterWithAnd(&req.Filter, queryFilter)
 		}
 	}
+}
 
+func parseClientOptions(req *client.LogSearch) {
 	if index != "" {
-		searchRequest.Options["index"] = index
+		req.Options["index"] = index
 	}
 	if k8sContainer != "" {
-		searchRequest.Options[k8s.FieldContainer] = k8sContainer
+		req.Options[k8s.FieldContainer] = k8sContainer
 	}
 	if k8sNamespace != "" {
-		searchRequest.Options[k8s.FieldNamespace] = k8sNamespace
+		req.Options[k8s.FieldNamespace] = k8sNamespace
 	}
 	if k8sPod != "" {
-		searchRequest.Options[k8s.FieldPod] = k8sPod
+		req.Options[k8s.FieldPod] = k8sPod
 	}
 	if k8sLabelSelector != "" {
-		searchRequest.Options[k8s.FieldLabelSelector] = k8sLabelSelector
+		req.Options[k8s.FieldLabelSelector] = k8sLabelSelector
 	}
 	if k8sPrevious {
-		searchRequest.Options[k8s.FieldPrevious] = k8sPrevious
+		req.Options[k8s.FieldPrevious] = k8sPrevious
 	}
 	if k8sTimestamp {
-		searchRequest.Options[k8s.OptionsTimestamp] = k8sTimestamp
+		req.Options[k8s.OptionsTimestamp] = k8sTimestamp
 	}
 	if cmd != "" {
-		searchRequest.Options[local.OptionsCmd] = cmd
+		req.Options[local.OptionsCmd] = cmd
 	}
 	if sshOptions.DisablePTY {
-		searchRequest.Options["disablePTY"] = true
+		req.Options["disablePTY"] = true
 	}
 	if template != "" {
-		searchRequest.PrinterOptions.Template.S(template)
+		req.PrinterOptions.Template.S(template)
 	}
 
 	// Handle color flag
 	if colorOutput != "" {
 		switch colorOutput {
 		case "always":
-			searchRequest.PrinterOptions.Color.S(true)
+			req.PrinterOptions.Color.S(true)
 		case "never":
-			searchRequest.PrinterOptions.Color.S(false)
+			req.PrinterOptions.Color.S(false)
 		case "auto":
 			// Don't set - will auto-detect TTY
 		default:
@@ -198,21 +222,14 @@ func buildSearchRequest() client.LogSearch {
 	}
 
 	if dockerContainer != "" {
-		searchRequest.Options["container"] = dockerContainer
+		req.Options["container"] = dockerContainer
 	}
 	if dockerService != "" {
-		searchRequest.Options["service"] = dockerService
+		req.Options["service"] = dockerService
 	}
 	if dockerProject != "" {
-		searchRequest.Options["project"] = dockerProject
+		req.Options["project"] = dockerProject
 	}
-	if nativeQuery != "" {
-		searchRequest.NativeQuery.S(nativeQuery)
-	}
-
-	searchRequest.Follow = refresh
-
-	return searchRequest
 }
 
 // parseRuntimeVars parses --var flags into a map
@@ -227,10 +244,10 @@ func parseRuntimeVars() map[string]string {
 	return runtimeVars
 }
 
-// resolveContextIdsFromConfig resolves context IDs, using current context if none specified
-func resolveContextIdsFromConfig(cfg *config.ContextConfig) []string {
-	if len(contextIds) > 0 {
-		return contextIds
+// resolveContextIDsFromConfig resolves context IDs, using current context if none specified
+func resolveContextIDsFromConfig(cfg *config.ContextConfig) []string {
+	if len(contextIDs) > 0 {
+		return contextIDs
 	}
 	if cfg.CurrentContext != "" {
 		if _, ok := cfg.Contexts[cfg.CurrentContext]; ok {
@@ -245,36 +262,37 @@ func isAdHocQuery() bool {
 	return endpointOpensearch != "" ||
 		endpointKibana != "" ||
 		cloudwatchLogGroup != "" ||
-		(k8sNamespace != "" && len(contextIds) == 0 && configPath == "") ||
-		(cmd != "" && len(contextIds) == 0 && configPath == "") ||
+		(k8sNamespace != "" && len(contextIDs) == 0 && configPath == "") ||
+		(cmd != "" && len(contextIDs) == 0 && configPath == "") ||
 		endpointSplunk != "" ||
-		((dockerContainer != "" || dockerService != "") && len(contextIds) == 0 && configPath == "")
+		((dockerContainer != "" || dockerService != "") && len(contextIDs) == 0 && configPath == "")
 }
 
 // getAdHocLogClient creates a LogClient from ad-hoc CLI flags
-func getAdHocLogClient(searchRequest *client.LogSearch) (client.LogClient, error) {
+func getAdHocLogClient(searchRequest *client.LogSearch) (client.LogBackend, error) {
 	var err error
 	var system string
 
-	if endpointOpensearch != "" {
+	switch {
+	case endpointOpensearch != "":
 		system = "opensearch"
-	} else if endpointKibana != "" {
+	case endpointKibana != "":
 		system = "kibana"
-	} else if cloudwatchLogGroup != "" {
+	case cloudwatchLogGroup != "":
 		system = "cloudwatch"
-	} else if k8sNamespace != "" {
+	case k8sNamespace != "":
 		system = "k8s"
-	} else if cmd != "" {
+	case cmd != "":
 		if sshOptions.Addr != "" {
 			system = "ssh"
 		} else {
 			system = "local"
 		}
-	} else if endpointSplunk != "" {
+	case endpointSplunk != "":
 		system = "splunk"
-	} else if dockerContainer != "" || dockerService != "" {
+	case dockerContainer != "" || dockerService != "":
 		system = "docker"
-	} else {
+	default:
 		return nil, errors.New(`
         failed to select a system for logging provide one of the following:
 			* --docker-container or --docker-service
@@ -287,13 +305,13 @@ func getAdHocLogClient(searchRequest *client.LogSearch) (client.LogClient, error
         `)
 	}
 
-	var logClient client.LogClient
+	var logClient client.LogBackend
 
 	switch system {
 	case "opensearch":
-		logClient, err = opensearch.GetClient(opensearch.OpenSearchTarget{Endpoint: endpointOpensearch})
+		logClient, err = opensearch.GetClient(opensearch.Target{Endpoint: endpointOpensearch})
 	case "kibana":
-		logClient, err = kibana.GetClient(kibana.KibanaTarget{Endpoint: endpointKibana})
+		logClient, err = kibana.GetClient(kibana.Target{Endpoint: endpointKibana})
 	case "cloudwatch":
 		opts := ty.MI{}
 		if cloudwatchRegion != "" {
@@ -320,7 +338,7 @@ func getAdHocLogClient(searchRequest *client.LogSearch) (client.LogClient, error
 		}
 		logClient, err = cloudwatch.GetLogClient(opts)
 	case "k8s":
-		logClient, err = k8s.GetLogClient(k8s.K8sLogClientOptions{})
+		logClient, err = k8s.GetLogClient(k8s.LogClientOptions{})
 	case "ssh":
 		logClient, err = ssh.GetLogClient(sshOptions)
 	case "docker":
@@ -341,7 +359,7 @@ func getAdHocLogClient(searchRequest *client.LogSearch) (client.LogClient, error
 			body = body.ResolveVariables()
 		}
 		logClient, err = splunk.GetClient(splunk.SplunkLogSearchClientOptions{
-			Url:        endpointSplunk,
+			URL:        endpointSplunk,
 			SearchBody: body,
 			Headers:    headers,
 		})
@@ -356,13 +374,13 @@ func resolveSearch() (client.LogSearchResult, error) {
 	searchRequest := buildSearchRequest()
 
 	// Check if this is a config-based query
-	if configPath != "" || len(contextIds) > 0 {
+	if configPath != "" || len(contextIDs) > 0 {
 		cfg, _, err := loadConfig(configPath)
 		if err != nil {
 			return nil, err
 		}
 
-		clientFactory, err := factory.GetLogClientFactory(cfg.Clients)
+		clientFactory, err := factory.GetLogBackendFactory(cfg.Clients)
 		if err != nil {
 			return nil, err
 		}
@@ -373,17 +391,17 @@ func resolveSearch() (client.LogSearchResult, error) {
 		}
 
 		runtimeVars := parseRuntimeVars()
-		resolvedContextIds := resolveContextIdsFromConfig(cfg)
+		resolvedContextIDs := resolveContextIDsFromConfig(cfg)
 
-		if len(resolvedContextIds) == 0 {
+		if len(resolvedContextIDs) == 0 {
 			return nil, errors.New("no contexts specified for query; use -i to select one or more contexts or set a default with 'logviewer context use'")
 		}
 
 		// For single context, execute directly without MultiLogSearchResult wrapper
-		if len(resolvedContextIds) == 1 {
+		if len(resolvedContextIDs) == 1 {
 			ctx := context.Background()
-			searchRequest.Options["__context_id__"] = resolvedContextIds[0]
-			return searchFactory.GetSearchResult(ctx, resolvedContextIds[0], inherits, searchRequest, runtimeVars)
+			searchRequest.Options["__context_id__"] = resolvedContextIDs[0]
+			return searchFactory.GetSearchResult(ctx, resolvedContextIDs[0], inherits, searchRequest, runtimeVars)
 		}
 
 		// Fan-out: execute queries for each context concurrently.
@@ -394,7 +412,7 @@ func resolveSearch() (client.LogSearchResult, error) {
 		var wg sync.WaitGroup
 		ctx := context.Background()
 
-		for _, contextId := range resolvedContextIds {
+		for _, contextID := range resolvedContextIDs {
 			wg.Add(1)
 			go func(cid string) {
 				defer wg.Done()
@@ -411,7 +429,7 @@ func resolveSearch() (client.LogSearchResult, error) {
 				}
 				sr, err := searchFactory.GetSearchResult(ctx, cid, inherits, reqCopy, runtimeVars)
 				multiResult.Add(sr, err)
-			}(contextId)
+			}(contextID)
 		}
 
 		wg.Wait()
@@ -447,117 +465,21 @@ func resolveSearch() (client.LogSearchResult, error) {
 	return searchResult, nil
 }
 
-// resolveFieldValues handles both config-based and ad-hoc queries for field values
-func resolveFieldValues(fieldNames []string) (map[string][]string, error) {
-	searchRequest := buildSearchRequest()
-	ctx := context.Background()
-
-	// Check if this is an ad-hoc query
-	if isAdHocQuery() {
-		logClient, err := getAdHocLogClient(&searchRequest)
-		if err != nil {
-			return nil, err
-		}
-		return logClient.GetFieldValues(ctx, &searchRequest, fieldNames)
-	}
-
-	// Config-based query
-	if configPath == "" && len(contextIds) == 0 {
-		return nil, errors.New("no config or context specified; use -i to select a context or provide endpoint flags for ad-hoc query")
-	}
-
-	cfg, _, err := loadConfig(configPath)
-	if err != nil {
-		return nil, err
-	}
-
-	clientFactory, err := factory.GetLogClientFactory(cfg.Clients)
-	if err != nil {
-		return nil, err
-	}
-
-	searchFactory, err := factory.GetLogSearchFactory(clientFactory, *cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	runtimeVars := parseRuntimeVars()
-	resolvedContextIds := resolveContextIdsFromConfig(cfg)
-
-	if len(resolvedContextIds) == 0 {
-		return nil, errors.New("no context specified; use -i to select a context")
-	}
-
-	// For multiple contexts, aggregate results using sets for efficiency
-	allResultsSet := make(map[string]map[string]struct{})
-	var hasError bool
-
-	for _, contextId := range resolvedContextIds {
-		if len(resolvedContextIds) > 1 {
-			fmt.Fprintf(os.Stderr, "=== Context: %s ===\n", contextId)
-		}
-
-		fieldValues, err := searchFactory.GetFieldValues(ctx, contextId, inherits, searchRequest, fieldNames, runtimeVars)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error getting field values for %s: %v\n", contextId, err)
-			hasError = true
-			continue
-		}
-
-		// Merge results into a set for uniqueness
-		for field, values := range fieldValues {
-			if _, ok := allResultsSet[field]; !ok {
-				allResultsSet[field] = make(map[string]struct{})
-			}
-			for _, v := range values {
-				allResultsSet[field][v] = struct{}{}
-			}
-		}
-	}
-
-	if hasError && len(allResultsSet) == 0 {
-		return nil, errors.New("failed to get field values from all contexts")
-	}
-
-	// Convert sets to sorted slices for deterministic output
-	allResults := make(map[string][]string, len(allResultsSet))
-	for field, valuesSet := range allResultsSet {
-		values := make([]string, 0, len(valuesSet))
-		for v := range valuesSet {
-			values = append(values, v)
-		}
-		sort.Strings(values)
-		allResults[field] = values
-	}
-
-	return allResults, nil
-}
-
 var queryFieldCommand = &cobra.Command{
 	Use:    "field",
 	Short:  "Dispaly available field for filtering of logs",
 	PreRun: onCommandStart,
-	Run: func(cmd *cobra.Command, args []string) {
-		searchResult, err1 := resolveSearch()
-
-		if err1 != nil {
-			fmt.Fprintln(os.Stderr, "error:", err1)
-			os.Exit(1)
-		}
-		searchResult.GetEntries(context.Background())
-		fields, _, err := searchResult.GetFields(context.Background())
+	Run: func(_ *cobra.Command, _ []string) {
+		logClient, search, err := resolveLogClient()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
 		}
 
-		for k, b := range fields {
-			fmt.Printf("%s \n", k)
-			for _, r := range b {
-				fmt.Println("    " + r)
-			}
+		if err := RunQueryField(os.Stdout, logClient, search); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
 		}
-
 	},
 }
 
@@ -565,7 +487,7 @@ var queryLogCommand = &cobra.Command{
 	Use:    "log",
 	Short:  "Display logs for system",
 	PreRun: onCommandStart,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		searchResult, err1 := resolveSearch()
 
 		if err1 != nil {
@@ -621,12 +543,12 @@ var queryLogCommand = &cobra.Command{
 			fmt.Fprintf(os.Stderr, "Error displaying logs: %v\n", err)
 			os.Exit(1)
 		}
-		continous, err := outputter.Display(context.Background(), searchResult, onError)
+		continuous, err := outputter.Display(context.Background(), searchResult, onError)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error displaying logs: %v\n", err)
 			os.Exit(1)
 		}
-		if continous {
+		if continuous {
 			c := make(chan os.Signal, 1)
 			signal.Notify(c, os.Interrupt)
 			<-c
@@ -662,35 +584,18 @@ Examples:
   logviewer query values level app --opensearch-endpoint http://localhost:9200 --elk-index app-logs --last 1h`,
 	PreRun: onCommandStart,
 	Args:   cobra.MinimumNArgs(1), // Require at least one field
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		fieldNames := args
 
-		fieldValues, err := resolveFieldValues(fieldNames)
+		logClient, search, err := resolveLogClient()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
 		}
 
-		if jsonOutput {
-			enc := json.NewEncoder(os.Stdout)
-			if err := enc.Encode(fieldValues); err != nil {
-				fmt.Fprintf(os.Stderr, "error encoding JSON: %v\n", err)
-				os.Exit(1)
-			}
-		} else {
-			// Output as formatted text (same format as query field)
-			for _, field := range fieldNames {
-				values, ok := fieldValues[field]
-				if !ok || len(values) == 0 {
-					fmt.Printf("%s \n", field)
-					fmt.Println("    (no values found)")
-					continue
-				}
-				fmt.Printf("%s \n", field)
-				for _, v := range values {
-					fmt.Println("    " + v)
-				}
-			}
+		if err := RunQueryValues(os.Stdout, logClient, search, fieldNames, jsonOutput); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
 		}
 	},
 }
@@ -699,8 +604,8 @@ var queryCommand = &cobra.Command{
 	Use:    "query",
 	Short:  "Query a login system for logs and available fields",
 	PreRun: onCommandStart,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		cmd.Println("Please use 'logviewer query log' to stream logs, 'logviewer query field' to inspect fields, or 'logviewer query values' to get distinct values.")
-		cmd.Help()
+		_ = cmd.Help()
 	},
 }

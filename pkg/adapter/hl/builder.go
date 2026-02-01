@@ -32,17 +32,13 @@ func BuildArgs(search *client.LogSearch, paths []string) ([]string, error) {
 	}
 
 	// Handle time range
-	if timeArgs, err := buildTimeRangeArgs(search); err != nil {
+	timeArgs, err := buildTimeRangeArgs(search)
+	if err != nil {
 		return nil, fmt.Errorf("building time range: %w", err)
-	} else {
-		args = append(args, timeArgs...)
 	}
+	args = append(args, timeArgs...)
 
 	// Handle size/limit
-	if search.Size.Set && search.Size.Value > 0 {
-		// hl doesn't have a direct --limit, but we can use head in a pipeline
-		// For now, we'll handle this in the caller
-	}
 
 	// Build filter expression from the effective filter
 	effectiveFilter := search.GetEffectiveFilter()
@@ -271,7 +267,7 @@ func escapeValue(value string) string {
 func BuildSimpleArgs(paths []string, follow bool, since string, filters map[string]string) []string {
 	var args []string
 
-	args = append(args, "-P")     // Disable pager
+	args = append(args, "-P")    // Disable pager
 	args = append(args, "--raw") // Output raw JSON
 
 	if follow {

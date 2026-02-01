@@ -1,3 +1,4 @@
+//nolint:revive // intentional package name for testing
 package http
 
 import (
