@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/docker/cli/cli/connhelper"
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
@@ -24,8 +25,14 @@ import (
 const regexDockerTimestamp = "(([0-9]*)-([0-9]*)-([0-9]*)T([0-9]*):([0-9]*):([0-9]*).([0-9]*)Z)"
 const dockerPingTimeout = 10 * time.Second
 
+type DockerAPIClient interface {
+	ContainerList(ctx context.Context, options container.ListOptions) ([]types.Container, error)
+	ContainerLogs(ctx context.Context, container string, options container.LogsOptions) (io.ReadCloser, error)
+	Ping(ctx context.Context) (types.Ping, error)
+}
+
 type DockerLogClient struct {
-	apiClient *client.Client
+	apiClient DockerAPIClient
 	host      string
 }
 
