@@ -495,13 +495,13 @@ func TestMergeIntoWithFilter(t *testing.T) {
 
 func TestFilterClone(t *testing.T) {
 	t.Run("Clone nil filter returns nil", func(t *testing.T) {
-		var f *Filter
+		var f *client.Filter
 		clone := f.Clone()
 		assert.Nil(t, clone)
 	})
 
 	t.Run("Clone simple leaf filter", func(t *testing.T) {
-		original := &Filter{
+		original := &client.Filter{
 			Field:  "level",
 			Op:     operator.Equals,
 			Value:  "ERROR",
@@ -528,9 +528,9 @@ func TestFilterClone(t *testing.T) {
 	})
 
 	t.Run("Clone branch filter with single level nesting", func(t *testing.T) {
-		original := &Filter{
-			Logic: LogicAnd,
-			Filters: []Filter{
+		original := &client.Filter{
+			Logic: client.LogicAnd,
+			Filters: []client.Filter{
 				{Field: "level", Op: operator.Equals, Value: "ERROR"},
 				{Field: "app", Op: operator.Equals, Value: "myapp"},
 			},
@@ -556,17 +556,17 @@ func TestFilterClone(t *testing.T) {
 	})
 
 	t.Run("Clone deeply nested filters", func(t *testing.T) {
-		original := &Filter{
-			Logic: LogicAnd,
-			Filters: []Filter{
+		original := &client.Filter{
+			Logic: client.LogicAnd,
+			Filters: []client.Filter{
 				{Field: "level", Op: operator.Equals, Value: "ERROR"},
 				{
-					Logic: LogicOr,
-					Filters: []Filter{
+					Logic: client.LogicOr,
+					Filters: []client.Filter{
 						{Field: "app", Op: operator.Equals, Value: "app1"},
 						{
-							Logic: LogicAnd,
-							Filters: []Filter{
+							Logic: client.LogicAnd,
+							Filters: []client.Filter{
 								{Field: "status", Op: operator.Equals, Value: "500"},
 								{Field: "user", Op: operator.Exists},
 							},
@@ -579,13 +579,13 @@ func TestFilterClone(t *testing.T) {
 		clone := original.Clone()
 
 		// Verify structure is preserved
-		assert.Equal(t, LogicAnd, clone.Logic)
+		assert.Equal(t, client.LogicAnd, clone.Logic)
 		assert.Len(t, clone.Filters, 2)
 		assert.Equal(t, "level", clone.Filters[0].Field)
-		assert.Equal(t, LogicOr, clone.Filters[1].Logic)
+		assert.Equal(t, client.LogicOr, clone.Filters[1].Logic)
 		assert.Len(t, clone.Filters[1].Filters, 2)
 		assert.Equal(t, "app", clone.Filters[1].Filters[0].Field)
-		assert.Equal(t, LogicAnd, clone.Filters[1].Filters[1].Logic)
+		assert.Equal(t, client.LogicAnd, clone.Filters[1].Filters[1].Logic)
 		assert.Len(t, clone.Filters[1].Filters[1].Filters, 2)
 
 		// Verify deep copy - modify deeply nested filter
@@ -598,7 +598,7 @@ func TestFilterClone(t *testing.T) {
 	})
 
 	t.Run("Clone filter with Negate flag", func(t *testing.T) {
-		original := &Filter{
+		original := &client.Filter{
 			Field:  "status",
 			Op:     operator.Equals,
 			Value:  "200",
@@ -617,28 +617,28 @@ func TestFilterClone(t *testing.T) {
 	})
 
 	t.Run("Clone empty branch filter", func(t *testing.T) {
-		original := &Filter{
-			Logic:   LogicAnd,
-			Filters: []Filter{},
+		original := &client.Filter{
+			Logic:   client.LogicAnd,
+			Filters: []client.Filter{},
 		}
 
 		clone := original.Clone()
 
-		assert.Equal(t, LogicAnd, clone.Logic)
+		assert.Equal(t, client.LogicAnd, clone.Logic)
 		assert.Len(t, clone.Filters, 0)
 	})
 
 	t.Run("Clone filter with NOT logic", func(t *testing.T) {
-		original := &Filter{
-			Logic: LogicNot,
-			Filters: []Filter{
+		original := &client.Filter{
+			Logic: client.LogicNot,
+			Filters: []client.Filter{
 				{Field: "level", Op: operator.Equals, Value: "DEBUG"},
 			},
 		}
 
 		clone := original.Clone()
 
-		assert.Equal(t, LogicNot, clone.Logic)
+		assert.Equal(t, client.LogicNot, clone.Logic)
 		assert.Len(t, clone.Filters, 1)
 		assert.Equal(t, "level", clone.Filters[0].Field)
 

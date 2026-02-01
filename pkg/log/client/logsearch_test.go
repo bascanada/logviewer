@@ -77,7 +77,7 @@ func TestMergingPrinterOptions(t *testing.T) {
 
 func TestClone(t *testing.T) {
 	t.Run("Clone creates deep copy of LogSearch", func(t *testing.T) {
-		original := &LogSearch{
+		original := &client.LogSearch{
 			Follow: true,
 			Size:   ty.Opt[int]{Value: 100, Set: true},
 			Options: ty.MI{
@@ -91,8 +91,8 @@ func TestClone(t *testing.T) {
 			FieldsCondition: ty.MS{
 				"field1": "equals",
 			},
-			Variables: map[string]VariableDefinition{
-				"var1": {Description: "test variable"},
+			   Variables: map[string]client.VariableDefinition{
+				   "var1": {Description: "test variable"},
 			},
 		}
 
@@ -110,7 +110,7 @@ func TestClone(t *testing.T) {
 		clone.Options["container"] = "modified-container"
 		clone.Fields["field1"] = "modified-value"
 		clone.FieldsCondition["field1"] = "modified-condition"
-		clone.Variables["var1"] = VariableDefinition{Description: "modified"}
+		clone.Variables["var1"] = client.VariableDefinition{Description: "modified"}
 
 		assert.Equal(t, "test-container", original.Options["container"], "Original should be unchanged")
 		assert.Equal(t, "value1", original.Fields["field1"], "Original should be unchanged")
@@ -119,13 +119,13 @@ func TestClone(t *testing.T) {
 	})
 
 	t.Run("Clone handles nil LogSearch", func(t *testing.T) {
-		var original *LogSearch
+		var original *client.LogSearch
 		clone := original.Clone()
 		assert.Nil(t, clone)
 	})
 
 	t.Run("Clone handles empty maps", func(t *testing.T) {
-		original := &LogSearch{
+		original := &client.LogSearch{
 			Follow: true,
 		}
 
@@ -135,12 +135,12 @@ func TestClone(t *testing.T) {
 	})
 
 	t.Run("Clone handles Filter field", func(t *testing.T) {
-		original := &LogSearch{
-			Filter: &Filter{
-				Field: "testField",
-				Op:    "equals",
-				Value: "testValue",
-			},
+		   original := &client.LogSearch{
+			   Filter: &client.Filter{
+				   Field: "testField",
+				   Op:    "equals",
+				   Value: "testValue",
+			   },
 		}
 
 		clone := original.Clone()
@@ -155,31 +155,31 @@ func TestClone(t *testing.T) {
 	})
 
 	t.Run("Clone deeply nested filters", func(t *testing.T) {
-		original := &LogSearch{
-			Follow: true,
-			Filter: &Filter{
-				Logic: LogicAnd,
-				Filters: []Filter{
-					{Field: "level", Op: "equals", Value: "ERROR"},
-					{
-						Logic: LogicOr,
-						Filters: []Filter{
-							{Field: "app", Op: "equals", Value: "app1"},
-							{Field: "app", Op: "equals", Value: "app2"},
-						},
-					},
-				},
-			},
+		   original := &client.LogSearch{
+			   Follow: true,
+			   Filter: &client.Filter{
+				   Logic: client.LogicAnd,
+				   Filters: []client.Filter{
+					   {Field: "level", Op: "equals", Value: "ERROR"},
+					   {
+						   Logic: client.LogicOr,
+						   Filters: []client.Filter{
+							   {Field: "app", Op: "equals", Value: "app1"},
+							   {Field: "app", Op: "equals", Value: "app2"},
+						   },
+					   },
+				   },
+			   },
 		}
 
 		clone := original.Clone()
 
 		// Verify structure is preserved
 		assert.NotNil(t, clone.Filter)
-		assert.Equal(t, LogicAnd, clone.Filter.Logic)
+		assert.Equal(t, client.LogicAnd, clone.Filter.Logic)
 		assert.Len(t, clone.Filter.Filters, 2)
 		assert.Equal(t, "level", clone.Filter.Filters[0].Field)
-		assert.Equal(t, LogicOr, clone.Filter.Filters[1].Logic)
+		assert.Equal(t, client.LogicOr, clone.Filter.Filters[1].Logic)
 
 		// Verify deep copy by modifying nested filter
 		clone.Filter.Filters[1].Filters[0].Value = "modified-app"
@@ -189,26 +189,26 @@ func TestClone(t *testing.T) {
 	})
 
 	t.Run("Clone with complex nested structure", func(t *testing.T) {
-		original := &LogSearch{
-			Options: ty.MI{"container": "test"},
-			Filter: &Filter{
-				Logic: LogicAnd,
-				Filters: []Filter{
-					{
-						Logic: LogicOr,
-						Filters: []Filter{
-							{Field: "level", Op: "equals", Value: "ERROR"},
-							{Field: "level", Op: "equals", Value: "WARN"},
-						},
-					},
-					{
-						Logic: LogicNot,
-						Filters: []Filter{
-							{Field: "app", Op: "equals", Value: "excluded-app"},
-						},
-					},
-				},
-			},
+		   original := &client.LogSearch{
+			   Options: ty.MI{"container": "test"},
+			   Filter: &client.Filter{
+				   Logic: client.LogicAnd,
+				   Filters: []client.Filter{
+					   {
+						   Logic: client.LogicOr,
+						   Filters: []client.Filter{
+							   {Field: "level", Op: "equals", Value: "ERROR"},
+							   {Field: "level", Op: "equals", Value: "WARN"},
+						   },
+					   },
+					   {
+						   Logic: client.LogicNot,
+						   Filters: []client.Filter{
+							   {Field: "app", Op: "equals", Value: "excluded-app"},
+						   },
+					   },
+				   },
+			   },
 		}
 
 		clone := original.Clone()
