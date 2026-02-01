@@ -18,6 +18,8 @@ contexts:
     description: "Splunk: ERROR or WARN level logs (tests OR filter)"
     searchInherit: ["json-structured", "transaction-view"]
     search:
+      range:
+        last: 1h
       options:
         index: main
       filter:
@@ -34,6 +36,8 @@ contexts:
     description: "Splunk: Critical logs (tests nested AND/OR)"
     searchInherit: ["json-structured", "transaction-view"]
     search:
+      range:
+        last: 1h
       options:
         index: main
       filter:
@@ -54,6 +58,8 @@ contexts:
     description: "Splunk: All logs except DEBUG (tests NOT filter)"
     searchInherit: ["json-structured", "transaction-view"]
     search:
+      range:
+        last: 1h
       options:
         index: main
       filter:
@@ -68,6 +74,8 @@ contexts:
     description: "OpenSearch: ERROR or WARN level logs"
     searchInherit: ["json-structured", "transaction-view"]
     search:
+      range:
+        last: 1h
       options:
         index: app-logs
       filter:
@@ -86,6 +94,8 @@ contexts:
     description: "OpenSearch: Complex nested filter - ERROR or WARN logs"
     searchInherit: ["json-structured", "transaction-view"]
     search:
+      range:
+        last: 1h
       options:
         index: app-logs
       filter:
@@ -109,6 +119,8 @@ contexts:
     description: "OpenSearch: Regex match for error patterns"
     searchInherit: ["json-structured", "transaction-view"]
     search:
+      range:
+        last: 1h
       options:
         index: app-logs
       filter:
@@ -163,6 +175,8 @@ contexts:
     search:
       fields:
         app: log-generator
+      range:
+        last: 1h
       options:
         index: main
       filter:
@@ -180,6 +194,8 @@ contexts:
     description: "OpenSearch: Wildcard app name filter"
     searchInherit: ["json-structured", "transaction-view"]
     search:
+      range:
+        last: 1h
       options:
         index: app-logs
       filter:
@@ -193,6 +209,8 @@ contexts:
     description: "Splunk: Only logs with trace_id field"
     searchInherit: ["json-structured", "transaction-view"]
     search:
+      range:
+        last: 1h
       options:
         index: main
       filter:

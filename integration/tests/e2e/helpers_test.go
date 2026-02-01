@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -23,6 +24,12 @@ var tCtx TestContext
 
 func (c *TestContext) Run(t *testing.T, args ...string) (string, string, error) {
 	t.Helper()
+
+	// Log the command for debugging purposes (visible on test failure or with -v)
+	// Attempts to construct a copy-pasteable command line including the config env var
+	cmdStr := fmt.Sprintf("LOGVIEWER_CONFIG=%s %s %s", c.ConfigPath, c.BinaryPath, strings.Join(args, " "))
+	t.Logf("Running command: %s", cmdStr)
+
 	cmd := exec.Command(c.BinaryPath, args...)
 	cmd.Env = append(os.Environ(), "LOGVIEWER_CONFIG="+c.ConfigPath)
 	var stdout, stderr bytes.Buffer

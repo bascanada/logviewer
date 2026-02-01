@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,6 +15,9 @@ func TestK8s_QueryLog(t *testing.T) {
 
 	t.Run("BasicQuery", func(t *testing.T) {
 		output, err := RunCommand("query", "log", "-i", "payment-processor-all", "--last", "1h", "--size", "10", "--json")
+		if err != nil {
+			fmt.Printf("Command Output: %s\n", output)
+		}
 		assert.NoError(t, err, "Query should execute successfully")
 
 		entries := ParseJSONOutput(output)
@@ -23,6 +27,9 @@ func TestK8s_QueryLog(t *testing.T) {
 
 	t.Run("WithFilters", func(t *testing.T) {
 		output, err := RunCommand("query", "log", "-i", "payment-processor-all", "--last", "1h", "-f", "level=ERROR", "--size", "10", "--json")
+		if err != nil {
+			fmt.Printf("Command Output: %s\n", output)
+		}
 		assert.NoError(t, err, "Query with filter should execute successfully")
 
 		entries := ParseJSONOutput(output)
@@ -33,6 +40,9 @@ func TestK8s_QueryLog(t *testing.T) {
 
 	t.Run("TimeRange", func(t *testing.T) {
 		output, err := RunCommand("query", "log", "-i", "payment-processor-all", "--last", "30m", "--size", "5", "--json")
+		if err != nil {
+			fmt.Printf("Command Output: %s\n", output)
+		}
 		assert.NoError(t, err, "Query with time range should execute successfully")
 
 		entries := ParseJSONOutput(output)
@@ -46,6 +56,9 @@ func TestK8s_QueryField(t *testing.T) {
 
 	t.Run("BasicFieldDiscovery", func(t *testing.T) {
 		output, err := RunCommand("query", "field", "-i", "payment-processor-all", "--last", "1h", "--json")
+		if err != nil {
+			fmt.Printf("Command Output: %s\n", output)
+		}
 		assert.NoError(t, err, "Field discovery should execute successfully")
 
 		fields := ParseFieldsJSON(output)
@@ -57,6 +70,9 @@ func TestK8s_QueryField(t *testing.T) {
 
 	t.Run("WithFiltering", func(t *testing.T) {
 		output, err := RunCommand("query", "field", "-i", "payment-processor-all", "--last", "1h", "-f", "level=ERROR", "--json")
+		if err != nil {
+			fmt.Printf("Command Output: %s\n", output)
+		}
 		assert.NoError(t, err, "Field discovery with filter should execute successfully")
 
 		fields := ParseFieldsJSON(output)
@@ -69,7 +85,10 @@ func TestK8s_QueryValues(t *testing.T) {
 	t.Parallel()
 
 	t.Run("SingleField", func(t *testing.T) {
-		output, err := RunCommand("query", "values", "-i", "payment-processor-all", "--last", "1h", "--field", "level", "--json")
+		output, err := RunCommand("query", "values", "level", "-i", "payment-processor-all", "--last", "1h", "--json")
+		if err != nil {
+			fmt.Printf("Command Output: %s\n", output)
+		}
 		assert.NoError(t, err, "Values query should execute successfully")
 
 		values := ParseValuesJSON(output)
@@ -81,7 +100,10 @@ func TestK8s_QueryValues(t *testing.T) {
 	})
 
 	t.Run("MultipleFields", func(t *testing.T) {
-		output, err := RunCommand("query", "values", "-i", "payment-processor-all", "--last", "1h", "--field", "level", "--field", "app", "--json")
+		output, err := RunCommand("query", "values", "level", "app", "-i", "payment-processor-all", "--last", "1h", "--json")
+		if err != nil {
+			fmt.Printf("Command Output: %s\n", output)
+		}
 		assert.NoError(t, err, "Multi-field values query should execute successfully")
 
 		values := ParseValuesJSON(output)
@@ -90,7 +112,10 @@ func TestK8s_QueryValues(t *testing.T) {
 	})
 
 	t.Run("WithFiltering", func(t *testing.T) {
-		output, err := RunCommand("query", "values", "-i", "payment-processor-all", "--last", "1h", "-f", "level=ERROR", "--field", "app", "--json")
+		output, err := RunCommand("query", "values", "app", "-i", "payment-processor-all", "--last", "1h", "-f", "level=ERROR", "--json")
+		if err != nil {
+			fmt.Printf("Command Output: %s\n", output)
+		}
 		assert.NoError(t, err, "Values query with filter should execute successfully")
 
 		values := ParseValuesJSON(output)

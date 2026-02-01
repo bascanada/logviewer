@@ -564,8 +564,8 @@ var queryFieldCommand = &cobra.Command{
 			os.Exit(1)
 		}
 
-		// Get entries for JSON mode
-		entries, _, err := searchResult.GetEntries(context.Background())
+		// Trigger log fetching to populate fields (required for reader-based clients like K8s)
+		_, _, err := searchResult.GetEntries(context.Background())
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
@@ -579,15 +579,10 @@ var queryFieldCommand = &cobra.Command{
 		}
 
 		if jsonOutput {
-			// JSON output mode - output log entries with their fields
 			enc := json.NewEncoder(os.Stdout)
-			for i := range entries {
-				// Extract JSON fields if enabled
-				client.ExtractJSONFromEntry(&entries[i], searchResult.GetSearch())
-				if err := enc.Encode(entries[i]); err != nil {
-					fmt.Fprintf(os.Stderr, "Error writing JSON output: %v\n", err)
-					os.Exit(1)
-				}
+			if err := enc.Encode(fields); err != nil {
+				fmt.Fprintf(os.Stderr, "Error writing JSON output: %v\n", err)
+				os.Exit(1)
 			}
 		} else {
 			// Text output mode - display field names and their values

@@ -37,6 +37,12 @@ Complete guide for testing LogViewer across all supported backends.
 make integration/start
 make integration/stop
 
+# Push logs
+make integration/logs
+
+# Deploy the log simulator to continuasly publish logs
+make integration/deploy-simulation
+
 # Build logviewer
 make build
 

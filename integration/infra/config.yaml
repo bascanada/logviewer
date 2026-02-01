@@ -20,6 +20,7 @@ clients:
     type: k8s
     options:
       kubeConfig: integration/k8s/k3s.yaml
+      insecureSkipTLSVerify: true
 
   # CloudWatch via LocalStack for DynamoDB logs (if needed)
   sim-cloudwatch:
@@ -220,6 +221,8 @@ contexts:
     searchInherit: ["json-structured"]
     search:
       fields: {}
+      range:
+        last: 1h
       options:
         index: test-e2e-errors
         search: 'sourcetype=json'
@@ -231,6 +234,8 @@ contexts:
     searchInherit: ["json-structured"]
     search:
       fields: {}
+      range:
+        last: 1h
       options:
         index: test-e2e-payments
         search: 'sourcetype=json'
@@ -252,6 +257,8 @@ contexts:
     searchInherit: ["json-structured"]
     search:
       fields: {}
+      range:
+        last: 1h
       options:
         index: test-e2e-mixed
 
@@ -262,6 +269,8 @@ contexts:
     searchInherit: ["json-structured"]
     search:
       fields: {}
+      range:
+        last: 1h
       options:
         index: test-e2e-traces
         search: 'sourcetype=json'
@@ -273,5 +282,7 @@ contexts:
     searchInherit: ["json-structured"]
     search:
       fields: {}
+      range:
+        last: 1h
       options:
         index: test-e2e-slow

@@ -29,13 +29,13 @@ import (
 
 const (
 	// FieldNamespace is the field name for Kubernetes namespace.
-	FieldNamespace     = "namespace"
+	FieldNamespace = "namespace"
 	// FieldContainer is the field name for Kubernetes container.
-	FieldContainer     = "container"
+	FieldContainer = "container"
 	// FieldPrevious is the field name for fetching previous pod logs.
-	FieldPrevious      = "previous"
+	FieldPrevious = "previous"
 	// FieldPod is the field name for the pod.
-	FieldPod           = "pod"
+	FieldPod = "pod"
 	// FieldLabelSelector is the field name for the label selector.
 	FieldLabelSelector = "labelSelector"
 
@@ -45,7 +45,8 @@ const (
 
 // LogClientOptions defines configuration for the Kubernetes client.
 type LogClientOptions struct {
-	KubeConfig string `json:"kubeConfig"`
+	KubeConfig            string `json:"kubeConfig"`
+	InsecureSkipTLSVerify bool   `json:"insecureSkipTLSVerify"`
 }
 
 /*
@@ -339,6 +340,14 @@ func GetLogClient(options LogClientOptions) (client.LogClient, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Apply insecureSkipTLSVerify setting if provided
+	if options.InsecureSkipTLSVerify {
+		config.Insecure = true
+		config.CAData = nil
+		config.CAFile = ""
+	}
+
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, err

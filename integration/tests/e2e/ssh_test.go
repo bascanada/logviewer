@@ -33,14 +33,21 @@ func TestSSH(t *testing.T) {
 	})
 
 	t.Run("SSHFieldDiscovery", func(t *testing.T) {
-		logs := tCtx.RunAndParse(t,
-			"query", "field",
-			"-i", "ssh-logs",
-			"--last", "1h",
-			"--size", "5",
-		)
-		if len(logs) > 0 {
-			Expect(t, logs).All(FieldPresent("fields"))
+		output, err := RunCommand("query", "field", "-i", "ssh-logs", "--last", "1h", "--json")
+		if err != nil {
+			t.Logf("Command Output: %s\n", output)
+		}
+		if err != nil {
+			t.Fatalf("Field discovery should execute successfully: %v", err)
+		}
+
+		fields := ParseFieldsJSON(output)
+		if len(fields) > 0 {
+			// SSH logs using json-extract should have level field
+			_, hasLevel := fields["level"]
+			if !hasLevel {
+				t.Errorf("Expected 'level' field in SSH logs, got fields: %v", fields)
+			}
 		}
 	})
 }

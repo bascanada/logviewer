@@ -261,14 +261,14 @@ func FieldContains(field string, substring string) LogCheck {
 	return simpleCheck{
 		validator: func(log map[string]interface{}) bool {
 			// Try direct access first
-			val, ok := log[field]
-			if !ok {
+			val, found := log[field]
+			if !found {
 				// Also check fields.fieldName for Splunk-style nested fields
 				if fields, ok := log["fields"].(map[string]interface{}); ok {
-					val, ok = fields[field]
+					val, found = fields[field]
 				}
 			}
-			if !ok {
+			if !found {
 				return false
 			}
 			strVal, isStr := val.(string)
@@ -281,8 +281,15 @@ func FieldContains(field string, substring string) LogCheck {
 func FieldMatches(field string, pattern string) LogCheck {
 	return simpleCheck{
 		validator: func(log map[string]interface{}) bool {
-			val, ok := log[field]
-			if !ok {
+			// Try direct access first
+			val, found := log[field]
+			if !found {
+				// Also check fields.fieldName for Splunk-style nested fields
+				if fields, ok := log["fields"].(map[string]interface{}); ok {
+					val, found = fields[field]
+				}
+			}
+			if !found {
 				return false
 			}
 			strVal, isStr := val.(string)
@@ -313,8 +320,17 @@ func FieldMatches(field string, pattern string) LogCheck {
 func FieldNotPresent(field string) LogCheck {
 	return simpleCheck{
 		validator: func(log map[string]interface{}) bool {
+			// Try direct access first
 			_, ok := log[field]
-			return !ok
+			if ok {
+				return false
+			}
+			// Also check fields.fieldName for Splunk-style nested fields
+			if fields, ok := log["fields"].(map[string]interface{}); ok {
+				_, ok = fields[field]
+				return !ok
+			}
+			return true
 		},
 		desc: fmt.Sprintf("field '%s' not present", field),
 	}
@@ -323,8 +339,17 @@ func FieldNotPresent(field string) LogCheck {
 func FieldPresent(field string) LogCheck {
 	return simpleCheck{
 		validator: func(log map[string]interface{}) bool {
+			// Try direct access first
 			_, ok := log[field]
-			return ok
+			if ok {
+				return true
+			}
+			// Also check fields.fieldName for Splunk-style nested fields
+			if fields, ok := log["fields"].(map[string]interface{}); ok {
+				_, ok = fields[field]
+				return ok
+			}
+			return false
 		},
 		desc: fmt.Sprintf("field '%s' is present", field),
 	}
@@ -333,8 +358,15 @@ func FieldPresent(field string) LogCheck {
 func FieldNotEmpty(field string) LogCheck {
 	return simpleCheck{
 		validator: func(log map[string]interface{}) bool {
-			val, ok := log[field]
-			if !ok {
+			// Try direct access first
+			val, found := log[field]
+			if !found {
+				// Also check fields.fieldName for Splunk-style nested fields
+				if fields, ok := log["fields"].(map[string]interface{}); ok {
+					val, found = fields[field]
+				}
+			}
+			if !found {
 				return false
 			}
 			strVal, isStr := val.(string)
@@ -347,8 +379,15 @@ func FieldNotEmpty(field string) LogCheck {
 func FieldOneOf(field string, allowedValues ...interface{}) LogCheck {
 	return simpleCheck{
 		validator: func(log map[string]interface{}) bool {
-			val, ok := log[field]
-			if !ok {
+			// Try direct access first
+			val, found := log[field]
+			if !found {
+				// Also check fields.fieldName for Splunk-style nested fields
+				if fields, ok := log["fields"].(map[string]interface{}); ok {
+					val, found = fields[field]
+				}
+			}
+			if !found {
 				return false
 			}
 			for _, allowed := range allowedValues {
@@ -365,8 +404,15 @@ func FieldOneOf(field string, allowedValues ...interface{}) LogCheck {
 func DateBetween(field string, start, end time.Time) LogCheck {
 	return simpleCheck{
 		validator: func(log map[string]interface{}) bool {
-			val, ok := log[field]
-			if !ok {
+			// Try direct access first
+			val, found := log[field]
+			if !found {
+				// Also check fields.fieldName for Splunk-style nested fields
+				if fields, ok := log["fields"].(map[string]interface{}); ok {
+					val, found = fields[field]
+				}
+			}
+			if !found {
 				return false
 			}
 			strVal, isStr := val.(string)
@@ -400,8 +446,15 @@ func DateBetween(field string, start, end time.Time) LogCheck {
 func DateAfter(field string, after time.Time) LogCheck {
 	return simpleCheck{
 		validator: func(log map[string]interface{}) bool {
-			val, ok := log[field]
-			if !ok {
+			// Try direct access first
+			val, found := log[field]
+			if !found {
+				// Also check fields.fieldName for Splunk-style nested fields
+				if fields, ok := log["fields"].(map[string]interface{}); ok {
+					val, found = fields[field]
+				}
+			}
+			if !found {
 				return false
 			}
 			strVal, isStr := val.(string)

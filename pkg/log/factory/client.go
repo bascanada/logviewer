@@ -85,7 +85,8 @@ func GetLogClientFactory(clients config.Clients) (LogClientFactory, error) {
 		case "k8s":
 			logClientFactory.clients[k] = ty.GetLazy(func() (*client.LogClient, error) {
 				vv, err := k8s.GetLogClient(k8s.LogClientOptions{
-					KubeConfig: v.Options.GetString("kubeConfig"),
+					KubeConfig:            v.Options.GetString("kubeConfig"),
+					InsecureSkipTLSVerify: v.Options.GetBool("insecureSkipTLSVerify"),
 				})
 				if err != nil {
 					return nil, err

@@ -69,6 +69,12 @@ func TestMain(m *testing.M) {
 	}
 	fmt.Println()
 
+	// Change to root directory so relative paths in config work
+	if err := os.Chdir(rootDir); err != nil {
+		fmt.Printf("ERROR: Failed to change to root dir: %v\n", err)
+		os.Exit(1)
+	}
+
 	exitCode := m.Run()
 
 	// Optional: Cleanup test data after tests complete
