@@ -11,10 +11,13 @@ import (
 	"time"
 
 	"github.com/docker/cli/cli/connhelper"
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
+
+	"sync"
 
 	logclient "github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/reader"
@@ -23,9 +26,15 @@ import (
 const regexDockerTimestamp = "(([0-9]*)-([0-9]*)-([0-9]*)T([0-9]*):([0-9]*):([0-9]*).([0-9]*)Z)"
 const dockerPingTimeout = 10 * time.Second
 
-// LogClient implements the client.LogClient interface for Docker.
+// DockerAPI defines the subset of the Docker client interface used by this package.
+type DockerAPI interface {
+	ContainerList(ctx context.Context, options container.ListOptions) ([]types.Container, error)
+	ContainerLogs(ctx context.Context, container string, options container.LogsOptions) (io.ReadCloser, error)
+}
+
+// LogClient implements the client.LogBackend interface for Docker.
 type LogClient struct {
-	apiClient *client.Client
+	apiClient DockerAPI
 	host      string
 }
 
@@ -61,9 +70,36 @@ func (lc LogClient) Get(ctx context.Context, search *logclient.LogSearch) (logcl
 			return nil, fmt.Errorf("no running containers found for service %s", service)
 		}
 
-		// TODO: Use MultiLogSearchResult to merge logs from all containers when multiple replicas exist
+		// Use MultiLogSearchResult to merge logs from all containers when multiple replicas exist
 		if len(containers) > 1 {
-			fmt.Fprintf(os.Stderr, "WARN: Found %d containers for service '%s'. Showing logs for the first one (%s).\n", len(containers), service, containers[0].ID[:12])
+			multiResult, err := logclient.NewMultiLogSearchResult(search)
+			if err != nil {
+				return nil, err
+			}
+
+			var wg sync.WaitGroup
+			for _, container := range containers {
+				wg.Add(1)
+				go func(cID string) {
+					defer wg.Done()
+					// Clone the search object to prevent race conditions
+					containerSearch := search.Clone()
+
+					// Configure for specific container
+					containerSearch.Options["container"] = cID
+					delete(containerSearch.Options, "service")
+					containerSearch.Options["__context_id__"] = cID[:12]
+
+					// Fetch logs
+					result, err := lc.Get(ctx, containerSearch)
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "Error fetching logs for container %s: %v\n", cID[:12], err)
+					}
+					multiResult.Add(result, err)
+				}(container.ID)
+			}
+			wg.Wait()
+			return multiResult, nil
 		}
 
 		// Use the first matching container
@@ -150,7 +186,7 @@ func (lc LogClient) GetFieldValues(ctx context.Context, search *logclient.LogSea
 }
 
 // GetLogClient returns a new Docker log client.
-func GetLogClient(host string) (logclient.LogClient, error) {
+func GetLogClient(host string) (logclient.LogBackend, error) {
 	// Prepare basic options
 	opts := []client.Opt{
 		client.FromEnv,

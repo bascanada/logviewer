@@ -260,7 +260,7 @@ func (lc sshLogClient) GetFieldValues(ctx context.Context, search *client.LogSea
 }
 
 // GetLogClient returns a new SSH log client.
-func GetLogClient(options LogClientOptions) (client.LogClient, error) {
+func GetLogClient(options LogClientOptions) (client.LogBackend, error) {
 
 	if options.Addr == "" {
 		return nil, errors.New("ssh address (addr) is empty")

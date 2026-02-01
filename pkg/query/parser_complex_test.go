@@ -1,78 +1,79 @@
-package query
+package query_test
 
 import (
 	"testing"
 
 	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/log/client/operator"
+	"github.com/bascanada/logviewer/pkg/query"
 )
 
 func TestLexer(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected []TokenType
+		expected []query.TokenType
 	}{
 		{
 			name:     "simple condition",
 			input:    "level=error",
-			expected: []TokenType{TokenField, TokenOperator, TokenValue, TokenEOF},
+			expected: []query.TokenType{query.TokenField, query.TokenOperator, query.TokenValue, query.TokenEOF},
 		},
 		{
 			name:     "condition with spaces",
 			input:    "level = error",
-			expected: []TokenType{TokenField, TokenOperator, TokenValue, TokenEOF},
+			expected: []query.TokenType{query.TokenField, query.TokenOperator, query.TokenValue, query.TokenEOF},
 		},
 		{
 			name:     "AND expression",
 			input:    "level=error AND status>=400",
-			expected: []TokenType{TokenField, TokenOperator, TokenValue, TokenAnd, TokenField, TokenOperator, TokenValue, TokenEOF},
+			expected: []query.TokenType{query.TokenField, query.TokenOperator, query.TokenValue, query.TokenAnd, query.TokenField, query.TokenOperator, query.TokenValue, query.TokenEOF},
 		},
 		{
 			name:     "OR expression",
 			input:    "level=error OR level=warn",
-			expected: []TokenType{TokenField, TokenOperator, TokenValue, TokenOr, TokenField, TokenOperator, TokenValue, TokenEOF},
+			expected: []query.TokenType{query.TokenField, query.TokenOperator, query.TokenValue, query.TokenOr, query.TokenField, query.TokenOperator, query.TokenValue, query.TokenEOF},
 		},
 		{
 			name:     "NOT expression",
 			input:    "NOT level=debug",
-			expected: []TokenType{TokenNot, TokenField, TokenOperator, TokenValue, TokenEOF},
+			expected: []query.TokenType{query.TokenNot, query.TokenField, query.TokenOperator, query.TokenValue, query.TokenEOF},
 		},
 		{
 			name:     "parentheses",
 			input:    "(level=error)",
-			expected: []TokenType{TokenLParen, TokenField, TokenOperator, TokenValue, TokenRParen, TokenEOF},
+			expected: []query.TokenType{query.TokenLParen, query.TokenField, query.TokenOperator, query.TokenValue, query.TokenRParen, query.TokenEOF},
 		},
 		{
 			name:     "complex with parentheses",
 			input:    "(level=error OR status>=500) AND service=api",
-			expected: []TokenType{TokenLParen, TokenField, TokenOperator, TokenValue, TokenOr, TokenField, TokenOperator, TokenValue, TokenRParen, TokenAnd, TokenField, TokenOperator, TokenValue, TokenEOF},
+			expected: []query.TokenType{query.TokenLParen, query.TokenField, query.TokenOperator, query.TokenValue, query.TokenOr, query.TokenField, query.TokenOperator, query.TokenValue, query.TokenRParen, query.TokenAnd, query.TokenField, query.TokenOperator, query.TokenValue, query.TokenEOF},
 		},
 		{
 			name:     "exists function",
 			input:    "exists(error)",
-			expected: []TokenType{TokenExists, TokenLParen, TokenField, TokenRParen, TokenEOF},
+			expected: []query.TokenType{query.TokenExists, query.TokenLParen, query.TokenField, query.TokenRParen, query.TokenEOF},
 		},
 		{
 			name:     "quoted value",
 			input:    `service="my-api"`,
-			expected: []TokenType{TokenField, TokenOperator, TokenValue, TokenEOF},
+			expected: []query.TokenType{query.TokenField, query.TokenOperator, query.TokenValue, query.TokenEOF},
 		},
 		{
 			name:     "symbolic AND",
 			input:    "level=error && status>=400",
-			expected: []TokenType{TokenField, TokenOperator, TokenValue, TokenAnd, TokenField, TokenOperator, TokenValue, TokenEOF},
+			expected: []query.TokenType{query.TokenField, query.TokenOperator, query.TokenValue, query.TokenAnd, query.TokenField, query.TokenOperator, query.TokenValue, query.TokenEOF},
 		},
 		{
 			name:     "symbolic OR",
 			input:    "level=error || level=warn",
-			expected: []TokenType{TokenField, TokenOperator, TokenValue, TokenOr, TokenField, TokenOperator, TokenValue, TokenEOF},
+			expected: []query.TokenType{query.TokenField, query.TokenOperator, query.TokenValue, query.TokenOr, query.TokenField, query.TokenOperator, query.TokenValue, query.TokenEOF},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			lexer := NewLexer(tt.input)
+			lexer := query.NewLexer(tt.input)
 			tokens, err := lexer.Tokenize()
 			if err != nil {
 				t.Fatalf("Tokenize error: %v", err)
@@ -304,7 +305,7 @@ func TestParseQueryExpression(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := ParseQueryExpression(tt.input)
+			result, err := query.ParseQueryExpression(tt.input)
 
 			if tt.expectError {
 				if err == nil {
@@ -347,7 +348,7 @@ func TestParseQueryExpression_Errors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := ParseQueryExpression(tt.input)
+			_, err := query.ParseQueryExpression(tt.input)
 			if err == nil {
 				t.Errorf("expected error for input %q", tt.input)
 			}

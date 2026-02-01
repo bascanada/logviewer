@@ -33,7 +33,7 @@ type Hits struct {
 // responses and provides convenience methods to extract entries and
 // pagination information.
 type SearchResult struct {
-	client client.LogClient
+	client client.LogBackend
 	search *client.LogSearch
 	result Hits
 
@@ -47,7 +47,7 @@ type SearchResult struct {
 
 // NewSearchResult constructs a SearchResult from a client, search
 // description and raw hits returned by Elasticsearch.
-func NewSearchResult(client client.LogClient, search *client.LogSearch, hits Hits) SearchResult {
+func NewSearchResult(client client.LogBackend, search *client.LogSearch, hits Hits) SearchResult {
 	return SearchResult{
 		client:  client,
 		search:  search,

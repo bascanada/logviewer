@@ -130,11 +130,11 @@ func DefaultSearchBarStyles() SearchBarStyles {
 
 // SearchBar is the chip-based search input component
 type SearchBar struct {
-	State     ChipSearchState
-	TextInput textinput.Model
-	Styles    SearchBarStyles
-	Width     int
-	Focused   bool
+	State      ChipSearchState
+	TextInput  textinput.Model
+	Styles     SearchBarStyles
+	Width      int
+	Focused    bool
 	ClientType string // Used to suggest backend-specific options
 
 	// Data sources for autocomplete
@@ -551,7 +551,7 @@ func (s *SearchBar) generateSuggestions() []Suggestion {
 		{Text: "size:", Description: "result limit (e.g., 100, 500)", Context: AutocompleteContextField},
 		{Text: "query:", Description: "native query (SPL, Lucene)", Context: AutocompleteContextField},
 	}
-	
+
 	// Add top options for this client type
 	optionSuggestions := s.suggestOptions("")
 	if len(optionSuggestions) > 0 {
@@ -588,7 +588,7 @@ func (s *SearchBar) getKnownOptions(clientType string) []string {
 func (s *SearchBar) suggestOptions(prefix string) []Suggestion {
 	var suggestions []Suggestion
 	prefix = strings.ToLower(prefix)
-	
+
 	options := s.getKnownOptions(s.ClientType)
 	for _, opt := range options {
 		if prefix == "" || strings.HasPrefix(strings.ToLower(opt), prefix) {
@@ -629,8 +629,6 @@ func (s *SearchBar) suggestFields(prefix string) []Suggestion {
 
 	return suggestions
 }
-
-
 
 // suggestValues suggests values for a field
 func (s *SearchBar) suggestValues(field string) []Suggestion {
@@ -924,8 +922,6 @@ func (s *SearchBar) BuildFilter() *client.Filter {
 	// All chips are informational and affect server-side queries only
 	return nil
 }
-
-
 
 // UpdateAvailableFields refreshes field suggestions from entries
 func (s *SearchBar) UpdateAvailableFields(entries []client.LogEntry) {

@@ -4,16 +4,18 @@ on:
   pull_request:
     types: [assigned, opened, synchronize, reopened, labeled]
 
+permissions:
+  contents: read
 
 jobs:
   quality:
     name: Quality & Security
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       
       - name: Set up Go 1.25.6
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
           go-version: 1.25.6
           check-latest: true
@@ -26,9 +28,10 @@ jobs:
 
       # 2. Vulnerability Scan (Security)
       - name: Security Scan
-        uses: golang/govulncheck-action@v1
+        uses: golang/govulncheck-action@b625fbe08f3bccbe446d94fbf87fcc875a4f50ee # v1.0.4
         with:
           go-version-input: 1.25.6
+          repo-checkout: false
 
   build:
     runs-on: ubuntu-latest
@@ -36,9 +39,9 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Set up Go 1.25.6
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
           go-version: 1.25.6
           check-latest: true
@@ -52,7 +55,7 @@ jobs:
       - name: Build for this platform
         run: make build
       - name: Code Coverage Report
-        uses: irongut/CodeCoverageSummary@v1.3.0
+        uses: irongut/CodeCoverageSummary@51cc3a756ddcd398d447c044c02cb6aa83fdae95 # v1.3.0
         with:
           filename: coverage.xml
           badge: true
@@ -64,14 +67,14 @@ jobs:
           output: both
           thresholds: '20 80'
       - name: Add Coverage PR Comment
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@773744901bac0e8cbb5a0dc842800d45e9b2b405 # v2.9.4
         if: github.event_name == 'pull_request'
         with:
           recreate: true
           path: code-coverage-results.md
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           files: ./coverage.xml
           flags: unittests

@@ -61,8 +61,8 @@ type PaginationInfo struct {
 	NextPageToken string
 }
 
-// LogClient is the interface for a log backend (e.g., Splunk, CloudWatch).
-type LogClient interface {
+// LogBackend is the interface for a log backend (e.g., Splunk, CloudWatch).
+type LogBackend interface {
 	Get(ctx context.Context, search *LogSearch) (LogSearchResult, error)
 	// GetFieldValues returns distinct values for the specified fields.
 	// If fields is empty, returns values for all fields.
@@ -173,11 +173,12 @@ func GetFieldValuesFromResult(ctx context.Context, result LogSearchResult, field
 		} else {
 			// Only collect values for requested fields
 			for _, field := range fields {
-				if v, ok := entry.Fields[field]; ok {
+				val := entry.Field(field)
+				if val != nil && val != "" {
 					if valueSet[field] == nil {
 						valueSet[field] = make(map[string]bool)
 					}
-					valueSet[field][fmt.Sprintf("%v", v)] = true
+					valueSet[field][fmt.Sprintf("%v", val)] = true
 				}
 			}
 		}

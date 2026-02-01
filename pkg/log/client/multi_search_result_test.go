@@ -1,27 +1,28 @@
-package client
+package client_test
 
 import (
 	"context"
 	"testing"
 	"time"
 
+	"github.com/bascanada/logviewer/pkg/log/client"
 	"github.com/bascanada/logviewer/pkg/ty"
 )
 
 type MockLogSearchResult struct {
-	Entries []LogEntry
-	Channel chan []LogEntry
-	Search  *LogSearch
+	Entries []client.LogEntry
+	Channel chan []client.LogEntry
+	Search  *client.LogSearch
 }
 
-func (m *MockLogSearchResult) GetSearch() *LogSearch {
+func (m *MockLogSearchResult) GetSearch() *client.LogSearch {
 	if m.Search != nil {
 		return m.Search
 	}
-	return &LogSearch{Options: ty.MI{"__context_id__": "test-ctx"}}
+	return &client.LogSearch{Options: ty.MI{"__context_id__": "test-ctx"}}
 }
 
-func (m *MockLogSearchResult) GetEntries(_ context.Context) ([]LogEntry, chan []LogEntry, error) {
+func (m *MockLogSearchResult) GetEntries(_ context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
 	return m.Entries, m.Channel, nil
 }
 
@@ -29,7 +30,7 @@ func (m *MockLogSearchResult) GetFields(_ context.Context) (ty.UniSet[string], c
 	return nil, nil, nil
 }
 
-func (m *MockLogSearchResult) GetPaginationInfo() *PaginationInfo {
+func (m *MockLogSearchResult) GetPaginationInfo() *client.PaginationInfo {
 	return nil
 }
 
@@ -39,21 +40,21 @@ func (m *MockLogSearchResult) Err() <-chan error {
 
 func TestMultiLogSearchResult_GetEntries_Streaming(t *testing.T) {
 	// Setup mock results
-	ch1 := make(chan []LogEntry)
+	ch1 := make(chan []client.LogEntry)
 	mock1 := &MockLogSearchResult{
-		Entries: []LogEntry{{Message: "init1", Timestamp: time.Now()}},
+		Entries: []client.LogEntry{{Message: "init1", Timestamp: time.Now()}},
 		Channel: ch1,
-		Search:  &LogSearch{Options: ty.MI{"__context_id__": "ctx1"}},
+		Search:  &client.LogSearch{Options: ty.MI{"__context_id__": "ctx1"}},
 	}
 
-	ch2 := make(chan []LogEntry)
+	ch2 := make(chan []client.LogEntry)
 	mock2 := &MockLogSearchResult{
-		Entries: []LogEntry{{Message: "init2", Timestamp: time.Now()}},
+		Entries: []client.LogEntry{{Message: "init2", Timestamp: time.Now()}},
 		Channel: ch2,
-		Search:  &LogSearch{Options: ty.MI{"__context_id__": "ctx2"}},
+		Search:  &client.LogSearch{Options: ty.MI{"__context_id__": "ctx2"}},
 	}
 
-	multiRes, err := NewMultiLogSearchResult(&LogSearch{})
+	multiRes, err := client.NewMultiLogSearchResult(&client.LogSearch{})
 	if err != nil {
 		t.Fatalf("NewMultiLogSearchResult failed: %v", err)
 	}
@@ -80,8 +81,8 @@ func TestMultiLogSearchResult_GetEntries_Streaming(t *testing.T) {
 
 	// Test streaming
 	go func() {
-		ch1 <- []LogEntry{{Message: "stream1", Timestamp: time.Now()}}
-		ch2 <- []LogEntry{{Message: "stream2", Timestamp: time.Now()}}
+		ch1 <- []client.LogEntry{{Message: "stream1", Timestamp: time.Now()}}
+		ch2 <- []client.LogEntry{{Message: "stream2", Timestamp: time.Now()}}
 		close(ch1)
 		close(ch2)
 	}()

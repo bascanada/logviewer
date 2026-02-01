@@ -20,7 +20,7 @@ type SearchFactory interface {
 }
 
 type logSearchFactory struct {
-	clientsFactory  LogClientFactory
+	clientsFactory  LogBackendFactory
 	searchesContext config.Contexts
 
 	config config.ContextConfig
@@ -96,7 +96,7 @@ func (sf *logSearchFactory) mergeClientOptions(search *client.LogSearch, clientN
 
 // GetLogSearchFactory creates a new search factory from the given client factory and config.
 func GetLogSearchFactory(
-	f LogClientFactory,
+	f LogBackendFactory,
 	c config.ContextConfig,
 ) (SearchFactory, error) {
 

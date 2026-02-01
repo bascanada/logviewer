@@ -19,6 +19,7 @@ type SearchResult struct {
 
 // SortItem represents a sort criteria.
 type SortItem map[string]map[string]string
+
 // Map is a shorthand for map[string]interface{}.
 type Map map[string]interface{}
 

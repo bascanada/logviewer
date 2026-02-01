@@ -29,7 +29,7 @@ type Server struct {
 
 // NewServer creates a new API server instance.
 func NewServer(host, port string, cfg *config.ContextConfig, logger *slog.Logger, openapiSpec []byte) (*Server, error) {
-	clientFactory, err := factory.GetLogClientFactory(cfg.Clients)
+	clientFactory, err := factory.GetLogBackendFactory(cfg.Clients)
 	if err != nil {
 		return nil, err
 	}

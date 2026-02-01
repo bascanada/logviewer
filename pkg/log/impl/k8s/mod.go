@@ -324,7 +324,7 @@ func ensureKubeconfig(kubeconfig string) error {
 }
 
 // GetLogClient returns a new Kubernetes log client.
-func GetLogClient(options LogClientOptions) (client.LogClient, error) {
+func GetLogClient(options LogClientOptions) (client.LogBackend, error) {
 	var kubeconfig string
 	if options.KubeConfig == "" {
 		kubeconfig = filepath.Join(homedir.HomeDir(), ".kube", "config")
