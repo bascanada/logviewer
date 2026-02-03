@@ -170,18 +170,18 @@ integration/stop/cloudwatch:
 integration/start/logs:
 	@echo "Starting log-generator..."
 	@export SPLUNK_HEC_TOKEN=$$(cat ./integration/infra/splunk/.hec_token 2>/dev/null || echo "") && \
-		cd integration/infra && docker compose -f docker compose-log-generator.yml up -d
+		cd integration/infra && docker compose -f docker-compose-log-generator.yml up -d
 
 integration/stop/logs:
 	@echo "Stopping log-generator..."
-	@cd integration/infra && docker compose -f docker compose-log-generator.yml down -v
+	@cd integration/infra && docker compose -f docker-compose-log-generator.yml down -v
 
 integration/rebuild/logs:
 	@echo "Rebuilding and redeploying log-generator with latest changes..."
-	@cd integration/infra && docker compose -f docker compose-log-generator.yml down || true
-	@cd integration/infra && docker compose -f docker compose-log-generator.yml build --no-cache log-generator
+	@cd integration/infra && docker compose -f docker-compose-log-generator.yml down || true
+	@cd integration/infra && docker compose -f docker-compose-log-generator.yml build --no-cache log-generator
 	@export SPLUNK_HEC_TOKEN=$$(cat ./integration/infra/splunk/.hec_token 2>/dev/null || echo "") && \
-		cd integration/infra && docker compose -f docker compose-log-generator.yml up -d
+		cd integration/infra && docker compose -f docker-compose-log-generator.yml up -d
 	@echo "Waiting for log-generator to be ready..."
 	@sleep 3
 	@echo "Testing /health endpoint..."
@@ -193,7 +193,7 @@ integration/logs/tail:
 
 integration/logs/generator-tail:
 	@echo "Tailing log-generator logs..."
-	@cd integration/infra && docker compose -f docker compose-log-generator.yml logs --tail=50 -f log-generator
+	@cd integration/infra && docker compose -f docker-compose-log-generator.yml logs --tail=50 -f log-generator
 
 integration/deploy-simulation:
 	@echo "Building simulator image..."
