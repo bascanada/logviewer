@@ -7,6 +7,7 @@ services:
     environment:
       - SPLUNK_HEC_URL=https://splunk:8088/services/collector # Note: Port 8088 for HEC SSL
       - SPLUNK_HEC_TOKEN=${SPLUNK_HEC_TOKEN:-} # Pass the token from an env var
+      - SPLUNK_HEC_INSECURE=true # Allow self-signed certificates for integration testing
       - OPENSEARCH_URL=http://opensearch:9200  # Base URL only, specific index/endpoint appended by code
     networks:
       - default

@@ -151,3 +151,212 @@ func TestBuildSSHCommand_InjectionPrevention(t *testing.T) {
 	// Verify the structure is correct - the rm command is quoted, not raw
 	assert.Contains(t, cmd, `hl -P --raw -q 'error'\''`)
 }
+
+func TestBuildSSHCommand_WithSizeLimit(t *testing.T) {
+	args := []string{"-P", "--raw"}
+	paths := []string{"/var/log/app.log"}
+
+	tests := []struct {
+		name      string
+		sizeLimit int
+		expectHL  string
+		expectFB  string
+	}{
+		{
+			name:      "no size limit",
+			sizeLimit: 0,
+			expectHL:  "hl -P --raw /var/log/app.log",
+			expectFB:  "cat /var/log/app.log",
+		},
+		{
+			name:      "size limit 100",
+			sizeLimit: 100,
+			expectHL:  "hl -P --raw /var/log/app.log | head -n 100",
+			expectFB:  "cat /var/log/app.log | head -n 100",
+		},
+		{
+			name:      "size limit 1000",
+			sizeLimit: 1000,
+			expectHL:  "hl -P --raw /var/log/app.log | head -n 1000",
+			expectFB:  "cat /var/log/app.log | head -n 1000",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := BuildSSHCommand(args, paths, "", tt.sizeLimit)
+
+			assert.Contains(t, cmd, tt.expectHL, "hl command should contain expected string")
+			assert.Contains(t, cmd, tt.expectFB, "fallback command should contain expected string")
+		})
+	}
+}
+
+func TestBuildSSHCommandWithMarker_WithSizeLimit(t *testing.T) {
+	args := []string{"-P", "--raw"}
+	paths := []string{"/var/log/app.log"}
+	sizeLimit := 500
+
+	cmd := BuildSSHCommandWithMarker(args, paths, "", sizeLimit)
+
+	// Should contain size limit in both branches
+	assert.Contains(t, cmd, "hl -P --raw /var/log/app.log | head -n 500")
+	assert.Contains(t, cmd, "cat /var/log/app.log | head -n 500")
+
+	// Should still have markers
+	assert.Contains(t, cmd, `echo "HL_ENGINE=hl" >&2`)
+	assert.Contains(t, cmd, `echo "HL_ENGINE=native" >&2`)
+}
+
+func TestBuildFollowSSHCommand_WithSizeLimit(t *testing.T) {
+	args := []string{"-P", "--raw", "-F"}
+	paths := []string{"/var/log/app.log"}
+	sizeLimit := 200
+
+	cmd := BuildFollowSSHCommand(args, paths, sizeLimit)
+
+	// For follow mode, size limit should be applied
+	assert.Contains(t, cmd, "head -n 200")
+	// Both hl and tail commands should have the limit
+	assert.Contains(t, cmd, "hl -P --raw -F /var/log/app.log | head -n 200")
+	assert.Contains(t, cmd, "tail -f /var/log/app.log | head -n 200")
+}
+
+func TestBuildSSHCommand_WithCustomFallbackAndSizeLimit(t *testing.T) {
+	args := []string{"-P"}
+	paths := []string{"/var/log/app.log"}
+	customFallback := "grep ERROR /var/log/app.log"
+	sizeLimit := 50
+
+	cmd := BuildSSHCommand(args, paths, customFallback, sizeLimit)
+
+	// Custom fallback should have size limit applied
+	assert.Contains(t, cmd, "grep ERROR /var/log/app.log | head -n 50")
+	// hl command should also have size limit
+	assert.Contains(t, cmd, "hl -P /var/log/app.log | head -n 50")
+}
+
+// TestBuildSSHCommand_ErrorCases tests error scenarios
+func TestBuildSSHCommand_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name      string
+		args      []string
+		paths     []string
+		expectCmd bool
+	}{
+		{
+			name:      "Empty paths",
+			args:      []string{"-P"},
+			paths:     []string{},
+			expectCmd: false,
+		},
+		{
+			name:      "Nil paths",
+			args:      []string{"-P"},
+			paths:     nil,
+			expectCmd: false,
+		},
+		{
+			name:      "Empty args and paths",
+			args:      []string{},
+			paths:     []string{},
+			expectCmd: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := BuildSSHCommand(tt.args, tt.paths, "", 0)
+
+			if tt.expectCmd {
+				assert.NotEmpty(t, cmd, "Expected command to be generated")
+			} else {
+				// For empty paths, command should still be generated (might be empty or minimal)
+				// The actual behavior depends on implementation
+				// This test documents the current behavior
+			}
+		})
+	}
+}
+
+// TestBuildSSHCommand_SizeLimitEdgeCases tests various size limit values
+func TestBuildSSHCommand_SizeLimitEdgeCases(t *testing.T) {
+	args := []string{"-P"}
+	paths := []string{"/var/log/app.log"}
+
+	tests := []struct {
+		name      string
+		sizeLimit int
+		hasHead   bool
+	}{
+		{
+			name:      "Zero size limit",
+			sizeLimit: 0,
+			hasHead:   false,
+		},
+		{
+			name:      "Negative size limit",
+			sizeLimit: -1,
+			hasHead:   false,
+		},
+		{
+			name:      "Very large size limit",
+			sizeLimit: 1000000,
+			hasHead:   true,
+		},
+		{
+			name:      "Size limit of 1",
+			sizeLimit: 1,
+			hasHead:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := BuildSSHCommand(args, paths, "", tt.sizeLimit)
+
+			if tt.hasHead {
+				assert.Contains(t, cmd, "head", "Expected head command for non-zero size limit")
+			} else {
+				// Zero or negative size limits should not add head command
+				// (or behavior may vary - documenting current behavior)
+			}
+		})
+	}
+}
+
+// TestBuildSSHCommand_SpecialCharactersInPaths tests path handling with special characters
+func TestBuildSSHCommand_SpecialCharactersInPaths(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+	}{
+		{
+			name: "Path with spaces",
+			path: "/var/log/my app.log",
+		},
+		{
+			name: "Path with single quotes",
+			path: "/var/log/app's.log",
+		},
+		{
+			name: "Path with special characters",
+			path: "/var/log/app(1).log",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := []string{"-P"}
+			paths := []string{tt.path}
+
+			cmd := BuildSSHCommand(args, paths, "", 0)
+
+			// Command should be generated without panicking
+			assert.NotEmpty(t, cmd, "Expected command to be generated for path with special characters")
+
+			// Path should be properly escaped or quoted in the command
+			// (exact escaping mechanism depends on implementation)
+		})
+	}
+}

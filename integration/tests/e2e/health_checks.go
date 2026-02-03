@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 )
@@ -23,10 +24,21 @@ func CheckServiceHealth(ctx context.Context, check ServiceHealthCheck) error {
 	fmt.Printf("  Checking %s at %s...\n", check.Name, check.URL)
 
 	deadline := time.Now().Add(check.Timeout)
+
+	// Build TLS config
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
+
+	// Allow insecure for integration testing
+	if os.Getenv("LOGVIEWER_TLS_INSECURE") == "true" {
+		tlsConfig.InsecureSkipVerify = true
+	}
+
 	client := &http.Client{
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			TLSClientConfig: tlsConfig,
 		},
 	}
 

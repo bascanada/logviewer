@@ -274,6 +274,6 @@ func (kc kibanaClient) GetFieldValues(ctx context.Context, search *client.LogSea
 func GetClient(target Target) (client.LogBackend, error) {
 	client := new(kibanaClient)
 	client.target = target
-	client.client = http.GetClient(target.Endpoint)
+	client.client = http.GetClient(target.Endpoint, nil)
 	return client, nil
 }

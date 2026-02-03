@@ -186,6 +186,6 @@ func GetSplunkRestClient(
 
 	return SplunkRestClient{
 		target: target,
-		client: http.GetClient(target.Endpoint),
+		client: http.GetClient(target.Endpoint, nil),
 	}, nil
 }

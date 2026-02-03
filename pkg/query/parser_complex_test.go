@@ -69,6 +69,26 @@ func TestLexer(t *testing.T) {
 			input:    "level=error || level=warn",
 			expected: []query.TokenType{query.TokenField, query.TokenOperator, query.TokenValue, query.TokenOr, query.TokenField, query.TokenOperator, query.TokenValue, query.TokenEOF},
 		},
+		{
+			name:     "CONTAINS operator",
+			input:    "message CONTAINS error",
+			expected: []query.TokenType{query.TokenField, query.TokenOperator, query.TokenValue, query.TokenEOF},
+		},
+		{
+			name:     "LIKE operator",
+			input:    "path LIKE /api/%",
+			expected: []query.TokenType{query.TokenField, query.TokenOperator, query.TokenValue, query.TokenEOF},
+		},
+		{
+			name:     "CONTAINS with quoted value",
+			input:    `message CONTAINS "connection refused"`,
+			expected: []query.TokenType{query.TokenField, query.TokenOperator, query.TokenValue, query.TokenEOF},
+		},
+		{
+			name:     "LIKE in complex expression",
+			input:    "level=error AND path LIKE /api/%",
+			expected: []query.TokenType{query.TokenField, query.TokenOperator, query.TokenValue, query.TokenAnd, query.TokenField, query.TokenOperator, query.TokenValue, query.TokenEOF},
+		},
 	}
 
 	for _, tt := range tests {
@@ -87,6 +107,59 @@ func TestLexer(t *testing.T) {
 				if tokens[i].Type != expected {
 					t.Errorf("token %d: expected type %d, got %d (value: %s)", i, expected, tokens[i].Type, tokens[i].Value)
 				}
+			}
+		})
+	}
+}
+
+// TestLexer_OperatorTranslation tests that keyword operators are properly translated
+func TestLexer_OperatorTranslation(t *testing.T) {
+	tests := []struct {
+		name             string
+		input            string
+		expectedOperator string
+	}{
+		{
+			name:             "CONTAINS maps to ~=",
+			input:            "field CONTAINS value",
+			expectedOperator: "~=",
+		},
+		{
+			name:             "contains (lowercase) maps to ~=",
+			input:            "field contains value",
+			expectedOperator: "~=",
+		},
+		{
+			name:             "LIKE maps to like",
+			input:            "field LIKE pattern",
+			expectedOperator: "like",
+		},
+		{
+			name:             "like (lowercase) maps to like",
+			input:            "field like pattern",
+			expectedOperator: "like",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := query.NewLexer(tt.input)
+			tokens, err := lexer.Tokenize()
+			if err != nil {
+				t.Fatalf("Tokenize error: %v", err)
+			}
+
+			// Find the operator token (second token should be operator)
+			if len(tokens) < 3 {
+				t.Fatalf("Expected at least 3 tokens, got %d", len(tokens))
+			}
+
+			if tokens[1].Type != query.TokenOperator {
+				t.Fatalf("Second token should be operator, got %v", tokens[1].Type)
+			}
+
+			if tokens[1].Value != tt.expectedOperator {
+				t.Errorf("Expected operator '%s', got '%s'", tt.expectedOperator, tokens[1].Value)
 			}
 		})
 	}

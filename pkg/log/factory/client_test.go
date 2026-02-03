@@ -54,7 +54,7 @@ func TestGetLogBackendFactory(t *testing.T) {
 		f, err := factory.GetLogBackendFactory(dockerClients)
 		assert.NoError(t, err)
 		assert.NotNil(t, f)
-		
+
 		// We don't necessarily want to call Get("docker") as it might fail if no docker socket exists,
 		// but the factory creation itself should work.
 	})
@@ -133,7 +133,7 @@ func TestGetLogBackendFactory(t *testing.T) {
 	t.Run("docker client initialization without host", func(t *testing.T) {
 		dockerClients := config.Clients{
 			"docker": config.Client{
-				Type: "docker",
+				Type:    "docker",
 				Options: ty.MI{},
 			},
 		}
@@ -147,7 +147,7 @@ func TestGetLogBackendFactory(t *testing.T) {
 			"splunk": config.Client{
 				Type: "splunk",
 				Options: ty.MI{
-					"url": "http://splunk:8089",
+					"url":  "http://splunk:8089",
 					"auth": ty.MS{"Authorization": "Bearer token"},
 				},
 			},
@@ -160,7 +160,7 @@ func TestGetLogBackendFactory(t *testing.T) {
 	t.Run("kibana client", func(t *testing.T) {
 		kbClients := config.Clients{
 			"kibana": config.Client{
-				Type: "kibana",
+				Type:    "kibana",
 				Options: ty.MI{"endpoint": "http://kibana:5601"},
 			},
 		}
@@ -172,7 +172,7 @@ func TestGetLogBackendFactory(t *testing.T) {
 	t.Run("opensearch client", func(t *testing.T) {
 		osClients := config.Clients{
 			"opensearch": config.Client{
-				Type: "opensearch",
+				Type:    "opensearch",
 				Options: ty.MI{"endpoint": "http://os:9200"},
 			},
 		}
@@ -184,11 +184,56 @@ func TestGetLogBackendFactory(t *testing.T) {
 	t.Run("k8s client", func(t *testing.T) {
 		k8sClients := config.Clients{
 			"k8s": config.Client{
-				Type: "k8s",
+				Type:    "k8s",
 				Options: ty.MI{"kubeConfig": "/path/to/cfg"},
 			},
 		}
 		f, err := factory.GetLogBackendFactory(k8sClients)
+		assert.NoError(t, err)
+		assert.NotNil(t, f)
+	})
+
+	t.Run("k8s client with insecureSkipTLSVerify", func(t *testing.T) {
+		k8sClients := config.Clients{
+			"k8s-insecure": config.Client{
+				Type: "k8s",
+				Options: ty.MI{
+					"kubeConfig":            "/path/to/cfg",
+					"insecureSkipTLSVerify": true,
+				},
+			},
+		}
+		f, err := factory.GetLogBackendFactory(k8sClients)
+		assert.NoError(t, err)
+		assert.NotNil(t, f)
+	})
+
+	t.Run("ssh client initialization", func(t *testing.T) {
+		sshClients := config.Clients{
+			"ssh": config.Client{
+				Type: "ssh",
+				Options: ty.MI{
+					"user":       "testuser",
+					"addr":       "localhost:22",
+					"privateKey": "/path/to/key",
+				},
+			},
+		}
+		f, err := factory.GetLogBackendFactory(sshClients)
+		assert.NoError(t, err)
+		assert.NotNil(t, f)
+	})
+
+	t.Run("cloudwatch client initialization", func(t *testing.T) {
+		cwClients := config.Clients{
+			"cloudwatch": config.Client{
+				Type: "cloudwatch",
+				Options: ty.MI{
+					"region": "us-east-1",
+				},
+			},
+		}
+		f, err := factory.GetLogBackendFactory(cwClients)
 		assert.NoError(t, err)
 		assert.NotNil(t, f)
 	})

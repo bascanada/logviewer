@@ -35,12 +35,12 @@ jobs:
         run: |
           set -euxo pipefail
           echo "Starting integration services via docker-compose"
-          cd integration
-          docker-compose up -d
-          cd ..
+          cd integration/infra
+          docker compose up -d
+          cd ../..
           # ensure helper is executable and wait for splunk
-          chmod +x integration/splunk/wait-for-splunk.sh
-          ./integration/splunk/wait-for-splunk.sh
+          chmod +x integration/infra/splunk/wait-for-splunk.sh
+          ./integration/infra/splunk/wait-for-splunk.sh
 
       - name: Build binary
         if: github.event.inputs.run_full_integration == 'true'
@@ -51,7 +51,7 @@ jobs:
       - name: Run integration tests
         if: github.event.inputs.run_full_integration == 'true'
         env:
-          KUBECONFIG: ${{ github.workspace }}/integration/k8s/k3s.yaml
+          KUBECONFIG: ${{ github.workspace }}/integration/infra/k8s/k3s.yaml
         run: |
           set -euxo pipefail
           make integration/logs
@@ -61,4 +61,4 @@ jobs:
         if: always()
         run: |
           set -euxo pipefail
-          cd integration && docker-compose down -v || true
+          cd integration/infra && docker compose down -v || true

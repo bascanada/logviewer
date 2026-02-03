@@ -3,16 +3,28 @@ package http
 import (
 	"bytes"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/bascanada/logviewer/pkg/ty"
 )
+
+// TLSConfig holds TLS-related configuration for HTTP clients
+type TLSConfig struct {
+	// InsecureSkipVerify disables TLS certificate verification (NOT RECOMMENDED for production)
+	InsecureSkipVerify bool
+	// CACert is a PEM-encoded CA certificate (optional, for custom/self-signed certs)
+	CACert string
+	// CACertFile is a path to a PEM-encoded CA certificate file (optional)
+	CACertFile string
+}
 
 // Auth provides an interface for authenticating HTTP requests.
 type Auth interface {
@@ -281,8 +293,9 @@ func (c Client) Delete(path string, headers ty.MS, auth Auth) error {
 	return nil
 }
 
-// GetClient returns a new Client for the given URL.
-func GetClient(url string) Client {
+// GetClient returns a new Client for the given URL with optional TLS configuration.
+// If tlsConfig is nil, TLS configuration is read from environment variables.
+func GetClient(url string, tlsConfig *TLSConfig) Client {
 	// Normalize URL: if scheme is missing, default to https. Also remove
 	// any trailing slash to avoid double slashes when appending paths.
 	if url != "" {
@@ -293,7 +306,7 @@ func GetClient(url string) Client {
 		url = strings.TrimRight(url, "/")
 	}
 
-	spaceClient := getSpaceClient()
+	spaceClient := getSpaceClient(tlsConfig)
 
 	return Client{
 		client: spaceClient,
@@ -301,17 +314,69 @@ func GetClient(url string) Client {
 	}
 }
 
-func getSpaceClient() http.Client {
+func getSpaceClient(tlsConfig *TLSConfig) http.Client {
+	// If no custom TLS config provided, use environment variables
+	if tlsConfig == nil {
+		tlsConfig = getTLSConfigFromEnv()
+	}
+
 	switch v := http.DefaultTransport.(type) {
 	case (*http.Transport):
 		customTransport := v.Clone()
-		customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // G402: intentionally skip TLS verification for development/internal use
+
+		// Build TLS config
+		clientTLSConfig := &tls.Config{
+			MinVersion: tls.VersionTLS12, // Secure default
+		}
+
+		if tlsConfig.InsecureSkipVerify {
+			log.Println("[WARN] TLS certificate verification is disabled - this is insecure for production")
+			clientTLSConfig.InsecureSkipVerify = true
+		} else {
+			// Secure default: use system cert pool
+			certPool, err := x509.SystemCertPool()
+			if err != nil {
+				certPool = x509.NewCertPool()
+			}
+
+			// Add custom CA if provided
+			if tlsConfig.CACert != "" {
+				if ok := certPool.AppendCertsFromPEM([]byte(tlsConfig.CACert)); !ok {
+					log.Println("[WARN] Failed to parse CA certificate from CACert")
+				}
+			} else if tlsConfig.CACertFile != "" {
+				caCertPEM, err := os.ReadFile(tlsConfig.CACertFile)
+				if err != nil {
+					log.Printf("[WARN] Failed to read CA cert file %s: %v", tlsConfig.CACertFile, err)
+				} else if ok := certPool.AppendCertsFromPEM(caCertPEM); !ok {
+					log.Println("[WARN] Failed to parse CA certificate from file")
+				}
+			}
+
+			clientTLSConfig.RootCAs = certPool
+		}
+
+		customTransport.TLSClientConfig = clientTLSConfig
 		return http.Client{Transport: customTransport}
 	default:
 		return http.Client{}
+	}
+}
 
+// getTLSConfigFromEnv reads TLS configuration from environment variables
+func getTLSConfigFromEnv() *TLSConfig {
+	cfg := &TLSConfig{}
+
+	// Check for insecure mode (opt-in)
+	if os.Getenv("LOGVIEWER_TLS_INSECURE") == "true" {
+		cfg.InsecureSkipVerify = true
 	}
 
+	// Check for custom CA cert
+	cfg.CACert = os.Getenv("LOGVIEWER_CA_CERT")
+	cfg.CACertFile = os.Getenv("LOGVIEWER_CA_CERT_FILE")
+
+	return cfg
 }
 
 // maskHeaderMap returns a string representation of headers with sensitive

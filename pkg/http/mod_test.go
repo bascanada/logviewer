@@ -22,7 +22,7 @@ func TestHttpClient_Get_SendsHeaders(t *testing.T) {
 		Reply(200).
 		JSON(map[string]string{"status": "ok"})
 
-	client := GetClient(url)
+	client := GetClient(url, nil)
 
 	headers := ty.MS{
 		"X-Custom-Header": "custom-value",

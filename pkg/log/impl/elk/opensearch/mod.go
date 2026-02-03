@@ -194,6 +194,6 @@ func (kc openSearchClient) getFieldValuesFromSearch(ctx context.Context, search 
 func GetClient(target Target) (client.LogBackend, error) {
 	client := new(openSearchClient)
 	client.target = target
-	client.client = http.GetClient(target.Endpoint)
+	client.client = http.GetClient(target.Endpoint, nil)
 	return client, nil
 }

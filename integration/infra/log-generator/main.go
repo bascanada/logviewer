@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -189,6 +190,39 @@ func logToDynamo(id, status, msg string) {
 	})
 }
 
+// getSplunkHTTPClient returns an HTTP client configured for Splunk HEC with TLS settings
+// from environment variables. For integration testing, SPLUNK_HEC_INSECURE=true allows
+// connections to self-signed certificates.
+func getSplunkHTTPClient() *http.Client {
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
+
+	// Allow insecure for integration testing
+	if os.Getenv("SPLUNK_HEC_INSECURE") == "true" {
+		tlsConfig.InsecureSkipVerify = true
+	} else if caCert := os.Getenv("SPLUNK_HEC_CA_CERT"); caCert != "" {
+		// Support custom CA cert
+		certPool := x509.NewCertPool()
+		certPool.AppendCertsFromPEM([]byte(caCert))
+		tlsConfig.RootCAs = certPool
+	} else if caCertFile := os.Getenv("SPLUNK_HEC_CA_CERT_FILE"); caCertFile != "" {
+		// Support custom CA cert file
+		caCertPEM, err := os.ReadFile(caCertFile)
+		if err == nil {
+			certPool := x509.NewCertPool()
+			certPool.AppendCertsFromPEM(caCertPEM)
+			tlsConfig.RootCAs = certPool
+		}
+	}
+
+	return &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: tlsConfig,
+		},
+	}
+}
+
 func sendToSplunk(entry LogEntry) {
 	if splunkHecURL == "" {
 		return
@@ -197,8 +231,8 @@ func sendToSplunk(entry LogEntry) {
 	req, _ := http.NewRequest("POST", splunkHecURL, bytes.NewBuffer(payload))
 	req.Header.Set("Authorization", "Splunk "+splunkHecToken)
 	req.Header.Set("Content-Type", "application/json")
-	// InsecureSkipVerify is acceptable here for integration testing with self-signed certificates
-	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+
+	client := getSplunkHTTPClient()
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("ERROR: failed to send log to splunk: %v", err)
@@ -507,8 +541,7 @@ func sendToSplunkWithIndex(entry LogEntry, index string) bool {
 	req.Header.Set("Authorization", "Splunk "+splunkHecToken)
 	req.Header.Set("Content-Type", "application/json")
 
-	// InsecureSkipVerify is acceptable here for integration testing with self-signed certificates
-	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+	client := getSplunkHTTPClient()
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("ERROR: failed to send log to Splunk: %v", err)
