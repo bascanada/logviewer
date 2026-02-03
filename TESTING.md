@@ -126,3 +126,27 @@ Check coverage:
 go test -coverprofile=coverage.out ./pkg/...
 go tool cover -func=coverage.out
 ```
+
+Run integration tests (requires Docker):
+```bash
+make integration/start
+make integration/test
+make integration/stop
+```
+
+---
+
+## Understanding Coverage Metrics
+
+**Coverage metrics are optional.** The primary focus should be on **smoke tests** that verify basic functionality works end-to-end. However, we still add unit tests where practical to catch regressions early.
+
+### Integration Test Focus
+Driver implementations (SSH, K8s, Splunk, CloudWatch clients) are primarily validated through **integration and E2E tests** rather than mocked unit tests. This ensures real-world compatibility.
+
+### Smoke Tests Priority
+The most important tests are:
+- E2E tests in `integration/tests/e2e/` - Verify core workflows work with real backends
+- Integration tests - Verify adapters work with actual services
+- Unit tests for pure logic - Nice to have for catching regressions quickly
+
+**Focus testing efforts on smoke tests that validate real behavior over achieving high coverage percentages.**

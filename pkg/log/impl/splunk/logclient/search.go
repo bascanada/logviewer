@@ -28,6 +28,8 @@ type SplunkLogSearchResult struct {
 	// useResultsEndpoint indicates if the query has transforming commands
 	// (stats, chart, etc.) requiring the /results endpoint instead of /events
 	useResultsEndpoint bool
+	// sizeLimit enforces max number of entries to return (0 = no limit)
+	sizeLimit int
 }
 
 // GetSearch returns the search configuration.
@@ -47,7 +49,12 @@ func (s *SplunkLogSearchResult) Close() error {
 // GetEntries returns log entries and a channel for streaming updates.
 func (s SplunkLogSearchResult) GetEntries(ctx context.Context) ([]client.LogEntry, chan []client.LogEntry, error) {
 	if !s.isFollow {
-		return s.parseResults(&s.results[0]), nil, nil
+		entries := s.parseResults(&s.results[0])
+		// Apply size limit if set
+		if s.sizeLimit > 0 && len(entries) > s.sizeLimit {
+			entries = entries[:s.sizeLimit]
+		}
+		return entries, nil, nil
 	}
 
 	entryChan := make(chan []client.LogEntry)
@@ -75,6 +82,16 @@ func (s SplunkLogSearchResult) GetEntries(ctx context.Context) ([]client.LogEntr
 
 				if len(results.Results) > 0 {
 					entries := s.parseResults(&results)
+					// Apply size limit for follow mode
+					if s.sizeLimit > 0 && offset+len(entries) > s.sizeLimit {
+						remaining := s.sizeLimit - offset
+						if remaining > 0 {
+							entries = entries[:remaining]
+							entryChan <- entries
+							offset += len(entries)
+						}
+						return
+					}
 					entryChan <- entries
 					offset += len(entries)
 				}

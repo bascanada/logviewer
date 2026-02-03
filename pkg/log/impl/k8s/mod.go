@@ -45,7 +45,8 @@ const (
 
 // LogClientOptions defines configuration for the Kubernetes client.
 type LogClientOptions struct {
-	KubeConfig string `json:"kubeConfig"`
+	KubeConfig            string `json:"kubeConfig"`
+	InsecureSkipTLSVerify bool   `json:"insecureSkipTLSVerify"`
 }
 
 /*
@@ -339,6 +340,14 @@ func GetLogClient(options LogClientOptions) (client.LogBackend, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Apply insecureSkipTLSVerify setting if provided
+	if options.InsecureSkipTLSVerify {
+		config.Insecure = true
+		config.CAData = nil
+		config.CAFile = ""
+	}
+
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, err

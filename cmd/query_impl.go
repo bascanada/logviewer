@@ -270,13 +270,21 @@ func RunQueryValues(out io.Writer, cli client.LogClient, search client.LogSearch
 }
 
 // RunQueryField executes the 'query field' logic using a LogClient.
-func RunQueryField(out io.Writer, cli client.LogClient, search client.LogSearch) error {
+func RunQueryField(out io.Writer, cli client.LogClient, search client.LogSearch, asJSON bool) error {
 	ctx := context.Background()
 	fields, err := cli.GetFields(ctx, search)
 	if err != nil {
 		return err
 	}
 
+	if asJSON {
+		// Output as JSON for machine consumption
+		enc := json.NewEncoder(out)
+		enc.SetIndent("", "  ")
+		return enc.Encode(fields)
+	}
+
+	// Human-readable output
 	keys := make([]string, 0, len(fields))
 	for k := range fields {
 		keys = append(keys, k)

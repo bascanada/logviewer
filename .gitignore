@@ -13,6 +13,9 @@ integration/ssh/id_rsa.pub
 integration/ssh/authorized_keys
 integration/k8s/k3s.*
 
+# macOS sed backup files
+*-e
+
 .DS_Store
 
 dist/

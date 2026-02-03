@@ -110,6 +110,20 @@ func (m *MultiLogSearchResult) GetEntries(ctx context.Context) ([]LogEntry, chan
 		return allEntries[i].Timestamp.Before(allEntries[j].Timestamp)
 	})
 
+	// Apply global size limit if specified in the search
+	globalSizeLimit := 0
+	if len(m.Results) > 0 {
+		firstSearch := m.Results[0].GetSearch()
+		if firstSearch.Size.Set && firstSearch.Size.Value > 0 {
+			globalSizeLimit = firstSearch.Size.Value
+		}
+	}
+
+	// Truncate to global size limit if needed
+	if globalSizeLimit > 0 && len(allEntries) > globalSizeLimit {
+		allEntries = allEntries[:globalSizeLimit]
+	}
+
 	var mergedChannel chan []LogEntry
 	if len(subChannels) > 0 {
 		mergedChannel = make(chan []LogEntry)
@@ -142,10 +156,33 @@ func (m *MultiLogSearchResult) GetEntries(ctx context.Context) ([]LogEntry, chan
 	return allEntries, mergedChannel, nil
 }
 
-// GetFields is not implemented for MultiLogSearchResult as it's ambiguous
-// how to merge fields from different sources.
-func (m *MultiLogSearchResult) GetFields(context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
-	return nil, nil, errors.New("field queries are not supported with multiple contexts; use a single context instead")
+// GetFields merges fields from all contexts in the result.
+func (m *MultiLogSearchResult) GetFields(ctx context.Context) (ty.UniSet[string], chan ty.UniSet[string], error) {
+	aggregatedFields := make(ty.UniSet[string])
+	var hasError bool
+
+	for _, res := range m.Results {
+		fields, _, err := res.GetFields(ctx)
+		if err != nil {
+			m.Errors = append(m.Errors, err)
+			hasError = true
+			continue
+		}
+
+		if fields != nil {
+			for k, values := range fields {
+				for _, v := range values {
+					aggregatedFields.Add(k, v)
+				}
+			}
+		}
+	}
+
+	if hasError && len(aggregatedFields) == 0 {
+		return nil, nil, errors.New("failed to get fields from any context")
+	}
+
+	return aggregatedFields, nil, nil
 }
 
 // GetPaginationInfo returns nil as pagination is not supported for multi-context search results.

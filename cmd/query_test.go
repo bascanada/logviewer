@@ -163,7 +163,7 @@ func TestRunQueryField(t *testing.T) {
 
 	t.Run("displays fields and examples", func(t *testing.T) {
 		var buf bytes.Buffer
-		err := RunQueryField(&buf, mockClient, search)
+		err := RunQueryField(&buf, mockClient, search, false)
 		assert.NoError(t, err)
 
 		output := buf.String()
@@ -173,5 +173,20 @@ func TestRunQueryField(t *testing.T) {
 		assert.True(t, strings.Contains(output, "INFO") || strings.Contains(output, "INFO\n"), "output should contain 'INFO'")
 		assert.Contains(t, output, "message")
 		assert.Contains(t, output, "foo bar")
+	})
+
+	t.Run("outputs JSON when requested", func(t *testing.T) {
+		var buf bytes.Buffer
+		err := RunQueryField(&buf, mockClient, search, true)
+		assert.NoError(t, err)
+
+		// Verify valid JSON
+		var fields map[string][]string
+		err = json.Unmarshal(buf.Bytes(), &fields)
+		assert.NoError(t, err, "output should be valid JSON")
+
+		// Verify content
+		assert.Equal(t, []string{"INFO", "WARN"}, fields["level"])
+		assert.Equal(t, []string{"foo bar"}, fields["message"])
 	})
 }
