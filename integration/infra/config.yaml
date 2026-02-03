@@ -119,7 +119,7 @@ contexts:
     search:
       fields: {}
       options:
-        index: main
+        index: "*"
         search: 'sourcetype=json'
 
   # Combined view - all OpenSearch logs
@@ -130,7 +130,7 @@ contexts:
     search:
       fields: {}
       options:
-        index: app-logs
+        index: "*"
 
   # CloudWatch logs (if using LocalStack for additional logging)
   cloudwatch-orders:

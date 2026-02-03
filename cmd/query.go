@@ -476,7 +476,7 @@ var queryFieldCommand = &cobra.Command{
 			os.Exit(1)
 		}
 
-		if err := RunQueryField(os.Stdout, logClient, search); err != nil {
+		if err := RunQueryField(os.Stdout, logClient, search, jsonOutput); err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
 		}

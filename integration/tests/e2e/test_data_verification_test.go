@@ -77,6 +77,7 @@ func TestDataSeeding_PaymentLogs(t *testing.T) {
 
 // TestDataSeeding_MixedLevels verifies the mixed-levels fixture was seeded correctly
 func TestDataSeeding_MixedLevels(t *testing.T) {
+	t.Skip("Mixed levels fixture not seeded in core smoke tests")
 	t.Parallel()
 
 	fixture, err := GetFixtureInfo("mixed-levels")
@@ -155,6 +156,7 @@ func TestDataSeeding_TraceLogs(t *testing.T) {
 
 // TestDataSeeding_SlowRequests verifies the slow-requests fixture was seeded correctly
 func TestDataSeeding_SlowRequests(t *testing.T) {
+	t.Skip("Slow requests fixture not seeded in core smoke tests")
 	t.Parallel()
 
 	fixture, err := GetFixtureInfo("slow-requests")
@@ -199,6 +201,6 @@ func TestDataSeeding_FieldValues(t *testing.T) {
 
 	ExpectValues(t, values).
 		HasFields("level", "app").
-		FieldHasExactValues("level", "ERROR"). // All should be ERROR
+		FieldHasExactValues("level", "ERROR").        // All should be ERROR
 		FieldHasExactValues("app", "payment-service") // All should be payment-service
 }

@@ -11,13 +11,28 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
+// RetryOptions defines the retry/polling policy
+type RetryOptions struct {
+	Timeout       time.Duration
+	RetryInterval time.Duration
+}
+
+// DefaultRetryOptions: 30 seconds max wait, check every 500ms
+var DefaultRetryOptions = RetryOptions{
+	Timeout:       30 * time.Second,
+	RetryInterval: 500 * time.Millisecond,
+}
+
 type TestContext struct {
-	BinaryPath string
-	ConfigPath string
+	BinaryPath         string
+	ConfigPath         string
+	RunID              string // Unique ID for this test run to isolate data
+	DisableRunIDFilter bool   // Set to true to disable automatic run_id injection
 }
 
 var tCtx TestContext
@@ -58,9 +73,101 @@ func (c *TestContext) RunAndParse(t *testing.T, args ...string) []map[string]int
 	if !hasJson {
 		args = append(args, "--json")
 	}
+
+	// Auto-inject run_id filter if RunID is set and not disabled
+	if c.RunID != "" && !c.DisableRunIDFilter {
+		args = c.injectRunIDFilter(args)
+	}
+
 	stdout, stderr, err := c.Run(t, args...)
 	require.NoError(t, err, "Command failed. Stderr: %s", stderr)
 	return parseJSONOutput(t, stdout)
+}
+
+// RunAndParseUntilFound executes CLI in a loop until logs are found or timeout
+// This replaces static sleeps with intelligent polling
+func (c *TestContext) RunAndParseUntilFound(t *testing.T, expectedCount int, args ...string) []map[string]interface{} {
+	t.Helper()
+
+	start := time.Now()
+	var lastLogs []map[string]interface{}
+	var lastErr error
+
+	// Ensure JSON flag is present
+	hasJson := false
+	for _, a := range args {
+		if a == "--json" {
+			hasJson = true
+			break
+		}
+	}
+	if !hasJson {
+		args = append(args, "--json")
+	}
+
+	// Auto-inject run_id filter if RunID is set and not disabled
+	if c.RunID != "" && !c.DisableRunIDFilter {
+		args = c.injectRunIDFilter(args)
+	}
+
+	attempts := 0
+	for time.Since(start) < DefaultRetryOptions.Timeout {
+		attempts++
+
+		// Use Run (not RunAndParse) to avoid failing test on transient errors
+		stdout, _, err := c.Run(t, args...)
+		if err == nil {
+			logs := parseJSONOutput(t, stdout)
+			if len(logs) >= expectedCount {
+				if attempts > 1 {
+					t.Logf("Found %d logs after %d attempts (%.1fs)", len(logs), attempts, time.Since(start).Seconds())
+				}
+				return logs // Success!
+			}
+			lastLogs = logs
+		} else {
+			lastErr = err
+		}
+
+		time.Sleep(DefaultRetryOptions.RetryInterval)
+	}
+
+	// Timeout - fail test with detailed message
+	require.Failf(t, "Timeout waiting for logs",
+		"Expected at least %d logs, got %d after %d attempts in %v. Last error: %v. Command: %v",
+		expectedCount, len(lastLogs), attempts, DefaultRetryOptions.Timeout, lastErr, args)
+
+	return nil
+}
+
+// injectRunIDFilter adds run_id filter to query args if not already present
+func (c *TestContext) injectRunIDFilter(args []string) []string {
+	// Check if run_id filter already exists
+	for i, arg := range args {
+		if arg == "-f" && i+1 < len(args) && strings.Contains(args[i+1], "run_id=") {
+			return args // Already has run_id filter
+		}
+	}
+
+	// Inject run_id filter after the command but before other flags
+	// Find insertion point (after "query log/field/values")
+	insertIdx := 0
+	for i, arg := range args {
+		if arg == "query" || arg == "log" || arg == "field" || arg == "values" {
+			insertIdx = i + 1
+		}
+		if strings.HasPrefix(arg, "-") {
+			break
+		}
+	}
+
+	// Insert at the right position
+	result := make([]string, 0, len(args)+2)
+	result = append(result, args[:insertIdx]...)
+	result = append(result, "-f", "run_id="+c.RunID)
+	result = append(result, args[insertIdx:]...)
+
+	return result
 }
 
 func parseJSONOutput(t *testing.T, output string) []map[string]interface{} {

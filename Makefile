@@ -113,6 +113,8 @@ integration/start:
 	@bash integration/infra/ssh/generate-keys.sh
 	@cd integration/infra && docker-compose up -d
 	@bash integration/infra/splunk/wait-for-splunk.sh
+	@bash integration/infra/splunk/create-test-indexes.sh
+	@bash integration/infra/opensearch/create-test-indexes.sh
 	@bash integration/infra/k8s/configure-kubeconfig.sh
 	@docker ps
 
@@ -173,6 +175,25 @@ integration/start/logs:
 integration/stop/logs:
 	@echo "Stopping log-generator..."
 	@cd integration/infra && docker-compose -f docker-compose-log-generator.yml down -v
+
+integration/rebuild/logs:
+	@echo "Rebuilding and redeploying log-generator with latest changes..."
+	@cd integration/infra && docker-compose -f docker-compose-log-generator.yml down || true
+	@cd integration/infra && docker-compose -f docker-compose-log-generator.yml build --no-cache log-generator
+	@export SPLUNK_HEC_TOKEN=$$(cat ./integration/infra/splunk/.hec_token 2>/dev/null || echo "") && \
+		cd integration/infra && docker-compose -f docker-compose-log-generator.yml up -d
+	@echo "Waiting for log-generator to be ready..."
+	@sleep 3
+	@echo "Testing /health endpoint..."
+	@curl -f http://localhost:8081/health 2>/dev/null && echo "\n✅ Log-generator ready with new code!" || echo "\n⚠️  /health endpoint not available"
+
+integration/logs/tail:
+	@echo "Tailing logs from all integration services..."
+	@cd integration/infra && docker-compose logs --tail=50 -f
+
+integration/logs/generator-tail:
+	@echo "Tailing log-generator logs..."
+	@cd integration/infra && docker-compose -f docker-compose-log-generator.yml logs --tail=50 -f log-generator
 
 integration/deploy-simulation:
 	@echo "Building simulator image..."
@@ -235,31 +256,32 @@ integration/test: build
 
 integration/test/query: build
 	@echo "Running query-related tests..."
-	@go test -v -tags=integration ./integration/tests/e2e/... -run TestQuery -timeout 10m
+	@TEST_FIXTURES="error-logs,payment-logs,order-logs" go test -v -tags=integration ./integration/tests/e2e/... -run TestQuery -timeout 10m
 
 integration/test/log: build
 	@echo "Running log query tests..."
-	@go test -v -tags=integration ./integration/tests/e2e/... -run TestQueryLog -timeout 10m
+	@TEST_FIXTURES="error-logs,payment-logs,order-logs" go test -v -tags=integration ./integration/tests/e2e/... -run TestQueryLog -timeout 10m
 
 integration/test/field: build
 	@echo "Running field query tests..."
-	@go test -v -tags=integration ./integration/tests/e2e/... -run TestQueryField -timeout 10m
+	@TEST_FIXTURES="payment-logs,order-logs" go test -v -tags=integration ./integration/tests/e2e/... -run TestQueryField -timeout 10m
 
 integration/test/values: build
 	@echo "Running values query tests..."
-	@go test -v -tags=integration ./integration/tests/e2e/... -run TestQueryValues -timeout 10m
+	@TEST_FIXTURES="payment-logs,order-logs,mixed-levels" go test -v -tags=integration ./integration/tests/e2e/... -run TestQueryValues -timeout 10m
 
 integration/test/ssh: build
 	@echo "Running SSH backend tests..."
-	@go test -v -tags=integration ./integration/tests/e2e/... -run TestSSH -timeout 10m
+	@# SSH tests don't use standard fixtures
+	@TEST_FIXTURES="" go test -v -tags=integration ./integration/tests/e2e/... -run TestSSH -timeout 10m
 
 integration/test/native: build
 	@echo "Running native query tests..."
-	@go test -v -tags=integration ./integration/tests/e2e/... -run TestNative -timeout 10m
+	@TEST_FIXTURES="error-logs,payment-logs,order-logs" go test -v -tags=integration ./integration/tests/e2e/... -run TestNative -timeout 10m
 
 integration/test/hl: build
 	@echo "Running HL query syntax tests..."
-	@go test -v -tags=integration ./integration/tests/e2e/... -run TestHL -timeout 10m
+	@TEST_FIXTURES="error-logs,payment-logs,order-logs" go test -v -tags=integration ./integration/tests/e2e/... -run TestHL -timeout 10m
 
 integration/test/short: build
 	@echo "Running short integration tests (quick smoke test)..."

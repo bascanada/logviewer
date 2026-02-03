@@ -23,7 +23,7 @@ func TestQueryLog_Splunk(t *testing.T) {
 	t.Run("PaymentService", func(t *testing.T) {
 		logs := tCtx.RunAndParse(t,
 			"query", "log",
-			"-i", "payment-service",
+			"-i", "test-splunk-payments",
 			"--last", "1h",
 			"--size", "5",
 		)

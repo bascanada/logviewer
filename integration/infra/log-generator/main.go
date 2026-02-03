@@ -28,6 +28,7 @@ type LogEntry struct {
 	App       string    `json:"app"`
 	TraceID   string    `json:"trace_id,omitempty"`
 	Latency   int64     `json:"latency_ms,omitempty"`
+	RunID     string    `json:"run_id,omitempty"` // For test run isolation
 }
 
 var (
@@ -40,6 +41,9 @@ var (
 
 func main() {
 	initDynamoDB()
+
+	// 0. Health Check Endpoint
+	http.HandleFunc("/health", handleHealth)
 
 	// 1. Trigger Endpoint (Manual)
 	http.HandleFunc("/checkout", handleCheckout)
@@ -59,8 +63,10 @@ func main() {
 
 // initDynamoDB connects to LocalStack
 func initDynamoDB() {
-	if localstackURL == "" { return }
-	
+	if localstackURL == "" {
+		return
+	}
+
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithRegion("us-east-1"),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider("test", "test", "")),
@@ -74,13 +80,13 @@ func initDynamoDB() {
 		return
 	}
 	dynamoClient = dynamodb.NewFromConfig(cfg)
-	
+
 	// Create table if not exists (ignoring errors for brevity)
 	dynamoClient.CreateTable(context.TODO(), &dynamodb.CreateTableInput{
-		TableName: aws.String("Orders"),
-		KeySchema: []types.KeySchemaElement{{AttributeName: aws.String("OrderID"), KeyType: types.KeyTypeHash}},
+		TableName:            aws.String("Orders"),
+		KeySchema:            []types.KeySchemaElement{{AttributeName: aws.String("OrderID"), KeyType: types.KeyTypeHash}},
 		AttributeDefinitions: []types.AttributeDefinition{{AttributeName: aws.String("OrderID"), AttributeType: types.ScalarAttributeTypeS}},
-		BillingMode: types.BillingModePayPerRequest,
+		BillingMode:          types.BillingModePayPerRequest,
 	})
 }
 
@@ -88,7 +94,7 @@ func startLoadGenerator() {
 	// Wait for startup
 	time.Sleep(5 * time.Second)
 	log.Println("Starting background load generator...")
-	
+
 	for {
 		// Simulate traffic bursts
 		go simulateTransaction()
@@ -107,7 +113,7 @@ func simulateTransaction() {
 
 	// --- 1. Frontend Service (Nginx Style -> Stdout/K8s Logs) ---
 	// "192.168.1.5 - - [Date] "POST /api/checkout" 200 ..."
-	fmt.Printf("10.0.0.%d - - [%s] \"POST /api/checkout HTTP/1.1\" 200 1024 \"Mozilla/5.0\" trace_id=%s\n", 
+	fmt.Printf("10.0.0.%d - - [%s] \"POST /api/checkout HTTP/1.1\" 200 1024 \"Mozilla/5.0\" trace_id=%s\n",
 		rand.Intn(255), time.Now().Format("02/Jan/2006:15:04:05 -0700"), traceID)
 
 	// --- 2. Order Service (JSON -> OpenSearch) ---
@@ -151,7 +157,7 @@ func simulateTransaction() {
 	// --- 4. Database (Stdout/K8s Logs - simulating separate pod) ---
 	// Occasional deadlock
 	if rand.Float32() < 0.05 {
-		fmt.Printf("%s [ERROR] [database-primary] Deadlock found when trying to get lock; try restarting transaction trace_id=%s\n", 
+		fmt.Printf("%s [ERROR] [database-primary] Deadlock found when trying to get lock; try restarting transaction trace_id=%s\n",
 			time.Now().Format(time.RFC3339), traceID)
 	}
 
@@ -169,7 +175,9 @@ func simulateTransaction() {
 }
 
 func logToDynamo(id, status, msg string) {
-	if dynamoClient == nil { return }
+	if dynamoClient == nil {
+		return
+	}
 	dynamoClient.PutItem(context.TODO(), &dynamodb.PutItemInput{
 		TableName: aws.String("Orders"),
 		Item: map[string]types.AttributeValue{
@@ -182,11 +190,14 @@ func logToDynamo(id, status, msg string) {
 }
 
 func sendToSplunk(entry LogEntry) {
-	if splunkHecURL == "" { return }
+	if splunkHecURL == "" {
+		return
+	}
 	payload, _ := json.Marshal(map[string]interface{}{"event": entry, "sourcetype": "json"})
 	req, _ := http.NewRequest("POST", splunkHecURL, bytes.NewBuffer(payload))
 	req.Header.Set("Authorization", "Splunk "+splunkHecToken)
 	req.Header.Set("Content-Type", "application/json")
+	// InsecureSkipVerify is acceptable here for integration testing with self-signed certificates
 	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -197,9 +208,13 @@ func sendToSplunk(entry LogEntry) {
 }
 
 func sendToOpenSearch(entry LogEntry) {
-	if opensearchURL == "" { return }
+	if opensearchURL == "" {
+		return
+	}
+	// Transaction simulator sends to app-logs index
+	url := fmt.Sprintf("%s/app-logs/_doc", opensearchURL)
 	payload, _ := json.Marshal(entry)
-	req, _ := http.NewRequest("POST", opensearchURL, bytes.NewBuffer(payload))
+	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(payload))
 	req.Header.Set("Content-Type", "application/json")
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -216,25 +231,27 @@ func sendToOpenSearch(entry LogEntry) {
 type TestFixture struct {
 	Name        string     `json:"name"`
 	Description string     `json:"description"`
-	Index       string     `json:"index"`        // Splunk/OpenSearch index
+	Index       string     `json:"index"` // Splunk/OpenSearch index
 	Logs        []LogEntry `json:"logs"`
 }
 
 // SeedRequest is the request payload for /seed endpoint
 type SeedRequest struct {
-	Fixtures []string `json:"fixtures"` // Names of fixtures to seed
+	Fixtures []string `json:"fixtures"`         // Names of fixtures to seed
+	RunID    string   `json:"run_id,omitempty"` // Unique ID to tag logs with
 }
 
 // SeedResponse is the response from /seed endpoint
 type SeedResponse struct {
-	Success  bool              `json:"success"`
-	Message  string            `json:"message"`
-	Seeded   map[string]int    `json:"seeded"`   // fixture name -> count
-	Errors   []string          `json:"errors,omitempty"`
+	Success bool           `json:"success"`
+	Message string         `json:"message"`
+	Seeded  map[string]int `json:"seeded"` // fixture name -> count
+	Errors  []string       `json:"errors,omitempty"`
+	RunID   string         `json:"run_id,omitempty"` // Echo back the run_id
 }
 
 // getTestFixtures returns all available test fixtures
-func getTestFixtures() map[string]TestFixture {
+func getTestFixtures(runID string) map[string]TestFixture {
 	baseTime := time.Now().Add(-1 * time.Hour) // Start from 1 hour ago
 
 	fixtures := make(map[string]TestFixture)
@@ -254,6 +271,7 @@ func getTestFixtures() map[string]TestFixture {
 			App:       "payment-service",
 			TraceID:   fmt.Sprintf("test-trace-%03d", i+1),
 			Latency:   int64(1200 + rand.Intn(500)),
+			RunID:     runID,
 		}
 	}
 	fixtures["error-logs"] = errorLogs
@@ -283,6 +301,7 @@ func getTestFixtures() map[string]TestFixture {
 			App:       "payment-service",
 			TraceID:   fmt.Sprintf("test-pay-%03d", i+1),
 			Latency:   latency,
+			RunID:     runID,
 		}
 	}
 	fixtures["payment-logs"] = paymentLogs
@@ -313,6 +332,7 @@ func getTestFixtures() map[string]TestFixture {
 			App:       "order-service",
 			TraceID:   fmt.Sprintf("test-ord-%03d", i+1),
 			Latency:   int64(50 + rand.Intn(200)),
+			RunID:     runID,
 		}
 	}
 	fixtures["order-logs"] = orderLogs
@@ -325,9 +345,15 @@ func getTestFixtures() map[string]TestFixture {
 		Logs:        make([]LogEntry, 100),
 	}
 	levelDist := []string{}
-	for i := 0; i < 50; i++ { levelDist = append(levelDist, "INFO") }
-	for i := 0; i < 30; i++ { levelDist = append(levelDist, "WARN") }
-	for i := 0; i < 20; i++ { levelDist = append(levelDist, "ERROR") }
+	for i := 0; i < 50; i++ {
+		levelDist = append(levelDist, "INFO")
+	}
+	for i := 0; i < 30; i++ {
+		levelDist = append(levelDist, "WARN")
+	}
+	for i := 0; i < 20; i++ {
+		levelDist = append(levelDist, "ERROR")
+	}
 
 	for i := 0; i < 100; i++ {
 		mixedLogs.Logs[i] = LogEntry{
@@ -337,6 +363,7 @@ func getTestFixtures() map[string]TestFixture {
 			App:       "api-gateway",
 			TraceID:   fmt.Sprintf("test-mix-%03d", i+1),
 			Latency:   int64(100 + rand.Intn(500)),
+			RunID:     runID,
 		}
 	}
 	fixtures["mixed-levels"] = mixedLogs
@@ -356,6 +383,7 @@ func getTestFixtures() map[string]TestFixture {
 			App:       "api-gateway",
 			TraceID:   fmt.Sprintf("trace-distributed-%03d", i+1),
 			Latency:   int64(50 + rand.Intn(150)),
+			RunID:     runID,
 		}
 	}
 	fixtures["trace-logs"] = traceLogs
@@ -375,11 +403,22 @@ func getTestFixtures() map[string]TestFixture {
 			App:       "api-gateway",
 			TraceID:   fmt.Sprintf("test-slow-%03d", i+1),
 			Latency:   int64(1000 + rand.Intn(2000)),
+			RunID:     runID,
 		}
 	}
 	fixtures["slow-requests"] = slowLogs
 
 	return fixtures
+}
+
+// handleHealth handles the /health endpoint for health checks
+func handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":  "ok",
+		"service": "log-generator",
+	})
 }
 
 // handleSeed handles the /seed endpoint for test data seeding
@@ -395,13 +434,19 @@ func handleSeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Received seed request for fixtures: %v", req.Fixtures)
+	// Generate RunID if not provided
+	if req.RunID == "" {
+		req.RunID = fmt.Sprintf("auto-%d", time.Now().UnixNano())
+	}
 
-	allFixtures := getTestFixtures()
+	log.Printf("Received seed request for fixtures: %v with RunID: %s", req.Fixtures, req.RunID)
+
+	allFixtures := getTestFixtures(req.RunID)
 	response := SeedResponse{
 		Success: true,
 		Seeded:  make(map[string]int),
 		Errors:  []string{},
+		RunID:   req.RunID,
 	}
 
 	// If no fixtures specified, seed all
@@ -448,7 +493,9 @@ func handleSeed(w http.ResponseWriter, r *http.Request) {
 
 // sendToSplunkWithIndex sends a log entry to Splunk HEC with custom index
 func sendToSplunkWithIndex(entry LogEntry, index string) bool {
-	if splunkHecURL == "" { return false }
+	if splunkHecURL == "" {
+		return false
+	}
 
 	payload, _ := json.Marshal(map[string]interface{}{
 		"event":      entry,
@@ -460,6 +507,7 @@ func sendToSplunkWithIndex(entry LogEntry, index string) bool {
 	req.Header.Set("Authorization", "Splunk "+splunkHecToken)
 	req.Header.Set("Content-Type", "application/json")
 
+	// InsecureSkipVerify is acceptable here for integration testing with self-signed certificates
 	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -478,7 +526,9 @@ func sendToSplunkWithIndex(entry LogEntry, index string) bool {
 
 // sendToOpenSearchWithIndex sends a log entry to OpenSearch with custom index
 func sendToOpenSearchWithIndex(entry LogEntry, index string) {
-	if opensearchURL == "" { return }
+	if opensearchURL == "" {
+		return
+	}
 
 	// OpenSearch bulk API format
 	url := fmt.Sprintf("%s/%s/_doc", opensearchURL, index)

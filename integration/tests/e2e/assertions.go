@@ -237,10 +237,27 @@ func (c simpleCheck) Description() string {
 	return c.desc
 }
 
+// getFieldValue retrieves a field value from a log entry, checking both top-level and nested fields map
+func getFieldValue(log map[string]interface{}, field string) (interface{}, bool) {
+	// Try top-level field first
+	if val, ok := log[field]; ok {
+		return val, true
+	}
+
+	// Try nested fields map (for Splunk/OpenSearch structured logs)
+	if fields, ok := log["fields"].(map[string]interface{}); ok {
+		if val, ok := fields[field]; ok {
+			return val, true
+		}
+	}
+
+	return nil, false
+}
+
 func FieldEquals(field string, expected interface{}) LogCheck {
 	return simpleCheck{
 		validator: func(log map[string]interface{}) bool {
-			val, ok := log[field]
+			val, ok := getFieldValue(log, field)
 			return ok && assert.ObjectsAreEqual(expected, val)
 		},
 		desc: fmt.Sprintf("field '%s' equals '%v'", field, expected),
@@ -250,7 +267,7 @@ func FieldEquals(field string, expected interface{}) LogCheck {
 func FieldContains(field string, substring string) LogCheck {
 	return simpleCheck{
 		validator: func(log map[string]interface{}) bool {
-			val, ok := log[field]
+			val, ok := getFieldValue(log, field)
 			if !ok {
 				return false
 			}
@@ -264,7 +281,7 @@ func FieldContains(field string, substring string) LogCheck {
 func FieldMatches(field string, pattern string) LogCheck {
 	return simpleCheck{
 		validator: func(log map[string]interface{}) bool {
-			val, ok := log[field]
+			val, ok := getFieldValue(log, field)
 			if !ok {
 				return false
 			}
@@ -296,7 +313,7 @@ func FieldMatches(field string, pattern string) LogCheck {
 func FieldNotPresent(field string) LogCheck {
 	return simpleCheck{
 		validator: func(log map[string]interface{}) bool {
-			_, ok := log[field]
+			_, ok := getFieldValue(log, field)
 			return !ok
 		},
 		desc: fmt.Sprintf("field '%s' not present", field),
@@ -306,7 +323,7 @@ func FieldNotPresent(field string) LogCheck {
 func FieldPresent(field string) LogCheck {
 	return simpleCheck{
 		validator: func(log map[string]interface{}) bool {
-			_, ok := log[field]
+			_, ok := getFieldValue(log, field)
 			return ok
 		},
 		desc: fmt.Sprintf("field '%s' is present", field),
@@ -316,7 +333,7 @@ func FieldPresent(field string) LogCheck {
 func FieldNotEmpty(field string) LogCheck {
 	return simpleCheck{
 		validator: func(log map[string]interface{}) bool {
-			val, ok := log[field]
+			val, ok := getFieldValue(log, field)
 			if !ok {
 				return false
 			}
@@ -330,7 +347,7 @@ func FieldNotEmpty(field string) LogCheck {
 func FieldOneOf(field string, allowedValues ...interface{}) LogCheck {
 	return simpleCheck{
 		validator: func(log map[string]interface{}) bool {
-			val, ok := log[field]
+			val, ok := getFieldValue(log, field)
 			if !ok {
 				return false
 			}
@@ -348,7 +365,7 @@ func FieldOneOf(field string, allowedValues ...interface{}) LogCheck {
 func DateBetween(field string, start, end time.Time) LogCheck {
 	return simpleCheck{
 		validator: func(log map[string]interface{}) bool {
-			val, ok := log[field]
+			val, ok := getFieldValue(log, field)
 			if !ok {
 				return false
 			}
@@ -383,7 +400,7 @@ func DateBetween(field string, start, end time.Time) LogCheck {
 func DateAfter(field string, after time.Time) LogCheck {
 	return simpleCheck{
 		validator: func(log map[string]interface{}) bool {
-			val, ok := log[field]
+			val, ok := getFieldValue(log, field)
 			if !ok {
 				return false
 			}
