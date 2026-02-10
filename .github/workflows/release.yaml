@@ -42,7 +42,7 @@ jobs:
           VERSION: ${{ steps.tag.outputs.tag }}
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@9c9ea19e37eb465b83766dbbf597b29dc5020bdf # v6.2.0
+        uses: goreleaser/goreleaser-action@02629984b10e9637873f2fc81b499c423349e72e # v6.2.0
         with:
           distribution: goreleaser
           version: latest
