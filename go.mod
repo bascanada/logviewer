@@ -1,6 +1,6 @@
 module github.com/bascanada/logviewer
 
-go 1.25.6
+go 1.25.7
 
 require (
 	github.com/TylerBrock/colorjson v0.0.0-20200706003622-8a50f05110d2
