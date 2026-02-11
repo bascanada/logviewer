@@ -27,7 +27,7 @@ jobs:
         run: echo "tag=${GITHUB_REF#refs/*/}" >> $GITHUB_OUTPUT
 
       - name: Login docker
-        run: docker login https://ghcr.io -u wquintal -p $GITHUB_ACCESS_TOKEN
+        run: echo "$GITHUB_ACCESS_TOKEN" | docker login https://ghcr.io -u wquintal --password-stdin
         env:
           GITHUB_ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
       
