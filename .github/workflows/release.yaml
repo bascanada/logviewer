@@ -41,6 +41,9 @@ jobs:
         env:
           VERSION: ${{ steps.tag.outputs.tag }}
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@d7a2cddc12e05f84f503b5ee3ae8c0a54d7bde6a # v3.9.0
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
         with:
