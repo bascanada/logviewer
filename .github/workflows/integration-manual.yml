@@ -13,6 +13,8 @@ concurrency:
   group: integration-manual-${{ github.ref }}
   cancel-in-progress: false
 
+permissions: read-all
+
 jobs:
   integration:
     name: Run integration (manual)

@@ -8,6 +8,8 @@ on:
   schedule:
     - cron: '30 1 * * 0' # Weekly scan
 
+permissions: read-all
+
 jobs:
   analyze:
     name: Analyze

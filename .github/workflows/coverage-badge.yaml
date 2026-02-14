@@ -9,12 +9,13 @@ on:
     types:
       - completed
 
-permissions:
-  contents: read
+permissions: read-all
 
 jobs:
   update-badge:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'push' }}
 
     steps:
