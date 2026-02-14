@@ -37,8 +37,6 @@ checksum:
 # Sign artifacts with Cosign (OIDC-based signing)
 signs:
   - cmd: cosign
-    env:
-      - COSIGN_EXPERIMENTAL=1
     certificate: '${artifact}.pem'
     args:
       - sign-blob
