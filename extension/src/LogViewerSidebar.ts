@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 import { ServerManager } from './ServerManager';
 
 export class LogViewerSidebarProvider implements vscode.WebviewViewProvider {
@@ -46,6 +47,7 @@ export class LogViewerSidebarProvider implements vscode.WebviewViewProvider {
     // Handle messages from sidebar
     webviewView.webview.onDidReceiveMessage((message) => {
       console.log('[LogViewerSidebar] Received message:', message);
+
       if (message.type === 'search') {
         if (this.onSearchCallback) {
           console.log('[LogViewerSidebar] Calling onSearchCallback with params:', {
@@ -65,6 +67,8 @@ export class LogViewerSidebarProvider implements vscode.WebviewViewProvider {
         } else {
           console.error('[LogViewerSidebar] onSearchCallback is not set!');
         }
+      } else if (message.type === 'openConfig') {
+        this.handleOpenConfig();
       }
     });
   }
@@ -129,6 +133,99 @@ export class LogViewerSidebarProvider implements vscode.WebviewViewProvider {
 
   private escapeHtml(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  /**
+   * Get the config file path to open
+   * Returns the first config file found based on settings/environment
+   */
+  private getConfigPath(): string | undefined {
+    const config = vscode.workspace.getConfiguration('logviewer');
+    const configPath = config.get<string>('configPath');
+
+    // If explicit config path is set, use it
+    if (configPath && configPath.trim() !== '') {
+      return configPath;
+    }
+
+    // Check LOGVIEWER_CONFIG environment variable
+    const envConfig = process.env.LOGVIEWER_CONFIG;
+    if (envConfig) {
+      // Return first file from colon-separated list
+      const envPaths = envConfig.split(path.delimiter);
+      if (envPaths.length > 0 && envPaths[0].trim() !== '') {
+        return envPaths[0];
+      }
+    }
+
+    // Default: ~/.logviewer/config.yaml
+    const homeDir = os.homedir();
+    const defaultConfig = path.join(homeDir, '.logviewer', 'config.yaml');
+
+    // Check if default config exists
+    if (fs.existsSync(defaultConfig)) {
+      return defaultConfig;
+    }
+
+    // If default doesn't exist, return path anyway (user can create it)
+    return defaultConfig;
+  }
+
+  /**
+   * Handle opening the config file in VS Code
+   */
+  private async handleOpenConfig(): Promise<void> {
+    const configPath = this.getConfigPath();
+
+    if (!configPath) {
+      vscode.window.showErrorMessage('No LogViewer configuration file found');
+      return;
+    }
+
+    try {
+      const uri = vscode.Uri.file(configPath);
+
+      // Check if file exists
+      if (!fs.existsSync(configPath)) {
+        // Ask user if they want to create it
+        const create = await vscode.window.showInformationMessage(
+          `Config file does not exist: ${configPath}. Create it?`,
+          'Create',
+          'Cancel'
+        );
+
+        if (create === 'Create') {
+          // Create directory if needed
+          const dir = path.dirname(configPath);
+          if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+          }
+
+          // Create empty file with basic structure
+          const template = `# LogViewer Configuration
+# See documentation for full configuration options
+
+clients: {}
+
+contexts: {}
+`;
+          fs.writeFileSync(configPath, template, 'utf8');
+          vscode.window.showInformationMessage(`Created config file: ${configPath}`);
+        } else {
+          return;
+        }
+      }
+
+      // Open the file
+      const document = await vscode.workspace.openTextDocument(uri);
+      await vscode.window.showTextDocument(document, {
+        preview: false,
+        viewColumn: vscode.ViewColumn.One
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      vscode.window.showErrorMessage(`Failed to open config file: ${message}`);
+    }
   }
 }
 

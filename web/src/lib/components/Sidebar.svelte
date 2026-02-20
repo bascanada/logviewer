@@ -103,6 +103,17 @@
       handleSearch();
     }
   }
+
+  function handleOpenConfig() {
+    console.log('[Sidebar] Opening config file');
+    if (vscode) {
+      vscode.postMessage({
+        type: 'openConfig'
+      });
+    } else {
+      console.error('[Sidebar] VS Code API is NOT available!');
+    }
+  }
 </script>
 
 <div class="sidebar">
@@ -208,6 +219,13 @@
       </ul>
     </section>
   {/if}
+
+  <footer class="footer">
+    <button class="config-link" onclick={handleOpenConfig} title="Open configuration file">
+      <span class="icon">⚙️</span>
+      <span class="text">Open Config File</span>
+    </button>
+  </footer>
 </div>
 
 <style>
@@ -395,5 +413,44 @@
 
   .error {
     color: var(--vscode-errorForeground);
+  }
+
+  .footer {
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--vscode-sideBar-border);
+  }
+
+  .config-link {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: none;
+    border: none;
+    color: var(--vscode-textLink-foreground);
+    cursor: pointer;
+    font-family: var(--vscode-font-family);
+    font-size: 12px;
+    border-radius: 2px;
+    text-align: left;
+  }
+
+  .config-link:hover {
+    background: var(--vscode-list-hoverBackground);
+    color: var(--vscode-textLink-activeForeground);
+  }
+
+  .config-link:active {
+    background: var(--vscode-list-activeSelectionBackground);
+  }
+
+  .config-link .icon {
+    font-size: 14px;
+  }
+
+  .config-link .text {
+    flex: 1;
   }
 </style>
