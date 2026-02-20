@@ -44,7 +44,7 @@ var serverCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		s, err := server.NewServer(host, strconv.Itoa(port), cfg, logger, api.OpenAPISpec)
+		s, err := server.NewServer(host, strconv.Itoa(port), cfg, configPath, logger, api.OpenAPISpec)
 		if err != nil {
 			logger.Error("failed to create server", "err", err)
 			os.Exit(1)

@@ -1,4 +1,4 @@
-.PHONY: build build/all release release/all test test/coverage lint audit quality integration/start integration/stop integration/tests integration/test integration/test/query integration/test/log integration/test/field integration/test/values integration/test/ssh integration/test/native integration/test/hl integration/test/short integration/test/all integration/logs integration/start/logs integration/stop/logs integration/deploy-simulation integration/mcp/setup integration/mcp/test install uninstall
+.PHONY: build build/all release release/all test test/coverage lint audit quality integration/start integration/stop integration/tests integration/test integration/test/query integration/test/log integration/test/field integration/test/values integration/test/ssh integration/test/native integration/test/hl integration/test/short integration/test/all integration/logs integration/start/logs integration/stop/logs integration/deploy-simulation integration/mcp/setup integration/mcp/test install uninstall web/install web/build web/dev web/check web/lint web/clean extension/install extension/compile extension/binaries extension/media extension/build extension/package extension/watch extension/dev/setup extension/dev/binary extension/clean vscode vscode/clean
 
 SHA=$(shell git rev-parse --short HEAD)
 # Determine latest tag (fallback to '0.0.0' when repository has no tags or git fails)
@@ -304,4 +304,126 @@ integration/mcp/test:
 	@echo "Running MCP agent integration tests..."
 	@command -v ollama >/dev/null 2>&1 || { echo "ERROR: Ollama not installed. Run 'make integration/mcp/setup' first."; exit 1; }
 	@OLLAMA_MODEL=llama3.1 go test ./cmd/... -run TestMCPAgent -v
+
+
+# =============================================================================
+# Web Frontend Build
+# =============================================================================
+
+WEB_DIR := web
+WEB_DIST := $(WEB_DIR)/dist
+
+web/install:
+	@echo "Installing web dependencies..."
+	@cd $(WEB_DIR) && npm ci
+
+web/build: web/install
+	@echo "Building web frontend..."
+	@cd $(WEB_DIR) && npm run build
+
+web/dev: web/install
+	@echo "Starting web dev server..."
+	@cd $(WEB_DIR) && npm run dev
+
+web/check: web/install
+	@echo "Running TypeScript type check..."
+	@cd $(WEB_DIR) && npm run check
+
+web/lint: web/install
+	@echo "Running linter..."
+	@cd $(WEB_DIR) && npx eslint src --ext .ts,.svelte || true
+
+web/clean:
+	@echo "Cleaning web build artifacts..."
+	@rm -rf $(WEB_DIST) $(WEB_DIR)/node_modules
+
+
+# =============================================================================
+# VS Code Extension Build
+# =============================================================================
+
+EXTENSION_DIR := extension
+EXTENSION_BIN := $(EXTENSION_DIR)/bin
+EXTENSION_MEDIA := $(EXTENSION_DIR)/media
+
+extension/install:
+	@echo "Installing extension dependencies..."
+	@cd $(EXTENSION_DIR) && npm ci
+
+extension/compile: extension/install
+	@echo "Compiling extension TypeScript..."
+	@cd $(EXTENSION_DIR) && npm run compile
+
+# Copy Go binaries to extension
+extension/binaries: release/all
+	@echo "Copying binaries to extension..."
+	@mkdir -p $(EXTENSION_BIN)
+	@cp build/logviewer-darwin-arm64 $(EXTENSION_BIN)/
+	@cp build/logviewer-darwin-amd64 $(EXTENSION_BIN)/
+	@cp build/logviewer-linux-arm64 $(EXTENSION_BIN)/
+	@cp build/logviewer-linux-amd64 $(EXTENSION_BIN)/
+	@cp build/logviewer-windows-amd64.exe $(EXTENSION_BIN)/
+	@cp build/logviewer-windows-arm64.exe $(EXTENSION_BIN)/
+
+# Copy web frontend to extension
+extension/media: web/build
+	@echo "Copying web frontend to extension..."
+	@mkdir -p $(EXTENSION_MEDIA)
+	@cp -r $(WEB_DIST)/* $(EXTENSION_MEDIA)/
+
+# Build complete extension
+extension/build: extension/compile extension/binaries extension/media
+	@echo "Extension build complete"
+
+# Package extension as .vsix
+extension/package: extension/build
+	@echo "Packaging extension..."
+	@cd $(EXTENSION_DIR) && npx vsce package --allow-missing-repository
+	@echo "Extension packaged: $(EXTENSION_DIR)/*.vsix"
+
+# Watch mode (recompile on changes)
+extension/watch: extension/install
+	@cd $(EXTENSION_DIR) && npm run watch
+
+# Copy current platform binary for development (faster than release/all)
+extension/dev/binary: build
+	@echo "Copying current platform binary to extension..."
+	@mkdir -p $(EXTENSION_BIN)
+	@GOOS=$$(go env GOOS) && GOARCH=$$(go env GOARCH) && \
+		if [ "$$GOOS" = "windows" ]; then \
+			cp build/logviewer $(EXTENSION_BIN)/logviewer-$$GOOS-$$GOARCH.exe; \
+		else \
+			cp build/logviewer $(EXTENSION_BIN)/logviewer-$$GOOS-$$GOARCH; \
+		fi
+	@echo "Binary copied for $$(go env GOOS)/$$(go env GOARCH)"
+
+# Quick development setup (builds everything for local dev)
+extension/dev/setup: extension/dev/binary web/build extension/media extension/compile
+	@echo ""
+	@echo "=== Development setup complete! ==="
+	@echo ""
+	@echo "Next steps:"
+	@echo "  1. Open the extension/ folder in VS Code"
+	@echo "  2. Press F5 to launch the Extension Development Host"
+	@echo "  3. Open Command Palette and run 'LogViewer: Open'"
+	@echo ""
+	@echo "For continuous development:"
+	@echo "  - Terminal 1: make web/dev"
+	@echo "  - Terminal 2: make extension/watch"
+
+extension/clean:
+	@echo "Cleaning extension build artifacts..."
+	@rm -rf $(EXTENSION_BIN) $(EXTENSION_MEDIA) $(EXTENSION_DIR)/out $(EXTENSION_DIR)/node_modules $(EXTENSION_DIR)/*.vsix
+
+
+# =============================================================================
+# Combined VS Code Extension Targets
+# =============================================================================
+
+# Build everything for VS Code extension
+vscode: extension/package
+	@echo "VS Code extension ready at $(EXTENSION_DIR)/*.vsix"
+
+vscode/clean: web/clean extension/clean
+	@echo "Cleaned all VS Code extension artifacts"
 
