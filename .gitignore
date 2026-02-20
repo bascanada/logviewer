@@ -24,3 +24,14 @@ logviewer.wiki/
 
 *.csv
 log.txt
+
+# Web frontend
+web/node_modules/
+web/dist/
+
+# VS Code extension
+extension/node_modules/
+extension/out/
+extension/bin/
+extension/media/
+extension/*.vsix

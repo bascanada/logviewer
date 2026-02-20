@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -65,8 +66,19 @@ func (s *Server) routes() {
 func (s *Server) Start() error {
 	handler := s.chainMiddleware(s.router, s.recoveryMiddleware, s.corsMiddleware, s.requestIDMiddleware, s.loggingMiddleware)
 
+	addr := fmt.Sprintf("%s:%s", s.host, s.port)
+
+	// Create listener first to get the actual assigned port (important when port=0)
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("failed to create listener: %w", err)
+	}
+
+	// Get the actual port (useful when port=0 was requested)
+	actualAddr := listener.Addr().(*net.TCPAddr)
+	actualPort := actualAddr.Port
+
 	s.httpServer = &http.Server{
-		Addr:              fmt.Sprintf("%s:%s", s.host, s.port),
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
@@ -76,8 +88,10 @@ func (s *Server) Start() error {
 
 	// Start the server in a goroutine
 	go func() {
-		s.logger.Info("starting server", "addr", s.httpServer.Addr)
-		serverErrors <- s.httpServer.ListenAndServe()
+		s.logger.Info("starting server", "addr", listener.Addr().String())
+		// Print in a format the VS Code extension can parse
+		fmt.Printf("Server listening on port %d\n", actualPort)
+		serverErrors <- s.httpServer.Serve(listener)
 	}()
 
 	// Channel to listen for shutdown signals

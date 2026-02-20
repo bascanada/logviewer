@@ -12,10 +12,12 @@ import (
 
 // QueryRequest defines the structure for query requests.
 type QueryRequest struct {
-	ContextID string            `json:"contextId"`           // Required
-	Inherits  []string          `json:"inherits,omitempty"`  // Optional search inherits
-	Search    client.LogSearch  `json:"search"`              // Search overrides
-	Variables map[string]string `json:"variables,omitempty"` // Runtime variables for substitution
+	ContextID   string            `json:"contextId"`           // Required
+	Inherits    []string          `json:"inherits,omitempty"`  // Optional search inherits
+	Search      client.LogSearch  `json:"search"`              // Search overrides
+	Variables   map[string]string `json:"variables,omitempty"` // Runtime variables for substitution
+	PageToken   string            `json:"pageToken,omitempty"` // Pagination token
+	NativeQuery string            `json:"nativeQuery,omitempty"` // Native query string
 }
 
 // LogsResponse is the response structure for the /query/logs endpoint.
@@ -45,10 +47,11 @@ type ContextInfo struct {
 
 // QueryMetadata provides execution details about a query.
 type QueryMetadata struct {
-	QueryTime   string `json:"queryTime"`   // How long the query took
-	ResultCount int    `json:"resultCount"` // Number of results returned
-	ContextUsed string `json:"contextUsed"` // Which context was used
-	ClientType  string `json:"clientType"`  // opensearch, splunk, k8s, etc.
+	QueryTime     string  `json:"queryTime"`              // How long the query took
+	ResultCount   int     `json:"resultCount"`            // Number of results returned
+	ContextUsed   string  `json:"contextUsed"`            // Which context was used
+	ClientType    string  `json:"clientType"`             // opensearch, splunk, k8s, etc.
+	NextPageToken *string `json:"nextPageToken,omitempty"` // Token for pagination
 }
 
 func (s *Server) healthHandler(w http.ResponseWriter, _ *http.Request) {
@@ -176,6 +179,16 @@ func (s *Server) processQueryLogsRequest(w http.ResponseWriter, r *http.Request,
 
 	startTime := time.Now()
 
+	// Set PageToken on LogSearch if provided
+	if req.PageToken != "" {
+		req.Search.PageToken.S(req.PageToken)
+	}
+
+	// Set NativeQuery on LogSearch if provided
+	if req.NativeQuery != "" {
+		req.Search.NativeQuery.S(req.NativeQuery)
+	}
+
 	searchResult, err := s.searchFactory.GetSearchResult(r.Context(), req.ContextID, req.Inherits, req.Search, req.Variables)
 	if err != nil {
 		s.logger.Error("failed to get search result", "err", err, "contextId", req.ContextID)
@@ -196,13 +209,20 @@ func (s *Server) processQueryLogsRequest(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
+	// Get pagination info from search result
+	var nextPageToken *string
+	if paginationInfo := searchResult.GetPaginationInfo(); paginationInfo != nil && paginationInfo.NextPageToken != "" {
+		nextPageToken = &paginationInfo.NextPageToken
+	}
+
 	resp := LogsResponse{
 		Logs: entries,
 		Meta: QueryMetadata{
-			QueryTime:   time.Since(startTime).String(),
-			ResultCount: len(entries),
-			ContextUsed: req.ContextID,
-			ClientType:  s.config.Clients[sc.Client].Type,
+			QueryTime:     time.Since(startTime).String(),
+			ResultCount:   len(entries),
+			ContextUsed:   req.ContextID,
+			ClientType:    s.config.Clients[sc.Client].Type,
+			NextPageToken: nextPageToken,
 		},
 	}
 
