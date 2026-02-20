@@ -32,6 +32,20 @@
 
   const levels = ['DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL'];
 
+  async function loadContexts() {
+    try {
+      const response = await api.getContexts();
+      contexts.set(response.contexts);
+      if (response.contexts.length > 0 && !$selectedContextId) {
+        selectedContextId.set(response.contexts[0].id);
+      }
+      fetchError = null;
+    } catch (e) {
+      fetchError = e instanceof Error ? e.message : 'Failed to load contexts';
+      throw e;
+    }
+  }
+
   onMount(async () => {
     // Load recent searches from localStorage
     try {
@@ -41,18 +55,17 @@
       }
     } catch {}
 
-    // Load contexts
+    // Load contexts initially
     try {
-      const response = await api.getContexts();
-      contexts.set(response.contexts);
-      if (response.contexts.length > 0 && !$selectedContextId) {
-        selectedContextId.set(response.contexts[0].id);
-      }
+      await loadContexts();
     } catch (e) {
-      fetchError = e instanceof Error ? e.message : 'Failed to load contexts';
+      console.error('[Sidebar] Failed to load contexts:', e);
     } finally {
       loading = false;
     }
+
+    // Setup SSE connection for config updates
+    setupEventSource();
   });
 
   function handleSearch() {
@@ -113,6 +126,46 @@
     } else {
       console.error('[Sidebar] VS Code API is NOT available!');
     }
+  }
+
+  function setupEventSource() {
+    // Get port from window (injected by extension)
+    const port = (window as any).LOGVIEWER_PORT;
+    if (!port) {
+      console.warn('[Sidebar] No LOGVIEWER_PORT found, SSE disabled');
+      return;
+    }
+
+    const eventSource = new EventSource(`http://localhost:${port}/events`);
+
+    eventSource.addEventListener('connected', (e) => {
+      console.log('[Sidebar] SSE connected');
+    });
+
+    eventSource.addEventListener('config-reloaded', async (e) => {
+      console.log('[Sidebar] Config reloaded, refreshing contexts');
+      try {
+        await loadContexts();
+        console.log('[Sidebar] Contexts refreshed successfully');
+      } catch (err) {
+        console.error('[Sidebar] Failed to refresh contexts:', err);
+      }
+    });
+
+    eventSource.addEventListener('server-error', (e) => {
+      console.error('[Sidebar] Server error:', e.data);
+    });
+
+    eventSource.onerror = (err) => {
+      console.error('[Sidebar] SSE error:', err);
+      // EventSource will automatically reconnect
+    };
+
+    // Cleanup on component unmount
+    return () => {
+      console.log('[Sidebar] Closing SSE connection');
+      eventSource.close();
+    };
   }
 </script>
 
