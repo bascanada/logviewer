@@ -46,12 +46,26 @@
         "logviewer.configPath": {
           "type": "string",
           "default": "",
-          "description": "Path to LogViewer configuration file (config.yaml)"
+          "markdownDescription": "Path to LogViewer configuration file. If empty, uses `~/.logviewer/config.yaml`. Supports environment variable `LOGVIEWER_CONFIG`.",
+          "scope": "window"
         },
         "logviewer.autoStart": {
           "type": "boolean",
           "default": true,
-          "description": "Automatically start the LogViewer server when opening the panel"
+          "description": "Automatically start the LogViewer server when opening the panel",
+          "scope": "window"
+        },
+        "logviewer.autoRestartOnConfigChange": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Automatically restart the server when the configuration file changes. If disabled, shows a notification with manual restart option.",
+          "scope": "window"
+        },
+        "logviewer.watchConfigFiles": {
+          "type": "boolean",
+          "default": true,
+          "description": "Watch configuration file(s) for changes and notify when restart is needed",
+          "scope": "window"
         }
       }
     },

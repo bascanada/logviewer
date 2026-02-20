@@ -69,5 +69,5 @@ export async function activate(context: vscode.ExtensionContext) {
 
 export function deactivate() {
   console.log('LogViewer extension deactivating...');
-  serverManager?.stop();
+  serverManager?.dispose();
 }

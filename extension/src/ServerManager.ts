@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as os from 'os';
+import * as fs from 'fs';
 import { ChildProcess, spawn } from 'child_process';
 
 export class ServerManager {
@@ -8,10 +9,25 @@ export class ServerManager {
   private port: number | undefined;
   private readonly extensionPath: string;
   private outputChannel: vscode.OutputChannel;
+  private configWatcher: vscode.FileSystemWatcher | undefined;
+  private isRestarting = false;
 
   constructor(private context: vscode.ExtensionContext) {
     this.extensionPath = context.extensionPath;
     this.outputChannel = vscode.window.createOutputChannel('LogViewer Server');
+    this.setupConfigWatcher();
+
+    // Watch for config path setting changes
+    context.subscriptions.push(
+      vscode.workspace.onDidChangeConfiguration((e) => {
+        if (e.affectsConfiguration('logviewer.configPath') ||
+            e.affectsConfiguration('logviewer.watchConfigFiles')) {
+          this.outputChannel.appendLine('LogViewer settings changed, recreating config watcher...');
+          this.disposeConfigWatcher();
+          this.setupConfigWatcher();
+        }
+      })
+    );
   }
 
   /**
@@ -166,5 +182,184 @@ export class ServerManager {
    */
   showOutput(): void {
     this.outputChannel.show();
+  }
+
+  /**
+   * Get configuration file paths to watch
+   * Returns all potential config files that might affect the server
+   */
+  private getConfigPaths(): string[] {
+    const config = vscode.workspace.getConfiguration('logviewer');
+    const configPath = config.get<string>('configPath');
+    const paths: string[] = [];
+
+    // If explicit config path is set, watch it
+    if (configPath && configPath.trim() !== '') {
+      paths.push(configPath);
+      return paths;
+    }
+
+    // Check LOGVIEWER_CONFIG environment variable
+    const envConfig = process.env.LOGVIEWER_CONFIG;
+    if (envConfig) {
+      // Can be colon-separated list
+      const envPaths = envConfig.split(path.delimiter);
+      paths.push(...envPaths);
+      return paths;
+    }
+
+    // Default paths: ~/.logviewer/config.yaml and ~/.logviewer/configs/*.yaml
+    const homeDir = os.homedir();
+    const logviewerDir = path.join(homeDir, '.logviewer');
+    const mainConfig = path.join(logviewerDir, 'config.yaml');
+    const configsDir = path.join(logviewerDir, 'configs');
+
+    // Check if main config exists
+    if (fs.existsSync(mainConfig)) {
+      paths.push(mainConfig);
+    }
+
+    // Check if configs directory exists and add all .yaml/.yml files
+    if (fs.existsSync(configsDir)) {
+      try {
+        const files = fs.readdirSync(configsDir);
+        for (const file of files) {
+          if (file.endsWith('.yaml') || file.endsWith('.yml')) {
+            paths.push(path.join(configsDir, file));
+          }
+        }
+      } catch (err) {
+        // Ignore errors reading directory
+      }
+    }
+
+    return paths;
+  }
+
+  /**
+   * Set up file watcher for configuration files
+   */
+  private setupConfigWatcher(): void {
+    const config = vscode.workspace.getConfiguration('logviewer');
+    const watchEnabled = config.get<boolean>('watchConfigFiles', true);
+
+    if (!watchEnabled) {
+      return;
+    }
+
+    const configPath = config.get<string>('configPath');
+    const homeDir = os.homedir();
+
+    // Determine watch pattern based on config
+    let watchPattern: string;
+
+    if (configPath && configPath.trim() !== '') {
+      // Watch explicit config file
+      watchPattern = configPath;
+    } else {
+      // Watch default .logviewer directory
+      watchPattern = path.join(homeDir, '.logviewer', '**/*.{yaml,yml}');
+    }
+
+    this.configWatcher = vscode.workspace.createFileSystemWatcher(
+      watchPattern,
+      false, // ignoreCreateEvents
+      false, // ignoreChangeEvents
+      false  // ignoreDeleteEvents
+    );
+
+    const handleConfigChange = async (uri: vscode.Uri) => {
+      // Only handle if this is one of our watched config files
+      const configPaths = this.getConfigPaths();
+      const changedPath = uri.fsPath;
+
+      if (!configPaths.some(p => p === changedPath)) {
+        return;
+      }
+
+      if (this.isRestarting) {
+        return; // Already restarting
+      }
+
+      this.outputChannel.appendLine(`Config file changed: ${changedPath}`);
+
+      const autoRestart = config.get<boolean>('autoRestartOnConfigChange', false);
+
+      if (autoRestart && this.isRunning()) {
+        // Auto-restart
+        this.outputChannel.appendLine('Auto-restarting server due to config change...');
+        await this.handleConfigChangeRestart(true);
+      } else if (this.isRunning()) {
+        // Show notification
+        const action = await vscode.window.showInformationMessage(
+          'LogViewer configuration file changed. Restart server to apply changes?',
+          'Restart Now',
+          'Later'
+        );
+
+        if (action === 'Restart Now') {
+          await this.handleConfigChangeRestart(false);
+        }
+      }
+    };
+
+    this.configWatcher.onDidChange(handleConfigChange);
+    this.configWatcher.onDidCreate(handleConfigChange);
+    this.configWatcher.onDidDelete((uri) => {
+      this.outputChannel.appendLine(`Config file deleted: ${uri.fsPath}`);
+      vscode.window.showWarningMessage(
+        `LogViewer config file deleted: ${path.basename(uri.fsPath)}. Server may not work correctly.`
+      );
+    });
+
+    this.context.subscriptions.push(this.configWatcher);
+  }
+
+  /**
+   * Handle config change restart
+   */
+  private async handleConfigChangeRestart(isAuto: boolean): Promise<void> {
+    if (this.isRestarting) {
+      return;
+    }
+
+    this.isRestarting = true;
+
+    try {
+      const restartMsg = isAuto ? 'Auto-restarting' : 'Restarting';
+      this.outputChannel.appendLine(`${restartMsg} server...`);
+
+      await this.restart();
+
+      this.outputChannel.appendLine('Server restarted successfully');
+
+      if (!isAuto) {
+        vscode.window.showInformationMessage('LogViewer server restarted successfully');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.outputChannel.appendLine(`Failed to restart server: ${message}`);
+      vscode.window.showErrorMessage(`Failed to restart LogViewer server: ${message}`);
+    } finally {
+      this.isRestarting = false;
+    }
+  }
+
+  /**
+   * Dispose of config watcher only
+   */
+  private disposeConfigWatcher(): void {
+    if (this.configWatcher) {
+      this.configWatcher.dispose();
+      this.configWatcher = undefined;
+    }
+  }
+
+  /**
+   * Dispose of resources
+   */
+  dispose(): void {
+    this.stop();
+    this.disposeConfigWatcher();
   }
 }
