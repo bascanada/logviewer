@@ -1,0 +1,105 @@
+{
+  "name": "logviewer",
+  "displayName": "LogViewer",
+  "description": "View logs from OpenSearch, Splunk, CloudWatch, and more",
+  "version": "0.0.1",
+  "publisher": "bascanada",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "logs",
+    "logging",
+    "opensearch",
+    "elasticsearch",
+    "splunk",
+    "cloudwatch",
+    "kubernetes"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "logviewer.open",
+        "title": "Open LogViewer",
+        "category": "LogViewer"
+      },
+      {
+        "command": "logviewer.restart",
+        "title": "Restart Server",
+        "category": "LogViewer"
+      },
+      {
+        "command": "logviewer.showOutput",
+        "title": "Show Server Output",
+        "category": "LogViewer"
+      }
+    ],
+    "configuration": {
+      "title": "LogViewer",
+      "properties": {
+        "logviewer.configPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to LogViewer configuration file. If empty, uses `~/.logviewer/config.yaml`. Supports environment variable `LOGVIEWER_CONFIG`.",
+          "scope": "window"
+        },
+        "logviewer.autoStart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically start the LogViewer server when opening the panel",
+          "scope": "window"
+        },
+        "logviewer.autoRestartOnConfigChange": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Automatically restart the server when the configuration file changes. If disabled, shows a notification with manual restart option.",
+          "scope": "window"
+        },
+        "logviewer.watchConfigFiles": {
+          "type": "boolean",
+          "default": true,
+          "description": "Watch configuration file(s) for changes and notify when restart is needed",
+          "scope": "window"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "logviewer",
+          "title": "LogViewer",
+          "icon": "$(output)"
+        }
+      ]
+    },
+    "views": {
+      "logviewer": [
+        {
+          "type": "webview",
+          "id": "logviewer.sidebar",
+          "name": "Search"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "package": "vsce package --allow-missing-repository",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.22.0",
+    "typescript": "^5.3.0"
+  }
+}
